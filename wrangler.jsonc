@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "tokko-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "tokko-db", "database_id": "tokko-db-local" }
+  ],
+  "r2_buckets": [
+    { "binding": "IMAGES", "bucket_name": "tokko-images" }
+  ],
+  "vars": {
+    "LLM_MODEL": "gpt-4o-mini",
+    "BETTER_AUTH_URL": "http://localhost:8787"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "dev": {
+    "port": 8787
+  }
+}
