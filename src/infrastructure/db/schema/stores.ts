@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { user } from "./users";
 
 /**
@@ -15,8 +16,8 @@ export const stores = sqliteTable("stores", {
   businessType: text("business_type").notNull(),
   aestheticPreference: text("aesthetic_preference").notNull(),
   whatsappNumber: text("whatsapp_number").notNull(),
-  status: text("status").notNull().default("draft"), // "draft" | "published"
+  status: text("status").notNull().default("draft"),
   heroImageUrl: text("hero_image_url"),
-  createdAt: text("created_at").notNull().default("(datetime('now'))"),
-  updatedAt: text("updated_at").notNull().default("(datetime('now'))"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

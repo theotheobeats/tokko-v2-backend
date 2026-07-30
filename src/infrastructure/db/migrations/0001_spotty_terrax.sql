@@ -1,0 +1,1 @@
+ALTER TABLE `pages` ADD `design_tokens` text;

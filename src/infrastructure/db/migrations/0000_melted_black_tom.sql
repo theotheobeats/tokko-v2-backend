@@ -25,16 +25,16 @@ CREATE TABLE `orders` (
 	`total_amount` integer NOT NULL,
 	`status` text DEFAULT 'pending' NOT NULL,
 	`notes` text,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
-	`updated_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
+	`updated_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`store_id`) REFERENCES `stores`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `pages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`store_id` text NOT NULL,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
-	`updated_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
+	`updated_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`store_id`) REFERENCES `stores`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -47,8 +47,8 @@ CREATE TABLE `products` (
 	`price` integer NOT NULL,
 	`image_url` text,
 	`is_available` integer DEFAULT 1 NOT NULL,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
-	`updated_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
+	`updated_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`store_id`) REFERENCES `stores`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -57,6 +57,7 @@ CREATE TABLE `sections` (
 	`page_id` text NOT NULL,
 	`type` text NOT NULL,
 	`data` text NOT NULL,
+	`template` text DEFAULT '<div>{{content}}</div>' NOT NULL,
 	`sort_order` integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY (`page_id`) REFERENCES `pages`(`id`) ON UPDATE no action ON DELETE no action
 );
@@ -86,8 +87,8 @@ CREATE TABLE `stores` (
 	`whatsapp_number` text NOT NULL,
 	`status` text DEFAULT 'draft' NOT NULL,
 	`hero_image_url` text,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
-	`updated_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
+	`updated_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`owner_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint

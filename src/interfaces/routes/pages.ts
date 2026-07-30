@@ -71,7 +71,7 @@ pagesRouter.get("/:storeId/page", async (c) => {
 // PATCH /api/stores/:storeId/page/sections/:id
 // ---------------------------------------------------------------------------
 pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
-  data: z.record(z.string(), z.unknown()),
+  slots: z.record(z.string(), z.string()),
 })), async (c) => {
   const storeId = c.req.param("storeId") as EntityId;
   const sectionId = c.req.param("id") as EntityId;
@@ -80,17 +80,17 @@ pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
 
   const db = createDb(c.env.DB);
   const pageRepo = new D1PageRepository(db);
-  const { data } = c.req.valid("json");
+  const { slots } = c.req.valid("json");
 
   const useCase = new UpdateSection(pageRepo);
-  const result = await useCase.execute({ storeId, sectionId, data });
+  const result = await useCase.execute({ storeId, sectionId, slots });
 
   if (!result.ok) {
     const status = result.error.code === "SECTION_NOT_FOUND" ? 404 : 404;
     return c.json({ error: result.error }, status);
   }
 
-  return c.json({ section: result.value });
+  return c.json(result.value);
 });
 
 // ---------------------------------------------------------------------------
@@ -98,7 +98,8 @@ pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
 // ---------------------------------------------------------------------------
 pagesRouter.post("/:storeId/page/sections", zValidator("json", z.object({
   type: z.enum(["hero", "about", "product-grid", "testimonial", "cta", "contact", "faq"]),
-  data: z.record(z.string(), z.unknown()),
+  template: z.string(),
+  slots: z.record(z.string(), z.string()),
   sortOrder: z.number().int().min(0).optional(),
 })), async (c) => {
   const storeId = c.req.param("storeId") as EntityId;
@@ -113,7 +114,8 @@ pagesRouter.post("/:storeId/page/sections", zValidator("json", z.object({
   const result = await useCase.execute({
     storeId,
     type: input.type,
-    data: input.data,
+    template: input.template,
+    slots: input.slots,
     sortOrder: input.sortOrder,
   });
 
@@ -121,7 +123,7 @@ pagesRouter.post("/:storeId/page/sections", zValidator("json", z.object({
     return c.json({ error: result.error }, 404);
   }
 
-  return c.json({ section: result.value.sections[result.value.sections.length - 1] }, 201);
+  return c.json(result.value, 201);
 });
 
 // ---------------------------------------------------------------------------
@@ -143,7 +145,7 @@ pagesRouter.delete("/:storeId/page/sections/:id", async (c) => {
     return c.json({ error: result.error }, 404);
   }
 
-  return c.json({ sections: result.value.sections });
+  return c.json(result.value);
 });
 
 // ---------------------------------------------------------------------------
@@ -170,7 +172,7 @@ pagesRouter.patch("/:storeId/page/reorder", zValidator("json", z.object({
     return c.json({ error: result.error }, 404);
   }
 
-  return c.json({ sections: result.value.sections });
+  return c.json(result.value);
 });
 
 // ---------------------------------------------------------------------------
@@ -178,24 +180,35 @@ pagesRouter.patch("/:storeId/page/reorder", zValidator("json", z.object({
 // ---------------------------------------------------------------------------
 pagesRouter.post("/:storeId/page/regenerate", async (c) => {
   const storeId = c.req.param("storeId") as EntityId;
-  const ownerCheck = await verifyOwner(c, storeId);
-  if (ownerCheck instanceof Response) return ownerCheck;
+  const store = await verifyOwner(c, storeId);
+  if (store instanceof Response) return store;
 
   const db = createDb(c.env.DB);
   const pageRepo = new D1PageRepository(db);
   const { RegeneratePage } = await import("../../application/page/regenerate-page");
+  const { generateStore } = await import("../../infrastructure/ai/deepseek-client");
 
-  // Use mock AI — replace with real LLM call
-  const mockAI = async () => ({
-    sections: [
-      { type: "hero", data: { title: "Selamat Datang", subtitle: "Produk berkualitas", ctaText: "Pesan" } },
-      { type: "about", data: { heading: "Tentang Kami", text: "Kami hadir untuk Anda." } },
-      { type: "product-grid", data: { heading: "Produk" } },
-      { type: "contact", data: { heading: "Kontak", whatsappNumber: "-", address: "-", hours: "-" } },
-    ],
-  });
+  const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
+  const aiFn = hasApiKey
+    ? async () => { 
+        const result = await generateStore({ apiKey: c.env.LLM_API_KEY, model: c.env.LLM_MODEL }, {
+          businessName: store.name,
+          businessType: store.businessType,
+          productCategory: "umum",
+          aesthetic: store.aestheticPreference,
+        });
+        return { sections: result.sections, designTokens: result.designTokens };
+      }
+    : async () => ({
+        sections: [
+          { type: "hero" as const, template: "<div style='text-align:center;padding:48px 24px'><h1 style='font-size:32px;color:{{text}}'>{{title}}</h1><p style='color:{{textSecondary}}'>{{subtitle}}</p></div>", slots: { title: "Selamat Datang", subtitle: "Produk berkualitas" } },
+          { type: "about" as const, template: "<div style='padding:32px 24px'><h2 style='font-size:20px;color:{{text}}'>{{heading}}</h2><p style='color:{{textSecondary}};line-height:1.6'>{{text}}</p></div>", slots: { heading: "Tentang Kami", text: "Kami hadir untuk Anda." } },
+          { type: "product-grid" as const, template: "<div style='padding:32px 24px'><h2 style='font-size:20px;color:{{text}};margin-bottom:16px'>{{heading}}</h2></div>", slots: { heading: "Produk" } },
+          { type: "contact" as const, template: "<div style='padding:32px 24px;text-align:center;background:{{bg}}'><h2 style='font-size:20px;color:{{text}};margin-bottom:8px'>{{heading}}</h2><p style='color:{{textSecondary}}'>{{whatsapp}} · {{address}} · {{hours}}</p></div>", slots: { heading: "Kontak", whatsapp: "-", address: "-", hours: "-" } },
+        ],
+      } as any);
 
-  const useCase = new RegeneratePage(pageRepo, mockAI);
+  const useCase = new RegeneratePage(pageRepo, aiFn);
   const result = await useCase.execute({ storeId });
 
   if (!result.ok) {
@@ -203,7 +216,7 @@ pagesRouter.post("/:storeId/page/regenerate", async (c) => {
     return c.json({ error: result.error }, status);
   }
 
-  return c.json({ page: result.value });
+  return c.json(result.value);
 });
 
 export { pagesRouter };

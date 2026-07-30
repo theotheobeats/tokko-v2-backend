@@ -1,5 +1,9 @@
 /**
  * Section value object — building block of a Page.
+ *
+ * Each section has a fixed type (hero, about, etc.), an AI-generated HTML
+ * template with {{slotName}} placeholders, and editable slot values.
+ * Users can change slot text; the template (HTML + CSS) stays AI-owned.
  */
 
 import type { EntityId } from "../shared/types";
@@ -16,70 +20,29 @@ export const SectionType = {
 } as const;
 export type SectionType = (typeof SectionType)[keyof typeof SectionType];
 
-// Section data shapes per type
-export interface HeroData {
-  title: string;
-  subtitle: string;
-  ctaText: string;
-}
-
-export interface AboutData {
-  heading: string;
-  text: string;
-}
-
-export interface ProductGridData {
-  heading: string;
-}
-
-export interface TestimonialData {
-  heading: string;
-  items: { name: string; text: string; rating: number }[];
-}
-
-export interface CtaData {
-  heading: string;
-  description: string;
-  buttonText: string;
-}
-
-export interface ContactData {
-  heading: string;
-  whatsappNumber: string;
-  address: string;
-  hours: string;
-}
-
-export interface FaqData {
-  heading: string;
-  items: { question: string; answer: string }[];
-}
-
-export type SectionData =
-  | HeroData
-  | AboutData
-  | ProductGridData
-  | TestimonialData
-  | CtaData
-  | ContactData
-  | FaqData;
-
 export interface SectionProps {
   id: EntityId;
   type: SectionType;
-  data: SectionData;
+  template: string;        // HTML with {{slotKey}} placeholders and inline CSS
+  slots: Record<string, string>;  // Editable text values
   sortOrder: number;
 }
 
 export class Section {
   private constructor(private readonly props: SectionProps) {}
 
-  static create(type: SectionType, data: SectionData, sortOrder: number = 0): Section {
+  static create(params: {
+    type: SectionType;
+    template: string;
+    slots: Record<string, string>;
+    sortOrder?: number;
+  }): Section {
     return new Section({
       id: createEntityId(),
-      type,
-      data,
-      sortOrder,
+      type: params.type,
+      template: params.template,
+      slots: { ...params.slots },
+      sortOrder: params.sortOrder ?? 0,
     });
   }
 
@@ -89,11 +52,19 @@ export class Section {
 
   get id() { return this.props.id; }
   get type() { return this.props.type; }
-  get data() { return this.props.data; }
+  get template() { return this.props.template; }
+  get slots() { return { ...this.props.slots }; }
   get sortOrder() { return this.props.sortOrder; }
 
-  updateData(data: SectionData): Section {
-    this.props.data = data;
+  /** Update a single slot value (user edits text) */
+  updateSlot(key: string, value: string): Section {
+    this.props.slots[key] = value;
+    return this;
+  }
+
+  /** Update all slots at once */
+  updateSlots(slots: Record<string, string>): Section {
+    this.props.slots = { ...this.props.slots, ...slots };
     return this;
   }
 
@@ -102,7 +73,28 @@ export class Section {
     return this;
   }
 
+  /** Get all slot keys found in the template */
+  get slotKeys(): string[] {
+    const matches = this.props.template.matchAll(/\{\{(\w+)\}\}/g);
+    return Array.from(matches, (m) => m[1]);
+  }
+
+  /** Render the template with current slot values */
+  render(): string {
+    let html = this.props.template;
+    for (const [key, value] of Object.entries(this.props.slots)) {
+      html = html.replaceAll(`{{${key}}}`, value);
+    }
+    return html;
+  }
+
   toJSON(): SectionProps {
-    return { ...this.props };
+    return {
+      id: this.props.id,
+      type: this.props.type,
+      template: this.props.template,
+      slots: { ...this.props.slots },
+      sortOrder: this.props.sortOrder,
+    };
   }
 }

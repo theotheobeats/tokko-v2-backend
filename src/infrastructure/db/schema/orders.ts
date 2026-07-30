@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { stores } from "./stores";
 
 /**
@@ -15,6 +16,6 @@ export const orders = sqliteTable("orders", {
   totalAmount: integer("total_amount").notNull(), // Rupiah
   status: text("status").notNull().default("pending"), // "pending" | "contacted" | "completed"
   notes: text("notes"),
-  createdAt: text("created_at").notNull().default("(datetime('now'))"),
-  updatedAt: text("updated_at").notNull().default("(datetime('now'))"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

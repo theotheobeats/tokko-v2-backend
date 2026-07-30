@@ -10,6 +10,7 @@ export const sections = sqliteTable("sections", {
     .notNull()
     .references(() => pages.id),
   type: text("type").notNull(), // "hero" | "about" | "product-grid" | "testimonial" | "cta" | "contact" | "faq"
-  data: text("data").notNull(), // JSON string — parsed at app level
+  data: text("data").notNull(), // JSON string of slots — parsed at app level
+  template: text("template").notNull().default("<div>{{content}}</div>"), // HTML with {{slotKey}} placeholders
   sortOrder: integer("sort_order").notNull().default(0),
 });

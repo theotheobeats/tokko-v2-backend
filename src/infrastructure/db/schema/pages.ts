@@ -1,15 +1,14 @@
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { stores } from "./stores";
 
-/**
- * Page entity table — one page per store.
- */
 export const pages = sqliteTable("pages", {
   id: text("id").primaryKey(),
   storeId: text("store_id")
     .notNull()
-    .unique() // One page per store
+    .unique()
     .references(() => stores.id),
-  createdAt: text("created_at").notNull().default("(datetime('now'))"),
-  updatedAt: text("updated_at").notNull().default("(datetime('now'))"),
+  designTokens: text("design_tokens"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

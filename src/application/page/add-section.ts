@@ -5,14 +5,20 @@
 import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
-import { Section, type SectionType, type SectionData, type SectionProps } from "../../domain/store/section";
-import type { PageProps } from "../../domain/store/page";
+import { Section, type SectionType } from "../../domain/store/section";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
+import {
+  serializePage,
+  serializeSection,
+  type RenderedPage,
+  type RenderedSection,
+} from "./render-section";
 
 export interface AddSectionInput {
   storeId: EntityId;
   type: SectionType;
-  data: Record<string, unknown>;
+  template: string;
+  slots: Record<string, string>;
   sortOrder?: number;
 }
 
@@ -21,21 +27,34 @@ export interface AddSectionError {
   message: string;
 }
 
-export type AddSectionOutput = Omit<PageProps, "sections"> & { sections: SectionProps[] };
+export interface AddSectionOutput {
+  section: RenderedSection;
+  page: RenderedPage;
+}
 
 export class AddSection {
   constructor(private readonly pageRepo: PageRepository) {}
 
   async execute(input: AddSectionInput): Promise<Result<AddSectionOutput, AddSectionError>> {
-    const page = await this.pageRepo.findByStoreId(input.storeId);
-    if (!page) {
+    const result = await this.pageRepo.findByStoreIdWithTokens(input.storeId);
+    if (!result) {
       return err({ code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan." });
     }
+    const { page, designTokens } = result;
 
-    const section = Section.create(input.type, input.data as unknown as SectionData, input.sortOrder ?? page.sections.length);
+    const section = Section.create({
+      type: input.type,
+      template: input.template,
+      slots: input.slots,
+      sortOrder: input.sortOrder ?? page.sections.length,
+    });
+
     page.addSection(section, input.sortOrder);
     await this.pageRepo.save(page);
 
-    return ok(page.toJSON());
+    return ok({
+      section: serializeSection(section.toJSON(), designTokens),
+      page: serializePage(page, designTokens),
+    });
   }
 }

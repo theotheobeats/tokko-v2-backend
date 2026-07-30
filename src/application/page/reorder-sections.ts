@@ -5,9 +5,8 @@
 import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
-import type { SectionProps } from "../../domain/store/section";
-import type { PageProps } from "../../domain/store/page";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
+import { serializePage, type RenderedPage } from "./render-section";
 
 export interface ReorderSectionsInput {
   storeId: EntityId;
@@ -19,20 +18,21 @@ export interface ReorderSectionsError {
   message: string;
 }
 
-export type ReorderSectionsOutput = Omit<PageProps, "sections"> & { sections: SectionProps[] };
+export type ReorderSectionsOutput = RenderedPage;
 
 export class ReorderSections {
   constructor(private readonly pageRepo: PageRepository) {}
 
   async execute(input: ReorderSectionsInput): Promise<Result<ReorderSectionsOutput, ReorderSectionsError>> {
-    const page = await this.pageRepo.findByStoreId(input.storeId);
-    if (!page) {
+    const result = await this.pageRepo.findByStoreIdWithTokens(input.storeId);
+    if (!result) {
       return err({ code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan." });
     }
+    const { page, designTokens } = result;
 
     page.reorder(input.sectionIds);
     await this.pageRepo.save(page);
 
-    return ok(page.toJSON());
+    return ok(serializePage(page, designTokens));
   }
 }

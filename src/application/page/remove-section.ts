@@ -5,9 +5,8 @@
 import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
-import type { SectionProps } from "../../domain/store/section";
-import type { PageProps } from "../../domain/store/page";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
+import { serializePage, type RenderedPage } from "./render-section";
 
 export interface RemoveSectionInput {
   storeId: EntityId;
@@ -19,20 +18,21 @@ export interface RemoveSectionError {
   message: string;
 }
 
-export type RemoveSectionOutput = Omit<PageProps, "sections"> & { sections: SectionProps[] };
+export type RemoveSectionOutput = RenderedPage;
 
 export class RemoveSection {
   constructor(private readonly pageRepo: PageRepository) {}
 
   async execute(input: RemoveSectionInput): Promise<Result<RemoveSectionOutput, RemoveSectionError>> {
-    const page = await this.pageRepo.findByStoreId(input.storeId);
-    if (!page) {
+    const result = await this.pageRepo.findByStoreIdWithTokens(input.storeId);
+    if (!result) {
       return err({ code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan." });
     }
+    const { page, designTokens } = result;
 
     page.removeSection(input.sectionId);
     await this.pageRepo.save(page);
 
-    return ok(page.toJSON());
+    return ok(serializePage(page, designTokens));
   }
 }

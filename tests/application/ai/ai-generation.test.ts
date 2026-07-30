@@ -17,6 +17,7 @@ function makePage() {
 function mockPageRepo(page: Page | null = null): PageRepository {
   return {
     findByStoreId: vi.fn().mockResolvedValue(page),
+    findByStoreIdWithTokens: vi.fn().mockResolvedValue(page ? { page, designTokens: null } : null),
     save: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
   };

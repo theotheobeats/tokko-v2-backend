@@ -8,12 +8,13 @@ import { ok, err } from "../../domain/shared/types";
 import { Store } from "../../domain/store/store";
 import { Product } from "../../domain/store/product";
 import { Page } from "../../domain/store/page";
-import { Section, SectionType, type SectionData } from "../../domain/store/section";
+import { Section, SectionType, type SectionProps } from "../../domain/store/section";
 import { SubdomainAlreadyTakenError } from "../../domain/store/rules";
 import type { StoreRepository } from "./store-repo";
 import type { ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import type { Aesthetic, BusinessType } from "../../domain/store/types";
+import { serializePage, type RenderedPage } from "../page/render-section";
 
 // ---------------------------------------------------------------------------
 // Input / Output
@@ -30,7 +31,7 @@ export interface GenerateStoreInput {
 
 export interface GenerateStoreOutput {
   store: ReturnType<Store["toJSON"]>;
-  page: ReturnType<Page["toJSON"]>;
+  page: RenderedPage;
   products: ReturnType<Product["toJSON"]>[];
 }
 
@@ -41,13 +42,15 @@ export interface GenerateStoreOutput {
 export interface AIGeneratedPage {
   sections: Array<{
     type: string;
-    data: Record<string, unknown>;
+    template: string;
+    slots: Record<string, string>;
   }>;
   sampleProducts: Array<{
     name: string;
     description: string;
     price: number;
   }>;
+  designTokens?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,18 +128,19 @@ export class GenerateStore {
 
     // 5. Create Page with sections
     const sections = aiResult.sections.map((s, i) =>
-      Section.create(s.type as SectionType, s.data as unknown as SectionData, i)
+      Section.create({ type: s.type as SectionType, template: s.template, slots: s.slots, sortOrder: i })
     );
     const page = Page.create(store.id, sections);
 
-    // 6. Persist in transaction-like fashion (D1 doesn't support real transactions in workers, but we can do sequential writes)
+    // 6. Persist
     await this.storeRepo.save(store);
     await Promise.all(products.map((p) => this.productRepo.save(p)));
-    await this.pageRepo.save(page);
+    await this.pageRepo.save(page, aiResult.designTokens);
 
+    // 7. Serialize the page with final rendered HTML (slots + design tokens applied)
     return ok({
       store: store.toJSON(),
-      page: page.toJSON(),
+      page: serializePage(page, aiResult.designTokens ?? null),
       products: products.map((p) => p.toJSON()),
     });
   }

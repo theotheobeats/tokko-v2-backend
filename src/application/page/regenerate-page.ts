@@ -5,13 +5,13 @@
 import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
-import { Section, type SectionType, type SectionData } from "../../domain/store/section";
-import type { SectionProps } from "../../domain/store/section";
-import type { PageProps } from "../../domain/store/page";
+import { Section, type SectionType } from "../../domain/store/section";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
+import { serializePage, type RenderedPage } from "./render-section";
 
 export interface AIGeneratedSections {
-  sections: Array<{ type: string; data: Record<string, unknown> }>;
+  sections: Array<{ type: string; template: string; slots: Record<string, string> }>;
+  designTokens?: Record<string, string>;
 }
 
 export interface RegeneratePageInput {
@@ -23,7 +23,7 @@ export interface RegeneratePageError {
   message: string;
 }
 
-export type RegeneratePageOutput = Omit<PageProps, "sections"> & { sections: SectionProps[] };
+export type RegeneratePageOutput = RenderedPage;
 
 export class RegeneratePage {
   constructor(
@@ -48,12 +48,17 @@ export class RegeneratePage {
     }
 
     const sections = aiResult.sections.map((s, i) =>
-      Section.create(s.type as SectionType, s.data as unknown as SectionData, i)
+      Section.create({
+        type: s.type as SectionType,
+        template: s.template,
+        slots: s.slots,
+        sortOrder: i,
+      })
     );
 
     page.replaceAll(sections);
-    await this.pageRepo.save(page);
+    await this.pageRepo.save(page, aiResult.designTokens);
 
-    return ok(page.toJSON());
+    return ok(serializePage(page, aiResult.designTokens ?? null));
   }
 }

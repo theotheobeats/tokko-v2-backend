@@ -5,6 +5,7 @@ import { createAuth } from "../../lib/auth";
 import { createDb } from "../../infrastructure/db/drizzle";
 import type { Env } from "../../types";
 import { GenerateStore, AIGenerationFailedError } from "../../application/store/generate-store";
+import { serializePage } from "../../application/page/render-section";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
 import { D1ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 import { D1PageRepository } from "../../infrastructure/repos/d1-page-repo";
@@ -13,7 +14,7 @@ import { eq } from "drizzle-orm";
 import { stores } from "../../infrastructure/db/schema";
 import { BusinessType, Aesthetic } from "../../domain/store/types";
 import type { EntityId } from "../../domain/shared/types";
-import { mockAIGenerate } from "../../infrastructure/ai/llm-client";
+import { mockAIGenerate, generateStore } from "../../infrastructure/ai/deepseek-client";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
 
@@ -70,11 +71,17 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
   const input = c.req.valid("json");
   const db = createDb(c.env.DB);
 
+  // Use DeepSeek if API key is configured, otherwise fall back to mock
+  const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
+  const aiGenerate = hasApiKey
+    ? (input: Parameters<typeof generateStore>[1]) => generateStore({ apiKey: c.env.LLM_API_KEY, model: c.env.LLM_MODEL }, input)
+    : mockAIGenerate;
+
   const useCase = new GenerateStore(
     new D1StoreRepository(db),
     new D1ProductRepository(db),
     new D1PageRepository(db),
-    mockAIGenerate, // TODO: replace with real LLM client
+    aiGenerate,
   );
 
   const result = await useCase.execute({
@@ -93,8 +100,9 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
       }, 409);
     }
     if (result.error instanceof AIGenerationFailedError) {
+      console.error("AI_GENERATION_FAILED:", result.error.message);
       return c.json({
-        error: { code: "AI_GENERATION_FAILED", message: "Gagal membuat halaman. Coba lagi." },
+        error: { code: "AI_GENERATION_FAILED", message: result.error.message },
       }, 422);
     }
     return c.json({ error: { code: "UNKNOWN", message: "Terjadi kesalahan." } }, 500);
@@ -158,7 +166,7 @@ storesRouter.get("/by-subdomain", async (c) => {
   const productRepo = new D1ProductRepository(db);
   const pageRepo = new D1PageRepository(db);
   const products = await productRepo.findByStoreId(store.id);
-  const page = await pageRepo.findByStoreId(store.id);
+  const pageData = await pageRepo.findByStoreIdWithTokens(store.id);
 
   return c.json({
     store: {
@@ -172,12 +180,9 @@ storesRouter.get("/by-subdomain", async (c) => {
       status: store.status,
       heroImageUrl: store.heroImageUrl,
     },
-    sections: page?.sections.map((s) => ({
-      id: s.id,
-      type: s.type,
-      sortOrder: s.sortOrder,
-      data: s.data,
-    })) ?? [],
+    sections: pageData
+      ? serializePage(pageData.page, pageData.designTokens).sections
+      : [],
     products: products.map((p) => ({
       id: p.id,
       storeId: p.storeId,
@@ -187,6 +192,7 @@ storesRouter.get("/by-subdomain", async (c) => {
       imageUrl: p.imageUrl,
       isAvailable: p.isAvailable,
     })),
+    designTokens: pageData?.designTokens ?? undefined,
   });
 });
 

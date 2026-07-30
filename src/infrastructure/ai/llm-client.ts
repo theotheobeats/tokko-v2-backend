@@ -26,7 +26,8 @@ export async function mockAIGenerate(input: {
     sections: [
       {
         type: "hero",
-        data: {
+        template: `<div style="background: {{bg}}; padding: 48px 24px; text-align: center;"><h1 style="font-size: 32px; font-weight: 700; color: {{text}}; margin-bottom: 12px;">{{title}}</h1><p style="font-size: 15px; color: {{textSecondary}}; line-height: 1.6; margin-bottom: 24px;">{{subtitle}}</p><a href="#" style="display: inline-block; background: {{accent}}; color: {{ctaText}}; padding: 14px 32px; border-radius: {{buttonRadius}}; text-decoration: none; font-weight: 600;">{{ctaText}}</a></div>`,
+        slots: {
           title: `Selamat Datang di ${storeName}`,
           subtitle: `${getTagline(input.businessType)} | Pesan sekarang via WhatsApp!`,
           ctaText: "Pesan Sekarang",
@@ -34,31 +35,30 @@ export async function mockAIGenerate(input: {
       },
       {
         type: "about",
-        data: {
+        template: `<div style="padding: 40px 24px; max-width: 480px; margin: 0 auto;"><h2 style="font-size: 22px; font-weight: 700; color: {{text}}; margin-bottom: 12px;">{{heading}}</h2><p style="font-size: 15px; color: {{textSecondary}}; line-height: 1.7;">{{text}}</p></div>`,
+        slots: {
           heading: "Tentang Kami",
           text: `${storeName} hadir untuk memberikan produk ${input.productCategory} terbaik dengan kualitas premium dan harga terjangkau. Kami percaya setiap pelanggan berhak mendapatkan produk berkualitas dengan pelayanan ramah khas Indonesia.`,
         },
       },
       {
         type: "product-grid",
-        data: {
-          heading: "Produk Unggulan Kami",
-        },
+        template: `<div style="padding: 40px 24px; max-width: 480px; margin: 0 auto;"><h2 style="font-size: 22px; font-weight: 700; color: {{text}}; margin-bottom: 20px;">{{heading}}</h2><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;"><div style="background: {{cardBg}}; border-radius: {{borderRadius}}; padding: 16px; text-align: center;"><div style="font-size: 32px; margin-bottom: 8px;">📦</div><div style="font-size: 13px; font-weight: 600; color: {{text}};">Produk 1</div><div style="font-size: 12px; color: {{textSecondary}};">Rp 85.000</div></div><div style="background: {{cardBg}}; border-radius: {{borderRadius}}; padding: 16px; text-align: center;"><div style="font-size: 32px; margin-bottom: 8px;">📦</div><div style="font-size: 13px; font-weight: 600; color: {{text}};">Produk 2</div><div style="font-size: 12px; color: {{textSecondary}};">Rp 55.000</div></div></div></div>`,
+        slots: { heading: "Produk Unggulan Kami" },
       },
       {
         type: "testimonial",
-        data: {
+        template: `<div style="background: {{bg}}; padding: 40px 24px; max-width: 480px; margin: 0 auto;"><h2 style="font-size: 22px; font-weight: 700; color: {{text}}; margin-bottom: 16px;">{{heading}}</h2><div style="background: {{cardBg}}; border-radius: {{borderRadius}}; padding: 16px; margin-bottom: 10px;"><div style="color: #f59e0b; font-size: 14px;">{{stars1}}</div><p style="font-size: 14px; color: {{text}}; line-height: 1.6; margin: 8px 0;">{{text1}}</p><p style="font-size: 12px; color: {{textSecondary}};">— {{name1}}</p></div><div style="background: {{cardBg}}; border-radius: {{borderRadius}}; padding: 16px; margin-bottom: 10px;"><div style="color: #f59e0b; font-size: 14px;">{{stars2}}</div><p style="font-size: 14px; color: {{text}}; line-height: 1.6; margin: 8px 0;">{{text2}}</p><p style="font-size: 12px; color: {{textSecondary}};">— {{name2}}</p></div></div>`,
+        slots: {
           heading: "Apa Kata Pelanggan",
-          items: [
-            { name: "Budi S.", text: `Produk ${input.productCategory}-nya enak banget! Pasti order lagi.`, rating: 5 },
-            { name: "Sari W.", text: "Pelayanannya ramah dan cepat. Recommended!", rating: 5 },
-            { name: "Dewi K.", text: "Harga terjangkau, kualitas premium. Suka banget!", rating: 4 },
-          ],
+          stars1: "★★★★★", text1: `Produk ${input.productCategory}-nya enak banget! Pasti order lagi.`, name1: "Budi S.",
+          stars2: "★★★★★", text2: "Pelayanannya ramah dan cepat. Recommended!", name2: "Sari W.",
         },
       },
       {
         type: "cta",
-        data: {
+        template: `<div style="padding: 40px 24px; text-align: center; max-width: 480px; margin: 0 auto;"><div style="background: linear-gradient(135deg, {{accent}}, {{accent}}dd); border-radius: {{borderRadius}}; padding: 32px 24px;"><h2 style="font-size: 22px; font-weight: 700; color: {{ctaText}}; margin-bottom: 8px;">{{heading}}</h2><p style="font-size: 14px; color: {{ctaText}}; opacity: 0.9; line-height: 1.6; margin-bottom: 20px;">{{description}}</p><a href="#" style="display: inline-block; background: {{ctaText}}; color: {{accent}}; padding: 12px 24px; border-radius: {{buttonRadius}}; text-decoration: none; font-weight: 600; font-size: 14px;">{{buttonText}}</a></div></div>`,
+        slots: {
           heading: "Siap Pesan?",
           description: `Dapatkan produk ${input.productCategory} terbaik dari ${storeName}. Pesan sekarang dan nikmati kualitasnya!`,
           buttonText: "Pesan via WhatsApp",
@@ -66,26 +66,35 @@ export async function mockAIGenerate(input: {
       },
       {
         type: "contact",
-        data: {
+        template: `<div style="background: {{text}}; padding: 40px 24px; text-align: center;"><h2 style="font-size: 22px; font-weight: 700; color: #ffffff; margin-bottom: 12px;">{{heading}}</h2><p style="font-size: 14px; color: rgba(255,255,255,0.7); line-height: 1.6; margin-bottom: 4px;">{{address}}</p><p style="font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 16px;">{{hours}}</p><a href="https://wa.me/{{whatsappNumber}}" style="display: inline-block; background: #25D366; color: white; padding: 12px 28px; border-radius: 9999px; text-decoration: none; font-weight: 600; font-size: 14px;">Chat via WhatsApp</a></div>`,
+        slots: {
           heading: "Hubungi Kami",
-          whatsappNumber: "(nomor WhatsApp Anda)",
+          whatsappNumber: "6281234567890",
           address: "Jl. Contoh No. 123, Jakarta",
           hours: "Senin - Sabtu: 08:00 - 20:00 WIB",
         },
       },
       {
         type: "faq",
-        data: {
+        template: `<div style="padding: 40px 24px; max-width: 480px; margin: 0 auto;"><h2 style="font-size: 22px; font-weight: 700; color: {{text}}; margin-bottom: 16px;">{{heading}}</h2><div style="background: {{cardBg}}; border-radius: {{borderRadius}}; padding: 16px; margin-bottom: 8px;"><p style="font-size: 14px; font-weight: 600; color: {{text}}; margin-bottom: 6px;">{{q1}}</p><p style="font-size: 13px; color: {{textSecondary}}; line-height: 1.6;">{{a1}}</p></div><div style="background: {{cardBg}}; border-radius: {{borderRadius}}; padding: 16px; margin-bottom: 8px;"><p style="font-size: 14px; font-weight: 600; color: {{text}}; margin-bottom: 6px;">{{q2}}</p><p style="font-size: 13px; color: {{textSecondary}}; line-height: 1.6;">{{a2}}</p></div></div>`,
+        slots: {
           heading: "Pertanyaan Umum",
-          items: [
-            { question: "Berapa lama proses pemesanan?", answer: "Pesanan akan diproses dalam 1-2 hari kerja setelah konfirmasi pembayaran." },
-            { question: "Apakah bisa COD?", answer: "Saat ini kami hanya melayani pembayaran via transfer dan pesanan diantar setelah pembayaran dikonfirmasi." },
-            { question: "Bagaimana cara memesan?", answer: "Cukup klik tombol 'Pesan via WhatsApp' dan kirimkan produk yang Anda inginkan beserta jumlahnya." },
-          ],
+          q1: "Berapa lama proses pemesanan?", a1: "Pesanan akan diproses dalam 1-2 hari kerja setelah konfirmasi.",
+          q2: "Bagaimana cara memesan?", a2: "Klik tombol WhatsApp dan kirimkan produk yang Anda inginkan.",
         },
       },
     ],
     sampleProducts: getSampleProducts(input.productCategory, input.businessType),
+    designTokens: {
+      accent: "#f97316",
+      bg: "#fdfcfa",
+      cardBg: "#ffffff",
+      text: "#1c1917",
+      textSecondary: "#78716c",
+      ctaText: "#ffffff",
+      borderRadius: "12px",
+      buttonRadius: "9999px",
+    },
   };
 }
 

@@ -11,7 +11,8 @@ import { pages, sections } from "../db/schema";
 
 export interface PageRepository {
   findByStoreId(storeId: EntityId): Promise<Page | null>;
-  save(page: Page): Promise<void>;
+  findByStoreIdWithTokens(storeId: EntityId): Promise<{ page: Page; designTokens: Record<string, string> | null } | null>;
+  save(page: Page, designTokens?: Record<string, string>): Promise<void>;
   delete(id: EntityId): Promise<void>;
 }
 
@@ -19,6 +20,11 @@ export class D1PageRepository implements PageRepository {
   constructor(private readonly db: DbClient) {}
 
   async findByStoreId(storeId: EntityId): Promise<Page | null> {
+    const result = await this.findByStoreIdWithTokens(storeId);
+    return result?.page ?? null;
+  }
+
+  async findByStoreIdWithTokens(storeId: EntityId): Promise<{ page: Page; designTokens: Record<string, string> | null } | null> {
     const pageRow = await this.db
       .select()
       .from(pages)
@@ -35,47 +41,55 @@ export class D1PageRepository implements PageRepository {
 
     const sectionProps: SectionProps[] = sectionRows
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((r) => ({
-        id: r.id as EntityId,
-        type: r.type as SectionProps["type"],
-        data: JSON.parse(r.data),
-        sortOrder: r.sortOrder,
-      }));
+      .map((r) => {
+        const data = JSON.parse(r.data);
+        return {
+          id: r.id as EntityId,
+          type: r.type as SectionProps["type"],
+          template: r.template ?? `<div>{{content}}</div>`,
+          slots: data.slots ?? data ?? {},
+          sortOrder: r.sortOrder,
+        };
+      });
 
-    return Page.from({
+    const page = Page.from({
       id: pageRow.id as EntityId,
       storeId: pageRow.storeId as EntityId,
       sections: sectionProps,
     });
+
+    const designTokens = pageRow.designTokens ? JSON.parse(pageRow.designTokens) : null;
+
+    return { page, designTokens };
   }
 
-  async save(page: Page): Promise<void> {
+  async save(page: Page, designTokens?: Record<string, string>): Promise<void> {
     const json = page.toJSON();
     const existing = await this.findByStoreId(page.storeId);
+    const tokensJson = designTokens ? JSON.stringify(designTokens) : undefined;
 
     if (existing) {
-      // Update page
-      await this.db.update(pages)
-        .set({ updatedAt: new Date().toISOString() })
-        .where(eq(pages.id, page.id as string));
-
-      // Replace sections: delete old, insert new
+      const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+      if (tokensJson) (updateData as any).designTokens = tokensJson;
+      await this.db.update(pages).set(updateData).where(eq(pages.id, page.id as string));
       await this.db.delete(sections).where(eq(sections.pageId, page.id as string));
     } else {
       await this.db.insert(pages).values({
         id: json.id as string,
         storeId: json.storeId as string,
-      });
+        designTokens: tokensJson ?? null,
+      } as any);
     }
 
-    // Insert all sections
+    // Insert all sections with template
     if (json.sections.length > 0) {
       await this.db.insert(sections).values(
         json.sections.map((s) => ({
           id: s.id as string,
           pageId: json.id as string,
           type: s.type,
-          data: JSON.stringify(s.data),
+          template: s.template,
+          data: JSON.stringify(s.slots),
           sortOrder: s.sortOrder,
         }))
       );
