@@ -71,6 +71,13 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
   const input = c.req.valid("json");
   const db = createDb(c.env.DB);
 
+  // One user, one store — prevent duplicate
+  const checkRepo = new D1StoreRepository(db);
+  const existing = await checkRepo.findByOwnerId(session.user.id as EntityId);
+  if (existing) {
+    return c.json({ error: { code: "ALREADY_ONBOARDED", message: "Anda sudah memiliki toko." } }, 409);
+  }
+
   // Use LLM provider configured via env vars (DeepSeek, Synthetic/Kimi, OpenAI, etc.)
   const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
   const aiGenerate = hasApiKey

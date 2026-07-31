@@ -68,6 +68,36 @@ pagesRouter.get("/:storeId/page", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// PATCH /api/stores/:storeId/page/theme
+// ---------------------------------------------------------------------------
+pagesRouter.patch("/:storeId/page/theme", zValidator("json", z.object({
+  theme: z.record(z.string(), z.string()).optional(),
+})), async (c) => {
+  const storeId = c.req.param("storeId") as EntityId;
+  const ownerCheck = await verifyOwner(c, storeId);
+  if (ownerCheck instanceof Response) return ownerCheck;
+
+  const db = createDb(c.env.DB);
+  const pageRepo = new D1PageRepository(db);
+  const { theme } = c.req.valid("json");
+
+  if (!theme || Object.keys(theme).length === 0) {
+    return c.json({ error: { code: "VALIDATION", message: "Theme data diperlukan." } }, 400);
+  }
+
+  const pageData = await pageRepo.findByStoreIdWithTokens(storeId);
+  if (!pageData) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Halaman tidak ditemukan." } }, 404);
+  }
+
+  // Merge new theme values on top of existing
+  const merged = { ...(pageData.designTokens ?? {}), ...theme };
+  await pageRepo.save(pageData.page, merged);
+
+  return c.json({ theme: merged });
+});
+
+// ---------------------------------------------------------------------------
 // PATCH /api/stores/:storeId/page/sections/:id
 // ---------------------------------------------------------------------------
 pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
