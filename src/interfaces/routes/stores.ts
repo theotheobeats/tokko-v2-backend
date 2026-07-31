@@ -71,10 +71,17 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
   const input = c.req.valid("json");
   const db = createDb(c.env.DB);
 
-  // Use DeepSeek if API key is configured, otherwise fall back to mock
+  // Use LLM provider configured via env vars (DeepSeek, Synthetic/Kimi, OpenAI, etc.)
   const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
   const aiGenerate = hasApiKey
-    ? (input: Parameters<typeof generateStore>[1]) => generateStore({ apiKey: c.env.LLM_API_KEY, model: c.env.LLM_MODEL }, input)
+    ? (input: Parameters<typeof generateStore>[1]) => {
+        console.log(`[LLM] generating with ${c.env.LLM_MODEL || "deepseek-chat"} @ ${c.env.LLM_BASE_URL || "https://api.deepseek.com/v1"}`);
+        return generateStore({
+          apiKey: c.env.LLM_API_KEY,
+          model: c.env.LLM_MODEL,
+          baseUrl: c.env.LLM_BASE_URL,
+        }, input);
+      }
     : mockAIGenerate;
 
   const useCase = new GenerateStore(

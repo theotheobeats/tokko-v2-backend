@@ -13,9 +13,10 @@ export interface Env {
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
 
-  // AI
+  // AI — OpenAI-compatible provider (DeepSeek, Synthetic/Kimi, OpenAI, etc.)
   LLM_API_KEY: string;
   LLM_MODEL: string;
+  LLM_BASE_URL?: string;  // optional — defaults to DeepSeek
 
   // Environment
   NODE_ENV?: string;

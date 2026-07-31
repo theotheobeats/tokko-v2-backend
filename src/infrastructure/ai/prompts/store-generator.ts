@@ -75,35 +75,55 @@ Gunakan tabel di atas sebagai panduan — tiap layoutStyle punya kombinasi natur
 
 ## SECTION — tipe, variant yang tersedia, dan isi content
 
-1. hero — variant: "split" | "centered" | "image-bg"
-   content: { eyebrow?, title, subtitle, ctaText, imageUrl? }
+1. hero — PILIH BLOCK dari catalog di bawah. Setiap block punya layout unik.
+   Semua block menerima content yang sama: { eyebrow?, title, subtitle, ctaText, blockId, imageSlot? }.
+   "blockId" menentukan layout mana yang dipakai. PILIH SALAH SATU:
 
-2. about — variant: "split" | "centered" | "stats"
-   content: { eyebrow?, heading, body, imageUrl?, stats? : [{ value, label }] }
-   (variant "stats" WAJIB menyertakan stats berisi 3-4 angka impresif, mis. "500+" / "Pelanggan Puas")
+   BLOCK CATALOG — HERO (5 block dari shadcn/ui patterns):
+   - "hero-shadcn-centered": Centered — lingkaran dekoratif + heading + CTA + trust text. Paling serbaguna, cocok untuk semua bisnis.
+   - "hero-shadcn-split": Split — 2 kolom, teks kiri + visual kanan. Cocok untuk brand dengan produk visual.
+   - "hero-shadcn-gradient": Gradient — centered di atas latar gradasi aksen + badge cluster. Premium, cocok beauty/fashion/lifestyle.
+   - "hero-shadcn-minimal": Minimal — kicker uppercase + headline 64px kiri, tanpa gambar. Cocok tech/service/consulting.
+   - "hero-shadcn-card": Card Overlay — image area di atas + kartu konten tumpang tindih. Modern, depth. Cocok gadget/premium.
 
-3. product-grid — variant: "grid" | "list"
-   content: { eyebrow?, heading }
+   Contoh: untuk toko gadget, pilih "hero-shadcn-card". Untuk toko jasa, pilih "hero-shadcn-minimal".
 
-4. testimonial — variant: "cards" | "single"
-   content: { eyebrow?, heading, items: [{ quote, name, role? }] }  (2-4 testimoni)
+2. about — PILIH BLOCK:
+   - "about-shadcn-split": Split — 2 kolom, visual kiri + teks kanan dengan stat cards. Visual dan informatif.
+   - "about-shadcn-centered": Centered — heading centered + body + stat grid. Bersih, seimbang.
+   - "about-shadcn-story": Story — kicker + headline besar + narasi panjang. Editorial, untuk cerita brand.
 
-5. cta — variant: "band" | "card"
-   content: { heading, subtitle?, ctaText }
+3. product-grid — PILIH BLOCK:
+   - "product-grid-shadcn-cards": Cards — grid kartu produk dengan gambar, nama, harga, tombol pesan. Density 2-4 kolom.
+   - "product-grid-shadcn-minimal": Minimal — list horizontal row per produk. Simpel, modern.
+   - "product-grid-shadcn-featured": Featured — 1 produk hero besar + sisanya grid kecil. Sorot best-seller.
 
-6. contact — variant: "split" | "centered"
-   content: { eyebrow?, heading, whatsapp?, address?, email?, hours? }
+4. testimonial — PILIH BLOCK:
+   - "testimonial-shadcn-cards": Cards — grid kartu dengan bintang, avatar, kutipan. Social proof kuat.
+   - "testimonial-shadcn-quote": Quote — pull-quote italic dengan border aksen. Editorial, elegan.
 
-7. faq — variant: "accordion" | "grid"
-   content: { eyebrow?, heading, items: [{ question, answer }] }  (3-5 FAQ)
+5. cta — PILIH BLOCK:
+   - "cta-shadcn-band": Band — full-width band warna aksen + heading + CTA. Bold, eye-catching.
+   - "cta-shadcn-card": Card — kartu centered dengan border subtle. Lebih soft, elegan.
+   - "cta-shadcn-split": Split — heading kiri + tombol CTA kanan. Kompak, direct.
+
+6. contact — PILIH BLOCK:
+   - "contact-shadcn-cards": Cards — grid kartu kontak dengan icon.
+   - "contact-shadcn-split": Split — 2 kolom, heading kiri + kartu kontak kanan.
+
+7. faq — PILIH BLOCK:
+   - "faq-shadcn-accordion": Accordion — stacked FAQ dengan border divider. Klasik.
+   - "faq-shadcn-cards": Cards — grid 2 kolom kartu FAQ. Terstruktur.
+   - "faq-shadcn-split": Split — 2 kolom independen kartu FAQ. Untuk banyak pertanyaan.
 
 ## ATURAN
-- Selalu sertakan: hero, about, product-grid, contact. Boleh tambah testimonial, cta, faq. Maksimal 7 section.
-- Pilih variant yang paling cocok dengan gaya referensi (mis. bold → "image-bg"/"band"; minimal → "centered"; editorial → "split").
+- WAJIB sertakan SEMUA section berikut: hero, about, product-grid, contact. WAJIB. Jangan skip satu pun.
+- Boleh tambah: testimonial, cta, faq (1-3 tambahan). Total maksimal 7 section.
+- Setiap section HARUS punya "blockId" — pilih dari catalog di atas.
 - Semua teks Bahasa Indonesia, nada ramah dan meyakinkan. Tulis copy yang menjual, bukan generik.
 - Harga dalam Rupiah angka bulat (mis. 85000), realistis untuk jenis bisnisnya.
 - JANGAN tulis HTML, CSS, atau tag apapun. Hanya teks/data biasa.
-- JANGAN pakai URL gambar eksternal — imageUrl boleh dikosongkan (frontend akan isi gambar asli).
+- JANGAN pakai URL gambar eksternal — imageUrl boleh dikosongkan.
 
 ## ATURAN JSON — PENTING
 - Output HANYA satu objek JSON valid. Tanpa teks/markdown/backtick.
@@ -120,9 +140,10 @@ Gunakan tabel di atas sebagai panduan — tiap layoutStyle punya kombinasi natur
     "layoutStyle":"startup"
   },
   "sections": [
-    { "type":"hero", "variant":"split", "content":{ "eyebrow":"✦ Skincare Alami", "title":"Judul Besar yang Menjual", "subtitle":"Deskripsi singkat value proposition.", "ctaText":"Belanja Sekarang" } },
-    { "type":"about", "variant":"stats", "content":{ "eyebrow":"✦ Tentang Kami", "heading":"Kenapa Memilih Kami", "body":"Cerita singkat bisnis.", "stats":[ { "value":"500+", "label":"Pelanggan" }, { "value":"4.9", "label":"Rating" } ] } },
-    { "type":"product-grid", "variant":"grid", "content":{ "eyebrow":"✦ Koleksi", "heading":"Produk Andalan" } }
+    { "type":"hero", "variant":"default", "content":{ "blockId":"hero-shadcn-centered", "eyebrow":"✦ Skincare Alami", "title":"Judul Besar yang Menjual", "subtitle":"Deskripsi singkat value proposition.", "ctaText":"Belanja Sekarang" } },
+    { "type":"about", "variant":"default", "content":{ "blockId":"about-shadcn-centered", "eyebrow":"✦ Tentang Kami", "heading":"Kenapa Memilih Kami", "body":"Cerita singkat bisnis.", "stats":[ { "value":"500+", "label":"Pelanggan" }, { "value":"4.9", "label":"Rating" } ] } },
+    { "type":"product-grid", "variant":"default", "content":{ "blockId":"product-grid-shadcn-cards", "eyebrow":"✦ Koleksi", "heading":"Produk Andalan" } },
+    { "type":"contact", "variant":"default", "content":{ "blockId":"contact-shadcn-cards", "eyebrow":"✦ Kontak", "heading":"Hubungi Kami", "whatsapp":"08123456789", "address":"Jl. Contoh No. 123" } }
   ],
   "sampleProducts": [ { "name":"Nama Produk", "description":"Deskripsi 2-3 kalimat.", "price":85000 } ]
 }`;

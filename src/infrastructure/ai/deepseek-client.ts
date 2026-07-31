@@ -1,10 +1,13 @@
 /**
- * DeepSeek LLM Client — OpenAI-compatible API.
+ * LLM Client — OpenAI-compatible (works with any provider).
  *
- * DeepSeek endpoint: https://api.deepseek.com/v1
- * Model: deepseek-chat
+ * Supported providers (set via LLM_BASE_URL env):
+ *   - DeepSeek (default):    https://api.deepseek.com/v1
+ *   - Synthetic / Kimi K3:   https://api.synthetic.new/openai/v1
+ *   - OpenAI:                https://api.openai.com/v1
+ *   - Any OpenAI-compatible  http://your-endpoint/v1
  *
- * Uses standard fetch() — no SDK needed. Works in Cloudflare Workers runtime.
+ * Uses standard fetch() — no SDK needed. Works in Cloudflare Workers.
  */
 
 import type { AIGeneratedPage } from "../../application/store/generate-store";
@@ -21,24 +24,26 @@ import {
 // Configuration
 // ---------------------------------------------------------------------------
 
-interface DeepSeekConfig {
+interface LlmConfig {
   apiKey: string;
   model?: string;
+  baseUrl?: string;
 }
 
+const DEFAULT_BASE_URL = "https://api.deepseek.com/v1";
 const DEFAULT_MODEL = "deepseek-chat";
-const BASE_URL = "https://api.deepseek.com/v1";
 
 // ---------------------------------------------------------------------------
-// Core client
+// Core client (OpenAI-compatible — works with any provider)
 // ---------------------------------------------------------------------------
 
 async function chatCompletion(
-  config: DeepSeekConfig,
+  config: LlmConfig,
   messages: { role: "system" | "user"; content: string }[],
   options?: { jsonMode?: boolean; maxTokens?: number; temperature?: number }
 ): Promise<string> {
-  const response = await fetch(`${BASE_URL}/chat/completions`, {
+  const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -57,7 +62,7 @@ async function chatCompletion(
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "Unknown error");
-    throw new Error(`DeepSeek API error ${response.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`LLM API error ${response.status}: ${errText.slice(0, 200)}`);
   }
 
   const data = (await response.json()) as {
@@ -73,10 +78,9 @@ async function chatCompletion(
 
 /**
  * Generate a complete store page + sample products from quiz answers.
- * Replaces mockAIGenerate.
  */
 export async function generateStore(
-  config: DeepSeekConfig,
+  config: LlmConfig,
   input: {
     businessName: string;
     businessType: string;
@@ -119,10 +123,9 @@ export async function generateStore(
 
 /**
  * Generate a product description from name + category.
- * Replaces the inline mock in the products route.
  */
 export async function generateProductDesc(
-  config: DeepSeekConfig,
+  config: LlmConfig,
   input: { name: string; category: string }
 ): Promise<string> {
   const raw = await chatCompletion(

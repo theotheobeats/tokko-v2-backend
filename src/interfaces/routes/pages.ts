@@ -192,7 +192,11 @@ pagesRouter.post("/:storeId/page/regenerate", async (c) => {
   const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
   const aiFn = hasApiKey
     ? async () => {
-        const result = await generateStore({ apiKey: c.env.LLM_API_KEY, model: c.env.LLM_MODEL }, {
+        const result = await generateStore({
+          apiKey: c.env.LLM_API_KEY,
+          model: c.env.LLM_MODEL,
+          baseUrl: c.env.LLM_BASE_URL,
+        }, {
           businessName: store.name,
           businessType: store.businessType,
           productCategory: "umum",

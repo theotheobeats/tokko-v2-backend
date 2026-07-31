@@ -19,8 +19,9 @@ export async function mockAIGenerate(input: {
     sections: [
       {
         type: "hero",
-        variant: "split",
+        variant: "default",
         content: {
+          blockId: "hero-shadcn-centered",
           eyebrow: "✦ " + input.productCategory,
           title: `Selamat Datang di ${storeName}`,
           subtitle: `${getTagline(input.businessType)}. Pesan sekarang via WhatsApp!`,
@@ -29,8 +30,9 @@ export async function mockAIGenerate(input: {
       },
       {
         type: "about",
-        variant: "stats",
+        variant: "default",
         content: {
+          blockId: "about-shadcn-split",
           eyebrow: "✦ Tentang Kami",
           heading: "Kenapa Memilih Kami",
           body: `${storeName} hadir untuk memberikan produk ${input.productCategory} terbaik dengan kualitas premium dan harga terjangkau. Kami percaya setiap pelanggan berhak mendapatkan produk berkualitas dengan pelayanan ramah khas Indonesia.`,
@@ -39,43 +41,56 @@ export async function mockAIGenerate(input: {
             { value: "4.9", label: "Rating Toko" },
             { value: "100%", label: "Original" },
           ],
+          columns: "2",
+          imageSlot: "right",
+          contentAlign: "left",
+          emphasis: "story",
         },
       },
       {
         type: "product-grid",
-        variant: "grid",
-        content: { eyebrow: "✦ Koleksi", heading: "Produk Unggulan Kami" },
+        variant: "default",
+        content: { blockId: "product-grid-shadcn-cards", eyebrow: "✦ Koleksi", heading: "Produk Unggulan Kami" },
       },
       {
         type: "testimonial",
-        variant: "cards",
+        variant: "default",
         content: {
+          blockId: "testimonial-shadcn-cards",
           eyebrow: "✦ Testimoni",
           heading: "Apa Kata Pelanggan",
           items: [
             { quote: `Produk ${input.productCategory}-nya bagus banget! Pasti order lagi.`, name: "Budi S.", role: "Jakarta" },
             { quote: "Pelayanannya ramah dan cepat. Recommended!", name: "Sari W.", role: "Bandung" },
           ],
+          columns: "2",
+          style: "cards",
         },
       },
       {
         type: "cta",
-        variant: "band",
+        variant: "default",
         content: {
+          blockId: "cta-shadcn-band",
           heading: "Siap Pesan?",
           subtitle: `Dapatkan produk ${input.productCategory} terbaik dari ${storeName}. Pesan sekarang!`,
           ctaText: "Pesan via WhatsApp",
+          style: "band",
+          background: "accent",
         },
       },
       {
         type: "contact",
-        variant: "split",
+        variant: "default",
         content: {
+          blockId: "contact-shadcn-cards",
           eyebrow: "✦ Kontak",
           heading: "Hubungi Kami",
           whatsapp: "6281234567890",
           address: "Jl. Contoh No. 123, Jakarta",
           hours: "Senin - Sabtu: 08:00 - 20:00 WIB",
+          columns: "2",
+          style: "cards",
         },
       },
     ],

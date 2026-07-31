@@ -90,31 +90,57 @@ export const LAYOUT_STYLE_GUIDE: Record<string, {
 // Per-section content shapes
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Hero layout parameters — the AI describes HOW to render, not which variant.
+// These params give ~384 distinct hero layouts from one component.
+// ---------------------------------------------------------------------------
+
+const HeroLayout = z.object({
+  columns: z.enum(["1", "2"]).optional().default("2"),
+  imageSlot: z.enum(["right", "left", "background", "none"]).optional().default("right"),
+  contentAlign: z.enum(["left", "center"]).optional().default("left"),
+  emphasis: z.enum(["headline", "cta", "balanced"]).optional().default("headline"),
+  decor: z.array(z.enum(["eyebrow-pill", "trust-badges", "stat-strip"])).optional().default([]),
+});
+
 export const HeroContent = z.object({
+  blockId: z.string().optional(),  // identifies which block from the catalog to use
   eyebrow: z.string().optional(),
   title: z.string(),
   subtitle: z.string(),
   ctaText: z.string(),
   imageUrl: z.string().optional(),
-});
+  imageSlot: z.string().optional(),  // for split-image block
+}).merge(HeroLayout);
 export type HeroContent = z.infer<typeof HeroContent>;
 
 export const AboutContent = z.object({
+  blockId: z.string().optional(),
   eyebrow: z.string().optional(),
   heading: z.string(),
   body: z.string(),
   imageUrl: z.string().optional(),
   stats: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
-});
+}).merge(z.object({
+  columns: z.enum(["1", "2"]).optional().default("2"),
+  imageSlot: z.enum(["right", "left", "none"]).optional().default("right"),
+  contentAlign: z.enum(["left", "center"]).optional().default("left"),
+  emphasis: z.enum(["story", "stats"]).optional().default("story"),
+}));
 export type AboutContent = z.infer<typeof AboutContent>;
 
 export const ProductGridContent = z.object({
+  blockId: z.string().optional(),
   eyebrow: z.string().optional(),
   heading: z.string(),
-});
+}).merge(z.object({
+  style: z.enum(["cards", "minimal"]).optional().default("cards"),
+  density: z.enum(["2", "3", "4"]).optional().default("2"),
+}));
 export type ProductGridContent = z.infer<typeof ProductGridContent>;
 
 export const TestimonialContent = z.object({
+  blockId: z.string().optional(),
   eyebrow: z.string().optional(),
   heading: z.string(),
   items: z.array(
@@ -124,31 +150,46 @@ export const TestimonialContent = z.object({
       role: z.string().optional(),
     })
   ),
-});
+}).merge(z.object({
+  columns: z.enum(["1", "2", "3"]).optional().default("2"),
+  style: z.enum(["cards", "quote"]).optional().default("cards"),
+}));
 export type TestimonialContent = z.infer<typeof TestimonialContent>;
 
 export const CtaContent = z.object({
+  blockId: z.string().optional(),
   heading: z.string(),
   subtitle: z.string().optional(),
   ctaText: z.string(),
-});
+}).merge(z.object({
+  style: z.enum(["band", "card", "split"]).optional().default("band"),
+  background: z.enum(["accent", "subtle", "dark"]).optional().default("accent"),
+}));
 export type CtaContent = z.infer<typeof CtaContent>;
 
 export const ContactContent = z.object({
+  blockId: z.string().optional(),
   eyebrow: z.string().optional(),
   heading: z.string(),
   whatsapp: z.string().optional(),
   address: z.string().optional(),
   email: z.string().optional(),
   hours: z.string().optional(),
-});
+}).merge(z.object({
+  columns: z.enum(["1", "2"]).optional().default("2"),
+  style: z.enum(["cards", "list"]).optional().default("cards"),
+}));
 export type ContactContent = z.infer<typeof ContactContent>;
 
 export const FaqContent = z.object({
+  blockId: z.string().optional(),
   eyebrow: z.string().optional(),
   heading: z.string(),
   items: z.array(z.object({ question: z.string(), answer: z.string() })),
-});
+}).merge(z.object({
+  columns: z.enum(["1", "2"]).optional().default("1"),
+  style: z.enum(["accordion", "cards"]).optional().default("accordion"),
+}));
 export type FaqContent = z.infer<typeof FaqContent>;
 
 // ---------------------------------------------------------------------------
@@ -157,31 +198,31 @@ export type FaqContent = z.infer<typeof FaqContent>;
 
 export const SECTION_DEFINITIONS = {
   hero: {
-    variants: ["split", "centered", "image-bg"] as const,
+    variants: ["default"] as const,  // layout is now driven by content.layout params
     content: HeroContent,
   },
   about: {
-    variants: ["split", "centered", "stats"] as const,
+    variants: ["default"] as const,
     content: AboutContent,
   },
   "product-grid": {
-    variants: ["grid", "list"] as const,
+    variants: ["default"] as const,
     content: ProductGridContent,
   },
   testimonial: {
-    variants: ["cards", "single"] as const,
+    variants: ["default"] as const,
     content: TestimonialContent,
   },
   cta: {
-    variants: ["band", "card"] as const,
+    variants: ["default"] as const,
     content: CtaContent,
   },
   contact: {
-    variants: ["split", "centered"] as const,
+    variants: ["default"] as const,
     content: ContactContent,
   },
   faq: {
-    variants: ["accordion", "grid"] as const,
+    variants: ["default"] as const,
     content: FaqContent,
   },
 } as const;
