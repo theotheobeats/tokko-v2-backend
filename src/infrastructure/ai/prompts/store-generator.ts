@@ -11,6 +11,18 @@ export function buildStorePrompt(designGuide: string, aesthetic: string): string
 
 Tugasmu: pilih TEMA visual + tulis KONTEN untuk setiap section. Kamu TIDAK menulis HTML/CSS — frontend sudah punya komponen desain yang bagus. Kamu hanya mengisi datanya.
 
+⚠️ RULE PALING PENTING — BACA DULU:
+Output sections WAJIB berisi SEMUA 7 tipe berikut, di urutan ini:
+1. hero
+2. about
+3. product-grid
+4. testimonial
+5. cta
+6. faq
+7. contact
+
+JANGAN pernah melewatkan satu pun. Selalu 7 sections lengkap. Tidak ada pengecualian.
+
 ## REFERENSI DESAIN (tema "${aesthetic}")
 ${designGuide}
 
@@ -79,46 +91,114 @@ Gunakan tabel di atas sebagai panduan — tiap layoutStyle punya kombinasi natur
    Semua block menerima content yang sama: { eyebrow?, title, subtitle, ctaText, blockId, imageSlot? }.
    "blockId" menentukan layout mana yang dipakai. PILIH SALAH SATU:
 
-   BLOCK CATALOG — HERO (5 block dari shadcn/ui patterns):
-   - "hero-shadcn-centered": Centered — lingkaran dekoratif + heading + CTA + trust text. Paling serbaguna, cocok untuk semua bisnis.
-   - "hero-shadcn-split": Split — 2 kolom, teks kiri + visual kanan. Cocok untuk brand dengan produk visual.
-   - "hero-shadcn-gradient": Gradient — centered di atas latar gradasi aksen + badge cluster. Premium, cocok beauty/fashion/lifestyle.
-   - "hero-shadcn-minimal": Minimal — kicker uppercase + headline 64px kiri, tanpa gambar. Cocok tech/service/consulting.
-   - "hero-shadcn-card": Card Overlay — image area di atas + kartu konten tumpang tindih. Modern, depth. Cocok gadget/premium.
+   BLOCK CATALOG — HERO (13 pilihan):
+   - "hero-shadcn-centered": Centered — lingkaran dekoratif + heading + CTA + trust text. Serbaguna.
+   - "hero-shadcn-split": Split — teks kiri + visual kanan.
+   - "hero-shadcn-gradient": Gradient — centered di atas gradasi aksen + badge.
+   - "hero-shadcn-minimal": Minimal — kicker uppercase + headline 64px, tanpa gambar.
+   - "hero-shadcn-card": Card Overlay — image area + kartu konten tumpang tindih.
+   - "hero-split-reverse": Split Reverse — image kiri + teks kanan.
+   - "hero-fullscreen": Fullscreen — full-viewport centered + gradient fade.
+   - "hero-two-cta": Two CTAs — headline + 2 tombol (primary + outline).
+   - "hero-image-banner": Image Banner — full-width image/gradient + overlay text putih.
+   - "hero-float-badges": Floating Badges — centered + trust badge strip.
+   - "hero-stats-inline": Stats Inline — headline + CTA + stat row.
+   - "hero-dark-glow": Dark Glow — dark section + glowing CTA.
+   - "hero-asymmetric": Asymmetric — headline besar kiri + whitespace lega.
 
-   Contoh: untuk toko gadget, pilih "hero-shadcn-card". Untuk toko jasa, pilih "hero-shadcn-minimal".
+   Contoh: toko gadget → "hero-shadcn-card". Toko jasa → "hero-shadcn-minimal". Beauty → "hero-shadcn-gradient".
 
-2. about — PILIH BLOCK:
-   - "about-shadcn-split": Split — 2 kolom, visual kiri + teks kanan dengan stat cards. Visual dan informatif.
-   - "about-shadcn-centered": Centered — heading centered + body + stat grid. Bersih, seimbang.
-   - "about-shadcn-story": Story — kicker + headline besar + narasi panjang. Editorial, untuk cerita brand.
+2. about — PILIH BLOCK (14 pilihan):
+   - "about-shadcn-split": Split — visual kiri + teks kanan + stat cards.
+   - "about-shadcn-centered": Centered — heading centered + body + stat grid.
+   - "about-shadcn-story": Story — kicker + headline besar + narasi.
+   - "about-split-reverse": Split Reverse — teks kiri + visual kanan.
+   - "about-features": Feature Cards — grid kartu icon/title/text (why choose us).
+   - "about-numbers": Numbers Band — band aksen + angka besar.
+   - "about-mission": Mission — statement centered + 2 kartu nilai.
+   - "about-checklist": Checklist — visual + daftar keunggulan.
+   - "about-quote": Pull Quote — kutipan besar italic.
+   - "about-team": Team — kartu anggota tim.
+   - "about-cards-stacked": Stacked Card — image atas + teks bawah satu kartu.
+   - "about-timeline": Timeline — langkah horizontal (berdiri→berkembang).
+   - "about-banner": Dark Banner — band gelap statement.
+   - "about-two-column": Two Columns — dua kolom body text.
 
-3. product-grid — PILIH BLOCK:
-   - "product-grid-shadcn-cards": Cards — grid kartu produk dengan gambar, nama, harga, tombol pesan. Density 2-4 kolom.
-   - "product-grid-shadcn-minimal": Minimal — list horizontal row per produk. Simpel, modern.
-   - "product-grid-shadcn-featured": Featured — 1 produk hero besar + sisanya grid kecil. Sorot best-seller.
+3. product-grid — PILIH BLOCK (13 pilihan):
+   - "product-grid-shadcn-cards": Cards — grid kartu produk + tombol pesan.
+   - "product-grid-shadcn-minimal": Minimal — list row per produk.
+   - "product-grid-shadcn-featured": Featured — 1 produk hero + grid kecil.
+   - "product-grid-compact": Compact Cards — kartu kecil padat.
+   - "product-grid-wide": Wide Cards — kartu horizontal image kiri.
+   - "product-grid-accent-band": Accent Band — grid dalam band aksen.
+   - "product-grid-bordered": Bordered — kartu outline tanpa fill.
+   - "product-grid-2col-big": 2 Col Big — dua kartu besar.
+   - "product-grid-tinted": Tinted — kartu di latar aksen tipis.
+   - "product-grid-numbered": Numbered — list bernomor.
+   - "product-grid-minimal-price": Minimal Price — nama + harga saja.
+   - "product-grid-carousel-row": Carousel Row — scroll horizontal.
+   - "product-grid-hover-lift": Hover Lift — kartu terangkat saat hover.
 
-4. testimonial — PILIH BLOCK:
-   - "testimonial-shadcn-cards": Cards — grid kartu dengan bintang, avatar, kutipan. Social proof kuat.
-   - "testimonial-shadcn-quote": Quote — pull-quote italic dengan border aksen. Editorial, elegan.
+4. testimonial — PILIH BLOCK (12 pilihan):
+   - "testimonial-shadcn-cards": Cards — grid kartu bintang + avatar.
+   - "testimonial-shadcn-quote": Quote — pull-quote italic border aksen.
+   - "testimonial-3col": 3 Column — grid 3 kolom.
+   - "testimonial-big-center": Big Center — satu kutipan besar centered.
+   - "testimonial-avatar-row": Avatar Row — tumpukan avatar + rating.
+   - "testimonial-bordered": Bordered List — baris kuotasi ber-border.
+   - "testimonial-dark": Dark Cards — kartu di latar gelap.
+   - "testimonial-stats-band": Stats Band — angka rating besar + kutipan.
+   - "testimonial-serif": Serif Quotes — kutipan serif editorial.
+   - "testimonial-featured": Featured — 1 testimoni besar + kartu kecil.
+   - "testimonial-chips": Chips — pill kuotasi ringkas.
+   - "testimonial-2col": 2 Column — grid 2 kolom.
 
-5. cta — PILIH BLOCK:
-   - "cta-shadcn-band": Band — full-width band warna aksen + heading + CTA. Bold, eye-catching.
-   - "cta-shadcn-card": Card — kartu centered dengan border subtle. Lebih soft, elegan.
-   - "cta-shadcn-split": Split — heading kiri + tombol CTA kanan. Kompak, direct.
+5. cta — PILIH BLOCK (13 pilihan):
+   - "cta-shadcn-band": Band — full-width band aksen.
+   - "cta-shadcn-card": Card — kartu centered border subtle.
+   - "cta-shadcn-split": Split — heading kiri + tombol kanan.
+   - "cta-gradient": Gradient Band — gradasi aksen.
+   - "cta-outlined": Outlined — kartu border putus-putus.
+   - "cta-dark-band": Dark Band — band gelap + CTA glow.
+   - "cta-pill": Pill Bar — pill horizontal heading + tombol.
+   - "cta-split-image": Split with Icon — icon besar + heading + tombol.
+   - "cta-minimal": Minimal Link — heading + link underline.
+   - "cta-banner-full": Full Banner — full-bleed aksen.
+   - "cta-big-statement": Big Statement — headline besar.
+   - "cta-urgency": Urgency — badge promo + kartu.
+   - "cta-double-button": Double Button — 2 tombol.
 
-6. contact — PILIH BLOCK:
-   - "contact-shadcn-cards": Cards — grid kartu kontak dengan icon.
-   - "contact-shadcn-split": Split — 2 kolom, heading kiri + kartu kontak kanan.
+6. contact — PILIH BLOCK (12 pilihan):
+   - "contact-shadcn-cards": Cards — grid kartu kontak icon.
+   - "contact-shadcn-split": Split — heading kiri + kartu kanan.
+   - "contact-centered": Centered — heading centered + kartu stacked.
+   - "contact-list": Plain List — list divider minimal.
+   - "contact-big-whatsapp": Big WhatsApp — tombol WA besar hijau.
+   - "contact-dark-band": Dark Band — band gelap info centered.
+   - "contact-grid-2col": Grid 2 Col — grid kartu 2 kolom.
+   - "contact-callout": Callout — bar tinted + tombol WA.
+   - "contact-hours": Hours Focus — tabel jam operasional.
+   - "contact-email-focus": Email Focus — email besar.
+   - "contact-icon-stack": Icon Stack — grid icon cards.
+   - "contact-minimal": Minimal — satu baris info kecil.
 
-7. faq — PILIH BLOCK:
-   - "faq-shadcn-accordion": Accordion — stacked FAQ dengan border divider. Klasik.
-   - "faq-shadcn-cards": Cards — grid 2 kolom kartu FAQ. Terstruktur.
-   - "faq-shadcn-split": Split — 2 kolom independen kartu FAQ. Untuk banyak pertanyaan.
+7. faq — PILIH BLOCK (13 pilihan):
+   - "faq-shadcn-accordion": Accordion — stacked divider.
+   - "faq-shadcn-cards": Cards — grid 2 kolom kartu.
+   - "faq-shadcn-split": Split — 2 kolom independen.
+   - "faq-centered": Centered — heading centered + stacked.
+   - "faq-numbered": Numbered — bernomor aksen.
+   - "faq-bordered": Bordered — kartu ber-border.
+   - "faq-split-heading": Split Heading — heading kiri + tanya kanan.
+   - "faq-pills": Pills — kartu pill rounded.
+   - "faq-dark": Dark — latar gelap kartu.
+   - "faq-icons": Icons — emoji icon per pertanyaan.
+   - "faq-compact": Compact — Q&A rapat.
+   - "faq-gradient": Gradient — kartu di gradasi.
+   - "faq-2col-cards": 2 Col Cards — grid 2 kolom.
 
 ## ATURAN
-- WAJIB sertakan SEMUA section berikut: hero, about, product-grid, contact. WAJIB. Jangan skip satu pun.
-- Boleh tambah: testimonial, cta, faq (1-3 tambahan). Total maksimal 7 section.
+- WAJIB sertakan SEMUA 7 section: hero, about, product-grid, testimonial, cta, faq, contact. Tidak ada yang optional.
 - Setiap section HARUS punya "blockId" — pilih dari catalog di atas.
 - Semua teks Bahasa Indonesia, nada ramah dan meyakinkan. Tulis copy yang menjual, bukan generik.
 - Harga dalam Rupiah angka bulat (mis. 85000), realistis untuk jenis bisnisnya.

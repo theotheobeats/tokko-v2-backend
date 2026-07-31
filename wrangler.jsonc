@@ -15,7 +15,8 @@
   ],
   "vars": {
     "LLM_MODEL": "gpt-4o-mini",
-    "BETTER_AUTH_URL": "http://localhost:8787"
+    "BETTER_AUTH_URL": "http://localhost:8787",
+    "NODE_ENV": "production"
   },
   "observability": {
     "enabled": true

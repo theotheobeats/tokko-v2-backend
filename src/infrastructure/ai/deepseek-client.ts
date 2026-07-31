@@ -285,6 +285,24 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
     throw new Error("AI response has no valid sections");
   }
 
+  // Ensure the 4 mandatory section types are always present.
+  // The AI sometimes drops sections when the prompt is long — fill defaults
+  // so the page is always complete and never missing hero/about/products/contact.
+  const MANDATORY_TYPES: SectionKind[] = ["hero", "about", "product-grid", "contact"];
+  const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
+    hero: { blockId: "hero-shadcn-centered", eyebrow: "Selamat Datang", title: "Produk Terbaik untuk Anda", subtitle: "Kualitas premium dengan harga terjangkau. Pesan sekarang!", ctaText: "Pesan Sekarang" },
+    about: { blockId: "about-shadcn-centered", eyebrow: "Tentang Kami", heading: "Kenapa Memilih Kami", body: "Kami berkomitmen memberikan produk dan layanan terbaik untuk kepuasan Anda.", stats: [{ value: "500+", label: "Pelanggan" }, { value: "4.9", label: "Rating" }] },
+    "product-grid": { blockId: "product-grid-shadcn-cards", eyebrow: "Koleksi Kami", heading: "Produk Andalan" },
+    contact: { blockId: "contact-shadcn-cards", eyebrow: "Kontak", heading: "Hubungi Kami", whatsapp: "", address: "Alamat toko", hours: "08.00 - 20.00" },
+  };
+  const existingTypes = new Set(sections.map((s) => s.type));
+  for (const t of MANDATORY_TYPES) {
+    if (!existingTypes.has(t)) {
+      const def = SECTION_DEFINITIONS[t];
+      sections.push({ type: t, variant: def.variants[0], content: DEFAULT_CONTENT[t] });
+    }
+  }
+
   // Validate + sanitize products
   const sampleProducts = (data.sampleProducts as Array<Record<string, unknown>>)
     .filter((p) => typeof p.name === "string" && typeof p.price === "number")

@@ -78,8 +78,9 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
     return c.json({ error: { code: "ALREADY_ONBOARDED", message: "Anda sudah memiliki toko." } }, 409);
   }
 
-  // Use LLM provider configured via env vars (DeepSeek, Synthetic/Kimi, OpenAI, etc.)
-  const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
+  // Use LLM provider ONLY in production; dev/local falls back to mock (no API cost)
+  const isProd = c.env.NODE_ENV === "production";
+  const hasApiKey = isProd && c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
   const aiGenerate = hasApiKey
     ? (input: Parameters<typeof generateStore>[1]) => {
         console.log(`[LLM] generating with ${c.env.LLM_MODEL || "deepseek-chat"} @ ${c.env.LLM_BASE_URL || "https://api.deepseek.com/v1"}`);

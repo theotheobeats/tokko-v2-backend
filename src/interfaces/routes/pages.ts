@@ -219,7 +219,9 @@ pagesRouter.post("/:storeId/page/regenerate", async (c) => {
   const { RegeneratePage } = await import("../../application/page/regenerate-page");
   const { generateStore } = await import("../../infrastructure/ai/deepseek-client");
 
-  const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
+  // Use LLM provider ONLY in production; dev/local falls back to mock (no API cost)
+  const isProd = c.env.NODE_ENV === "production";
+  const hasApiKey = isProd && c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
   const aiFn = hasApiKey
     ? async () => {
         const result = await generateStore({

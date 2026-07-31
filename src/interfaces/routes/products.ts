@@ -191,8 +191,9 @@ productsRouter.post("/:storeId/products/generate-description", zValidator("json"
   const { GenerateProductDescription } = await import("../../application/product/generate-product-description");
   const { generateProductDesc, mockAIGenerate: mockDesc } = await import("../../infrastructure/ai/deepseek-client");
 
-  // Use DeepSeek if API key is configured, otherwise fall back to mock
-  const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
+  // Use LLM provider ONLY in production; dev/local falls back to mock (no API cost)
+  const isProd = c.env.NODE_ENV === "production";
+  const hasApiKey = isProd && c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
   const useCase = new GenerateProductDescription(
     hasApiKey
       ? (input) => generateProductDesc({ apiKey: c.env.LLM_API_KEY, model: c.env.LLM_MODEL }, input)
