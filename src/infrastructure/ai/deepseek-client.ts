@@ -10,7 +10,12 @@
 import type { AIGeneratedPage } from "../../application/store/generate-store";
 import { buildStorePrompt } from "./prompts/store-generator";
 import { PRODUCT_DESCRIPTION_PROMPT } from "./prompts/product-description";
-import { loadDesignGuide, mapAestheticToFolder } from "./design-loader";
+import { loadDesignGuide } from "./design-loader";
+import {
+  SECTION_DEFINITIONS,
+  ThemeSchema,
+  type SectionKind,
+} from "../../domain/store/section-content";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -223,23 +228,20 @@ function extractJsonObject(raw: string): string | null {
 function parseStoreResponse(raw: string): AIGeneratedPage {
   let parsed: unknown;
 
-  // Attempt 1: strict parse (works when json_mode behaves).
+  // Attempt 1: strict parse.
   try {
     parsed = JSON.parse(raw);
   } catch {
     // Attempt 2: extract the outermost balanced {...} then repair newlines.
-    // Handles: markdown fences, leading prose, multi-line HTML strings.
     const extracted = extractJsonObject(raw);
     if (extracted) {
       try {
         parsed = JSON.parse(repairJsonNewlines(extracted));
       } catch {
-        // fall through to error below
+        // fall through
       }
     }
-
     if (parsed === undefined) {
-      // Attempt 3: repair newlines across the whole raw payload.
       try {
         parsed = JSON.parse(repairJsonNewlines(raw));
       } catch {
@@ -255,31 +257,32 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
 
   const data = parsed as Record<string, unknown>;
 
-  if (!Array.isArray(data.sections)) {
-    throw new Error("AI response missing 'sections' array");
-  }
+  if (!Array.isArray(data.sections)) throw new Error("AI response missing 'sections' array");
+  if (!Array.isArray(data.sampleProducts)) throw new Error("AI response missing 'sampleProducts' array");
 
-  if (!Array.isArray(data.sampleProducts)) {
-    throw new Error("AI response missing 'sampleProducts' array");
-  }
+  // Validate + normalize each section against its content schema.
+  const sections: AIGeneratedPage["sections"] = [];
+  for (const s of data.sections as Array<Record<string, unknown>>) {
+    const type = s.type as SectionKind;
+    const def = SECTION_DEFINITIONS[type];
+    if (!def) continue;
 
-  // Validate and sanitize sections
-  const validTypes = ["hero", "about", "product-grid", "testimonial", "cta", "contact", "faq"];
-  const sections = (data.sections as Array<Record<string, unknown>>)
-    .filter((s) => validTypes.includes(s.type as string))
-    .map((s) => {
-      const rawTemplate = (typeof s.template === "string" ? s.template : `<div>{{content}}</div>`) as string;
-      // Normalize: collapse any newlines/excess whitespace into single-line HTML
-      const template = rawTemplate.replace(/\s+/g, " ").trim();
-      const slots = (s.slots && typeof s.slots === "object" ? s.slots : { content: s.data ? JSON.stringify(s.data) : "" }) as Record<string, string>;
-      return { type: s.type as string, template, slots };
-    });
+    const variant = typeof s.variant === "string" && (def.variants as readonly string[]).includes(s.variant)
+      ? s.variant
+      : def.variants[0]; // fall back to first variant
+
+    const contentRaw = (s.content && typeof s.content === "object" ? s.content : {}) as Record<string, unknown>;
+    const contentParsed = def.content.safeParse(contentRaw);
+    if (!contentParsed.success) continue; // skip malformed sections
+
+    sections.push({ type, variant, content: contentParsed.data as Record<string, unknown> });
+  }
 
   if (sections.length === 0) {
     throw new Error("AI response has no valid sections");
   }
 
-  // Validate and sanitize products
+  // Validate + sanitize products
   const sampleProducts = (data.sampleProducts as Array<Record<string, unknown>>)
     .filter((p) => typeof p.name === "string" && typeof p.price === "number")
     .map((p) => ({
@@ -293,13 +296,40 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
     throw new Error("AI response has no valid products");
   }
 
-  // Parse design tokens
-  const designTokens = (data.designTokens && typeof data.designTokens === "object"
-    ? data.designTokens as Record<string, string>
-    : undefined);
+  // Theme: validate with zod → fall back to defaults for any missing/invalid fields.
+  const themeSrc = (data.theme && typeof data.theme === "object"
+    ? data.theme
+    : data.designTokens) as Record<string, unknown> | undefined;
+
+  const themeParsed = ThemeSchema.safeParse(themeSrc ?? {});
+  const theme = themeParsed.success
+    ? themeParsed.data
+    : FALLBACK_THEME;
+
+  // Flatten to string-keyed map (the rest of the system expects Record<string,string>).
+  const designTokens: Record<string, string> = {};
+  for (const [k, v] of Object.entries(theme)) {
+    designTokens[k] = String(v);
+  }
 
   return { sections, sampleProducts, designTokens };
 }
+
+const FALLBACK_THEME = ThemeSchema.parse({
+  accent: "#f97316",
+  bg: "#fdfcfa",
+  cardBg: "#ffffff",
+  text: "#1c1917",
+  textSecondary: "#78716c",
+  ctaText: "#ffffff",
+  borderRadius: "12px",
+  buttonRadius: "9999px",
+  fontStyle: "sans-clean",
+  spacing: "comfortable",
+  elevation: "subtle-shadow",
+  decorDensity: "moderate",
+  layoutStyle: "startup",
+});
 
 // ---------------------------------------------------------------------------
 // Mock (fallback for development without API key)

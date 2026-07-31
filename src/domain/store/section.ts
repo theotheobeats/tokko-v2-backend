@@ -1,9 +1,14 @@
 /**
  * Section value object — building block of a Page.
  *
- * Each section has a fixed type (hero, about, etc.), an AI-generated HTML
- * template with {{slotName}} placeholders, and editable slot values.
- * Users can change slot text; the template (HTML + CSS) stays AI-owned.
+ * A section is STRUCTURED CONTENT, not HTML. It has:
+ *   - type:    which kind of section (hero, about, ...)
+ *   - variant: which designed component the frontend should render
+ *   - content: typed data for that component (heading, items, ...)
+ *
+ * The frontend maps (type + variant) → a hand-designed component and feeds
+ * it `content` + the page `theme`. The AI only ever produces data — never
+ * markup — so output is always renderable and on-brand.
  */
 
 import type { EntityId } from "../shared/types";
@@ -23,8 +28,8 @@ export type SectionType = (typeof SectionType)[keyof typeof SectionType];
 export interface SectionProps {
   id: EntityId;
   type: SectionType;
-  template: string;        // HTML with {{slotKey}} placeholders and inline CSS
-  slots: Record<string, string>;  // Editable text values
+  variant: string;
+  content: Record<string, unknown>;
   sortOrder: number;
 }
 
@@ -33,38 +38,37 @@ export class Section {
 
   static create(params: {
     type: SectionType;
-    template: string;
-    slots: Record<string, string>;
+    variant: string;
+    content: Record<string, unknown>;
     sortOrder?: number;
   }): Section {
     return new Section({
       id: createEntityId(),
       type: params.type,
-      template: params.template,
-      slots: { ...params.slots },
+      variant: params.variant,
+      content: { ...params.content },
       sortOrder: params.sortOrder ?? 0,
     });
   }
 
   static from(props: SectionProps): Section {
-    return new Section({ ...props });
+    return new Section({ ...props, content: { ...props.content } });
   }
 
   get id() { return this.props.id; }
   get type() { return this.props.type; }
-  get template() { return this.props.template; }
-  get slots() { return { ...this.props.slots }; }
+  get variant() { return this.props.variant; }
+  get content() { return { ...this.props.content }; }
   get sortOrder() { return this.props.sortOrder; }
 
-  /** Update a single slot value (user edits text) */
-  updateSlot(key: string, value: string): Section {
-    this.props.slots[key] = value;
+  /** Replace the section's content (user edits copy via the editor). */
+  updateContent(content: Record<string, unknown>): Section {
+    this.props.content = { ...this.props.content, ...content };
     return this;
   }
 
-  /** Update all slots at once */
-  updateSlots(slots: Record<string, string>): Section {
-    this.props.slots = { ...this.props.slots, ...slots };
+  setVariant(variant: string): Section {
+    this.props.variant = variant;
     return this;
   }
 
@@ -73,27 +77,12 @@ export class Section {
     return this;
   }
 
-  /** Get all slot keys found in the template */
-  get slotKeys(): string[] {
-    const matches = this.props.template.matchAll(/\{\{(\w+)\}\}/g);
-    return Array.from(matches, (m) => m[1]);
-  }
-
-  /** Render the template with current slot values */
-  render(): string {
-    let html = this.props.template;
-    for (const [key, value] of Object.entries(this.props.slots)) {
-      html = html.replaceAll(`{{${key}}}`, value);
-    }
-    return html;
-  }
-
   toJSON(): SectionProps {
     return {
       id: this.props.id,
       type: this.props.type,
-      template: this.props.template,
-      slots: { ...this.props.slots },
+      variant: this.props.variant,
+      content: { ...this.props.content },
       sortOrder: this.props.sortOrder,
     };
   }

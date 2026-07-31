@@ -192,7 +192,7 @@ storesRouter.get("/by-subdomain", async (c) => {
       imageUrl: p.imageUrl,
       isAvailable: p.isAvailable,
     })),
-    designTokens: pageData?.designTokens ?? undefined,
+    theme: pageData?.designTokens ?? undefined,
   });
 });
 

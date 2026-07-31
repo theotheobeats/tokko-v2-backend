@@ -46,8 +46,8 @@ export class D1PageRepository implements PageRepository {
         return {
           id: r.id as EntityId,
           type: r.type as SectionProps["type"],
-          template: r.template ?? `<div>{{content}}</div>`,
-          slots: data.slots ?? data ?? {},
+          variant: data.variant ?? "default",
+          content: data.content ?? {},
           sortOrder: r.sortOrder,
         };
       });
@@ -81,15 +81,14 @@ export class D1PageRepository implements PageRepository {
       } as any);
     }
 
-    // Insert all sections with template
+    // Insert all sections as structured content { variant, content }
     if (json.sections.length > 0) {
       await this.db.insert(sections).values(
         json.sections.map((s) => ({
           id: s.id as string,
           pageId: json.id as string,
           type: s.type,
-          template: s.template,
-          data: JSON.stringify(s.slots),
+          data: JSON.stringify({ variant: s.variant, content: s.content }),
           sortOrder: s.sortOrder,
         }))
       );

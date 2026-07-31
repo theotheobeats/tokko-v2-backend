@@ -63,14 +63,37 @@ const DESIGN_REGISTRY: Record<string, string[]> = {
 // ---------------------------------------------------------------------------
 
 /**
+ * A guide under this many characters is too vague to steer the model —
+ * it produces generic output. Rich guides (with concrete hex codes, font
+ * sizes, spacing rules, do's/don'ts) are what make the output distinctive.
+ */
+const RICH_GUIDE_MIN_CHARS = 1500;
+
+function isRichGuide(content: string): boolean {
+  // Heuristic: a useful guide has several concrete hex colors and real detail.
+  const hexCount = (content.match(/#[0-9a-fA-F]{6}/g) ?? []).length;
+  return content.length >= RICH_GUIDE_MIN_CHARS && hexCount >= 4;
+}
+
+/**
  * Load a random design guide for the given aesthetic preference.
- * Returns the full markdown content of the selected design file.
+ * Prefers rich guides; logs a warning when only thin ones are available
+ * so the generic-output root cause is visible in logs instead of silent.
  */
 export function loadDesignGuide(aesthetic: string): string {
   const folder = mapAestheticToFolder(aesthetic);
   const guides = DESIGN_REGISTRY[folder] ?? DESIGN_REGISTRY.elegant;
 
-  // Pick a random guide
-  const index = Math.floor(Math.random() * guides.length);
-  return guides[index];
+  const rich = guides.filter(isRichGuide);
+  const pool = rich.length > 0 ? rich : guides;
+
+  if (rich.length === 0) {
+    console.warn(
+      `[design-loader] No rich design guides in "${folder}" (${guides.length} thin). ` +
+      `AI output will likely be generic. Add concrete guides (hex codes, sizes, patterns).`
+    );
+  }
+
+  const index = Math.floor(Math.random() * pool.length);
+  return pool[index];
 }

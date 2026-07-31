@@ -33,7 +33,7 @@ function mockPageRepo(overrides?: Partial<PageRepository>): PageRepository {
 const storeId = createEntityId();
 
 function s(type: SectionType, label: string, order: number = 0): Section {
-  return Section.create({ type, template: `<div>{{content}}</div>`, slots: { content: label }, sortOrder: order });
+  return Section.create({ type, variant: "default", content: { title: label }, sortOrder: order });
 }
 
 // ---------------------------------------------------------------------------
@@ -57,20 +57,18 @@ describe("GetPage use case", () => {
     if (result.ok) expect(result.value).toBeNull();
   });
 
-  it("should render final html per section (slots + design tokens substituted)", async () => {
+  it("should serialize page with structured sections and theme", async () => {
     const page = Page.create(storeId, [
       Section.create({
         type: SectionType.Hero,
-        template: `<div style="background:{{bg}}"><h1 style="color:{{text}}">{{title}}</h1></div>`,
-        slots: { title: "Hello" },
+        variant: "split",
+        content: { title: "Hello" },
         sortOrder: 0,
       }),
     ]);
+    const theme = { accent: "#e07b39", bg: "#f6f5f4" };
     const repo = mockPageRepo({
-      findByStoreIdWithTokens: vi.fn().mockResolvedValue({
-        page,
-        designTokens: { bg: "#fff", text: "#111" },
-      }),
+      findByStoreIdWithTokens: vi.fn().mockResolvedValue({ page, designTokens: theme }),
     });
     const useCase = new GetPage(repo);
     const result = await useCase.execute({ storeId });
@@ -78,13 +76,11 @@ describe("GetPage use case", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       const section = result.value!.sections[0] as any;
-      // No placeholders remain — frontend can inject directly
-      expect(section.html).toBe(`<div style="background:#fff"><h1 style="color:#111">Hello</h1></div>`);
-      expect(section.html).not.toContain("{{");
-      // Editor still gets the raw pieces
-      expect(section.slots.title).toBe("Hello");
-      expect(section.template).toContain("{{title}}");
-      expect(result.value!.designTokens).toEqual({ bg: "#fff", text: "#111" });
+      // Component-based: no html — the frontend renders type+variant+content
+      expect(section.html).toBeUndefined();
+      expect(section.variant).toBe("split");
+      expect(section.content.title).toBe("Hello");
+      expect(result.value!.theme).toEqual(theme);
     }
   });
 });
@@ -101,12 +97,12 @@ describe("UpdateSection use case", () => {
     repo = mockPageRepo({ findByStoreId: vi.fn().mockResolvedValue(page) });
   });
 
-  it("should update a section's slots", async () => {
+  it("should update a section's content", async () => {
     const useCase = new UpdateSection(repo);
     const targetSection = page.sections[0];
-    const result = await useCase.execute({ storeId, sectionId: targetSection.id, slots: { content: "Updated" } });
+    const result = await useCase.execute({ storeId, sectionId: targetSection.id, content: { title: "Updated" } });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.section.slots.content).toBe("Updated");
+    if (result.ok) expect((result.value.section.content as any).title).toBe("Updated");
     expect(repo.save).toHaveBeenCalledOnce();
   });
 

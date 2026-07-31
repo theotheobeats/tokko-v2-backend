@@ -8,15 +8,15 @@ import { ok, err } from "../../domain/shared/types";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import {
   serializePage,
-  serializeSection,
-  type RenderedPage,
-  type RenderedSection,
+  type SerializedPage,
+  type SerializedSection,
 } from "./render-section";
 
 export interface UpdateSectionInput {
   storeId: EntityId;
   sectionId: EntityId;
-  slots?: Record<string, string>;
+  content?: Record<string, unknown>;
+  variant?: string;
 }
 
 export interface UpdateSectionError {
@@ -25,8 +25,8 @@ export interface UpdateSectionError {
 }
 
 export interface UpdateSectionOutput {
-  section: RenderedSection;
-  page: RenderedPage;
+  section: SerializedSection;
+  page: SerializedPage;
 }
 
 export class UpdateSection {
@@ -46,11 +46,12 @@ export class UpdateSection {
       return err({ code: "SECTION_NOT_FOUND", message: "Bagian tidak ditemukan." });
     }
 
-    section.updateSlots(input.slots ?? {});
+    if (input.content) section.updateContent(input.content);
+    if (input.variant) section.setVariant(input.variant);
     await this.pageRepo.save(page);
 
     return ok({
-      section: serializeSection(section.toJSON(), designTokens),
+      section: section.toJSON(),
       page: serializePage(page, designTokens),
     });
   }

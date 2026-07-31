@@ -6,7 +6,7 @@ import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
-import { serializePage, type RenderedPage } from "./render-section";
+import { serializePage, type SerializedPage } from "./render-section";
 
 export interface ReorderSectionsInput {
   storeId: EntityId;
@@ -18,7 +18,7 @@ export interface ReorderSectionsError {
   message: string;
 }
 
-export type ReorderSectionsOutput = RenderedPage;
+export type ReorderSectionsOutput = SerializedPage;
 
 export class ReorderSections {
   constructor(private readonly pageRepo: PageRepository) {}

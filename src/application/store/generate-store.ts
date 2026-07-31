@@ -14,7 +14,7 @@ import type { StoreRepository } from "./store-repo";
 import type { ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import type { Aesthetic, BusinessType } from "../../domain/store/types";
-import { serializePage, type RenderedPage } from "../page/render-section";
+import { serializePage, type SerializedPage } from "../page/render-section";
 
 // ---------------------------------------------------------------------------
 // Input / Output
@@ -31,7 +31,7 @@ export interface GenerateStoreInput {
 
 export interface GenerateStoreOutput {
   store: ReturnType<Store["toJSON"]>;
-  page: RenderedPage;
+  page: SerializedPage;
   products: ReturnType<Product["toJSON"]>[];
 }
 
@@ -42,8 +42,8 @@ export interface GenerateStoreOutput {
 export interface AIGeneratedPage {
   sections: Array<{
     type: string;
-    template: string;
-    slots: Record<string, string>;
+    variant: string;
+    content: Record<string, unknown>;
   }>;
   sampleProducts: Array<{
     name: string;
@@ -128,7 +128,7 @@ export class GenerateStore {
 
     // 5. Create Page with sections
     const sections = aiResult.sections.map((s, i) =>
-      Section.create({ type: s.type as SectionType, template: s.template, slots: s.slots, sortOrder: i })
+      Section.create({ type: s.type as SectionType, variant: s.variant, content: s.content, sortOrder: i })
     );
     const page = Page.create(store.id, sections);
 
@@ -137,7 +137,7 @@ export class GenerateStore {
     await Promise.all(products.map((p) => this.productRepo.save(p)));
     await this.pageRepo.save(page, aiResult.designTokens);
 
-    // 7. Serialize the page with final rendered HTML (slots + design tokens applied)
+    // 7. Serialize the page (structured sections + theme)
     return ok({
       store: store.toJSON(),
       page: serializePage(page, aiResult.designTokens ?? null),

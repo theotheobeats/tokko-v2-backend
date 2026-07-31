@@ -71,7 +71,8 @@ pagesRouter.get("/:storeId/page", async (c) => {
 // PATCH /api/stores/:storeId/page/sections/:id
 // ---------------------------------------------------------------------------
 pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
-  slots: z.record(z.string(), z.string()),
+  content: z.record(z.string(), z.unknown()).optional(),
+  variant: z.string().optional(),
 })), async (c) => {
   const storeId = c.req.param("storeId") as EntityId;
   const sectionId = c.req.param("id") as EntityId;
@@ -80,10 +81,10 @@ pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
 
   const db = createDb(c.env.DB);
   const pageRepo = new D1PageRepository(db);
-  const { slots } = c.req.valid("json");
+  const { content, variant } = c.req.valid("json");
 
   const useCase = new UpdateSection(pageRepo);
-  const result = await useCase.execute({ storeId, sectionId, slots });
+  const result = await useCase.execute({ storeId, sectionId, content, variant });
 
   if (!result.ok) {
     const status = result.error.code === "SECTION_NOT_FOUND" ? 404 : 404;
@@ -98,8 +99,8 @@ pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
 // ---------------------------------------------------------------------------
 pagesRouter.post("/:storeId/page/sections", zValidator("json", z.object({
   type: z.enum(["hero", "about", "product-grid", "testimonial", "cta", "contact", "faq"]),
-  template: z.string(),
-  slots: z.record(z.string(), z.string()),
+  variant: z.string(),
+  content: z.record(z.string(), z.unknown()),
   sortOrder: z.number().int().min(0).optional(),
 })), async (c) => {
   const storeId = c.req.param("storeId") as EntityId;
@@ -114,8 +115,8 @@ pagesRouter.post("/:storeId/page/sections", zValidator("json", z.object({
   const result = await useCase.execute({
     storeId,
     type: input.type,
-    template: input.template,
-    slots: input.slots,
+    variant: input.variant,
+    content: input.content,
     sortOrder: input.sortOrder,
   });
 
@@ -190,7 +191,7 @@ pagesRouter.post("/:storeId/page/regenerate", async (c) => {
 
   const hasApiKey = c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
   const aiFn = hasApiKey
-    ? async () => { 
+    ? async () => {
         const result = await generateStore({ apiKey: c.env.LLM_API_KEY, model: c.env.LLM_MODEL }, {
           businessName: store.name,
           businessType: store.businessType,
@@ -199,14 +200,16 @@ pagesRouter.post("/:storeId/page/regenerate", async (c) => {
         });
         return { sections: result.sections, designTokens: result.designTokens };
       }
-    : async () => ({
-        sections: [
-          { type: "hero" as const, template: "<div style='text-align:center;padding:48px 24px'><h1 style='font-size:32px;color:{{text}}'>{{title}}</h1><p style='color:{{textSecondary}}'>{{subtitle}}</p></div>", slots: { title: "Selamat Datang", subtitle: "Produk berkualitas" } },
-          { type: "about" as const, template: "<div style='padding:32px 24px'><h2 style='font-size:20px;color:{{text}}'>{{heading}}</h2><p style='color:{{textSecondary}};line-height:1.6'>{{text}}</p></div>", slots: { heading: "Tentang Kami", text: "Kami hadir untuk Anda." } },
-          { type: "product-grid" as const, template: "<div style='padding:32px 24px'><h2 style='font-size:20px;color:{{text}};margin-bottom:16px'>{{heading}}</h2></div>", slots: { heading: "Produk" } },
-          { type: "contact" as const, template: "<div style='padding:32px 24px;text-align:center;background:{{bg}}'><h2 style='font-size:20px;color:{{text}};margin-bottom:8px'>{{heading}}</h2><p style='color:{{textSecondary}}'>{{whatsapp}} · {{address}} · {{hours}}</p></div>", slots: { heading: "Kontak", whatsapp: "-", address: "-", hours: "-" } },
-        ],
-      } as any);
+    : async () => {
+        const { mockAIGenerate } = await import("../../infrastructure/ai/llm-client");
+        const result = await mockAIGenerate({
+          businessName: store.name,
+          businessType: store.businessType,
+          productCategory: "umum",
+          aesthetic: store.aestheticPreference,
+        });
+        return { sections: result.sections, designTokens: result.designTokens };
+      };
 
   const useCase = new RegeneratePage(pageRepo, aiFn);
   const result = await useCase.execute({ storeId });

@@ -7,10 +7,10 @@ import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import { Section, type SectionType } from "../../domain/store/section";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
-import { serializePage, type RenderedPage } from "./render-section";
+import { serializePage, type SerializedPage } from "./render-section";
 
 export interface AIGeneratedSections {
-  sections: Array<{ type: string; template: string; slots: Record<string, string> }>;
+  sections: Array<{ type: string; variant: string; content: Record<string, unknown> }>;
   designTokens?: Record<string, string>;
 }
 
@@ -23,7 +23,7 @@ export interface RegeneratePageError {
   message: string;
 }
 
-export type RegeneratePageOutput = RenderedPage;
+export type RegeneratePageOutput = SerializedPage;
 
 export class RegeneratePage {
   constructor(
@@ -50,8 +50,8 @@ export class RegeneratePage {
     const sections = aiResult.sections.map((s, i) =>
       Section.create({
         type: s.type as SectionType,
-        template: s.template,
-        slots: s.slots,
+        variant: s.variant,
+        content: s.content,
         sortOrder: i,
       })
     );

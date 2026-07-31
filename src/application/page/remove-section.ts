@@ -6,7 +6,7 @@ import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
-import { serializePage, type RenderedPage } from "./render-section";
+import { serializePage, type SerializedPage } from "./render-section";
 
 export interface RemoveSectionInput {
   storeId: EntityId;
@@ -18,7 +18,7 @@ export interface RemoveSectionError {
   message: string;
 }
 
-export type RemoveSectionOutput = RenderedPage;
+export type RemoveSectionOutput = SerializedPage;
 
 export class RemoveSection {
   constructor(private readonly pageRepo: PageRepository) {}

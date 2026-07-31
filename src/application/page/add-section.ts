@@ -9,16 +9,15 @@ import { Section, type SectionType } from "../../domain/store/section";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import {
   serializePage,
-  serializeSection,
-  type RenderedPage,
-  type RenderedSection,
+  type SerializedPage,
+  type SerializedSection,
 } from "./render-section";
 
 export interface AddSectionInput {
   storeId: EntityId;
   type: SectionType;
-  template: string;
-  slots: Record<string, string>;
+  variant: string;
+  content: Record<string, unknown>;
   sortOrder?: number;
 }
 
@@ -28,8 +27,8 @@ export interface AddSectionError {
 }
 
 export interface AddSectionOutput {
-  section: RenderedSection;
-  page: RenderedPage;
+  section: SerializedSection;
+  page: SerializedPage;
 }
 
 export class AddSection {
@@ -44,8 +43,8 @@ export class AddSection {
 
     const section = Section.create({
       type: input.type,
-      template: input.template,
-      slots: input.slots,
+      variant: input.variant,
+      content: input.content,
       sortOrder: input.sortOrder ?? page.sections.length,
     });
 
@@ -53,7 +52,7 @@ export class AddSection {
     await this.pageRepo.save(page);
 
     return ok({
-      section: serializeSection(section.toJSON(), designTokens),
+      section: section.toJSON(),
       page: serializePage(page, designTokens),
     });
   }

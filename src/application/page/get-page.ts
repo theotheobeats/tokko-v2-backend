@@ -6,13 +6,13 @@ import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok } from "../../domain/shared/types";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
-import { serializePage, type RenderedPage } from "./render-section";
+import { serializePage, type SerializedPage } from "./render-section";
 
 export interface GetPageInput {
   storeId: EntityId;
 }
 
-export type GetPageOutput = RenderedPage | null;
+export type GetPageOutput = SerializedPage | null;
 
 export class GetPage {
   constructor(private readonly pageRepo: PageRepository) {}
