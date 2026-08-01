@@ -22,6 +22,7 @@ export const SectionType = {
   Cta: "cta",
   Contact: "contact",
   Faq: "faq",
+  Footer: "footer",
 } as const;
 export type SectionType = (typeof SectionType)[keyof typeof SectionType];
 

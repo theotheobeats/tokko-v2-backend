@@ -15,6 +15,7 @@ import { stores } from "../../infrastructure/db/schema";
 import { BusinessType, Aesthetic } from "../../domain/store/types";
 import type { EntityId } from "../../domain/shared/types";
 import { mockAIGenerate, generateStore } from "../../infrastructure/ai/deepseek-client";
+import { useRealAi } from "../../infrastructure/ai/ai-mode";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
 
@@ -78,10 +79,9 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
     return c.json({ error: { code: "ALREADY_ONBOARDED", message: "Anda sudah memiliki toko." } }, 409);
   }
 
-  // Use LLM provider ONLY in production; dev/local falls back to mock (no API cost)
-  const isProd = c.env.NODE_ENV === "production";
-  const hasApiKey = isProd && c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
-  const aiGenerate = hasApiKey
+  // Use the real LLM whenever a valid key is configured (dev or prod); only
+  // fall back to the deterministic mock when no key is set or LLM_FORCE_MOCK=1.
+  const aiGenerate = useRealAi(c.env)
     ? (input: Parameters<typeof generateStore>[1]) => {
         console.log(`[LLM] generating with ${c.env.LLM_MODEL || "deepseek-chat"} @ ${c.env.LLM_BASE_URL || "https://api.deepseek.com/v1"}`);
         return generateStore({

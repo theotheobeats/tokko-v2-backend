@@ -79,24 +79,49 @@ async function chatCompletion(
 /**
  * Generate a complete store page + sample products from quiz answers.
  */
+export interface GenerateStoreInput {
+  businessName: string;
+  businessType: string;
+  productCategory: string;
+  aesthetic: string;
+  /** Blocks used last time — regenerate picks different ones (anti-repeat). */
+  previousBlocks?: Array<{ type: string; blockId: string }>;
+  /** Theme tokens used last time — regenerate varies the theme. */
+  previousTheme?: Record<string, string>;
+}
+
+/** Rotating creative directions to push each generation into a different space. */
+const CREATIVE_DIRECTIONS = [
+  "Sangat minimal & bersih, banyak ruang kosong, tipografi besar.",
+  "Hangat & personal, menonjolkan cerita pemilik dan sentuhan lokal.",
+  "Bold & modern, warna aksen kuat, tata letak editorial yang berani.",
+  "Elegan & premium, tone mewah, detail halus, fokus kualitas.",
+  "Ceria & playful, energik, ramah, cocok untuk brand muda.",
+  "Fokus pada bukti sosial & kepercayaan (testimoni, angka nyata bila ada).",
+];
+
 export async function generateStore(
   config: LlmConfig,
-  input: {
-    businessName: string;
-    businessType: string;
-    productCategory: string;
-    aesthetic: string;
-  }
+  input: GenerateStoreInput
 ): Promise<AIGeneratedPage> {
   // Load a random design guide for this aesthetic
   const designGuide = loadDesignGuide(input.aesthetic);
   const systemPrompt = buildStorePrompt(designGuide, input.aesthetic);
+
+  // Per-call variation: pick a creative direction + random seed so consecutive
+  // regenerations explore different layouts/copy instead of converging.
+  const direction = CREATIVE_DIRECTIONS[Math.floor(Math.random() * CREATIVE_DIRECTIONS.length)];
+  const seed = Math.random().toString(36).slice(2, 8);
 
   const userMessage = JSON.stringify({
     namaBisnis: input.businessName,
     jenisBisnis: input.businessType,
     kategoriProduk: input.productCategory,
     gayaDesain: input.aesthetic,
+    arahKreatif: direction,
+    variasiId: seed,
+    ...(input.previousBlocks?.length ? { blokSebelumnya: input.previousBlocks } : {}),
+    ...(input.previousTheme ? { temaSebelumnya: input.previousTheme } : {}),
   });
 
   const raw = await chatCompletion(
@@ -285,15 +310,18 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
     throw new Error("AI response has no valid sections");
   }
 
-  // Ensure the 4 mandatory section types are always present.
+  // Ensure the mandatory section types are always present (footer included).
   // The AI sometimes drops sections when the prompt is long — fill defaults
-  // so the page is always complete and never missing hero/about/products/contact.
-  const MANDATORY_TYPES: SectionKind[] = ["hero", "about", "product-grid", "contact"];
+  // so the page is always complete and always ends with a footer.
+  // NOTE: numeric/metric fields (stats, ratings) are intentionally left empty
+  // so we never fabricate numbers — the owner fills real data in the editor.
+  const MANDATORY_TYPES: SectionKind[] = ["hero", "about", "product-grid", "contact", "footer"];
   const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     hero: { blockId: "hero-shadcn-centered", eyebrow: "Selamat Datang", title: "Produk Terbaik untuk Anda", subtitle: "Kualitas premium dengan harga terjangkau. Pesan sekarang!", ctaText: "Pesan Sekarang" },
-    about: { blockId: "about-shadcn-centered", eyebrow: "Tentang Kami", heading: "Kenapa Memilih Kami", body: "Kami berkomitmen memberikan produk dan layanan terbaik untuk kepuasan Anda.", stats: [{ value: "500+", label: "Pelanggan" }, { value: "4.9", label: "Rating" }] },
+    about: { blockId: "about-shadcn-centered", eyebrow: "Tentang Kami", heading: "Kenapa Memilih Kami", body: "Kami berkomitmen memberikan produk dan layanan terbaik untuk kepuasan Anda." },
     "product-grid": { blockId: "product-grid-shadcn-cards", eyebrow: "Koleksi Kami", heading: "Produk Andalan" },
     contact: { blockId: "contact-shadcn-cards", eyebrow: "Kontak", heading: "Hubungi Kami", whatsapp: "", address: "Alamat toko", hours: "08.00 - 20.00" },
+    footer: { blockId: "footer-simple-centered", tagline: "Terima kasih sudah berbelanja!" },
   };
   const existingTypes = new Set(sections.map((s) => s.type));
   for (const t of MANDATORY_TYPES) {

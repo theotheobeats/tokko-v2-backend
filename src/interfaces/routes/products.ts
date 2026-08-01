@@ -189,13 +189,12 @@ productsRouter.post("/:storeId/products/generate-description", zValidator("json"
 
   const input = c.req.valid("json");
   const { GenerateProductDescription } = await import("../../application/product/generate-product-description");
-  const { generateProductDesc, mockAIGenerate: mockDesc } = await import("../../infrastructure/ai/deepseek-client");
+  const { generateProductDesc } = await import("../../infrastructure/ai/deepseek-client");
+  const { useRealAi } = await import("../../infrastructure/ai/ai-mode");
 
-  // Use LLM provider ONLY in production; dev/local falls back to mock (no API cost)
-  const isProd = c.env.NODE_ENV === "production";
-  const hasApiKey = isProd && c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
+  // Use the real LLM whenever a valid key is configured (dev or prod).
   const useCase = new GenerateProductDescription(
-    hasApiKey
+    useRealAi(c.env)
       ? (input) => generateProductDesc({ apiKey: c.env.LLM_API_KEY, model: c.env.LLM_MODEL }, input)
       : async ({ name, category }) => `${name} adalah produk ${category} berkualitas premium, dibuat dengan bahan pilihan terbaik. Cocok untuk berbagai kebutuhan Anda.`
   );

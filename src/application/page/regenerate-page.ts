@@ -32,10 +32,11 @@ export class RegeneratePage {
   ) {}
 
   async execute(input: RegeneratePageInput): Promise<Result<RegeneratePageOutput, RegeneratePageError>> {
-    const page = await this.pageRepo.findByStoreId(input.storeId);
-    if (!page) {
+    const existing = await this.pageRepo.findByStoreIdWithTokens(input.storeId);
+    if (!existing) {
       return err({ code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan." });
     }
+    const { page } = existing;
 
     let aiResult: AIGeneratedSections;
     try {
@@ -56,9 +57,14 @@ export class RegeneratePage {
       })
     );
 
-    page.replaceAll(sections);
-    await this.pageRepo.save(page, aiResult.designTokens);
+    // Preserve user-chosen preferences the AI doesn't generate.
+    const preserved: Record<string, string> = {};
+    if (existing.designTokens?.navbarStyle) preserved.navbarStyle = existing.designTokens.navbarStyle;
+    const designTokens = { ...(aiResult.designTokens ?? {}), ...preserved };
 
-    return ok(serializePage(page, aiResult.designTokens ?? null));
+    page.replaceAll(sections);
+    await this.pageRepo.save(page, designTokens);
+
+    return ok(serializePage(page, designTokens));
   }
 }

@@ -1,9 +1,25 @@
 /**
- * Mock AI store generator — returns structured content for development/testing.
- * Matches the component-based AIGeneratedPage shape (no HTML, just data).
+ * Mock AI store generator — structured content for dev/test (no HTML, just data).
+ * Emits all 8 sections and varies blockId/theme per call so "regenerate" in
+ * dev produces a visibly different page instead of an identical copy.
+ * Numeric/metric fields are left empty so no numbers are fabricated.
  */
 
 import type { AIGeneratedPage } from "../../application/store/generate-store";
+
+const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+const HERO_BLOCKS = ["hero-shadcn-centered", "hero-shadcn-minimal", "hero-premium-mesh", "hero-photo-collage", "hero-card-cluster"];
+const ABOUT_BLOCKS = ["about-shadcn-centered", "about-shadcn-split", "about-coach-story", "about-soft-panel", "about-serif-manifesto"];
+const TESTIMONIAL_BLOCKS = ["testimonial-shadcn-cards", "testimonial-shadcn-quote", "testimonial-big-center", "testimonial-avatar-row"];
+const FOOTER_BLOCKS = ["footer-simple-centered", "footer-split-contact", "footer-social-grid", "footer-minimal-bar"];
+
+const THEMES = [
+  { accent: "#f97316", bg: "#fdfcfa", cardBg: "#ffffff", text: "#1c1917", textSecondary: "#78716c" },
+  { accent: "#0ea5e9", bg: "#f8fafc", cardBg: "#ffffff", text: "#0f172a", textSecondary: "#64748b" },
+  { accent: "#16a34a", bg: "#f7fee7", cardBg: "#ffffff", text: "#14532d", textSecondary: "#4d7c0f" },
+  { accent: "#e11d48", bg: "#fff1f2", cardBg: "#ffffff", text: "#4c0519", textSecondary: "#9f1239" },
+];
 
 export async function mockAIGenerate(input: {
   businessName: string;
@@ -14,6 +30,7 @@ export async function mockAIGenerate(input: {
   await new Promise((r) => setTimeout(r, 100));
 
   const storeName = input.businessName;
+  const theme = pick(THEMES);
 
   return {
     sections: [
@@ -21,7 +38,7 @@ export async function mockAIGenerate(input: {
         type: "hero",
         variant: "default",
         content: {
-          blockId: "hero-shadcn-centered",
+          blockId: pick(HERO_BLOCKS),
           eyebrow: "✦ " + input.productCategory,
           title: `Selamat Datang di ${storeName}`,
           subtitle: `${getTagline(input.businessType)}. Pesan sekarang via WhatsApp!`,
@@ -32,19 +49,11 @@ export async function mockAIGenerate(input: {
         type: "about",
         variant: "default",
         content: {
-          blockId: "about-shadcn-split",
+          blockId: pick(ABOUT_BLOCKS),
           eyebrow: "✦ Tentang Kami",
           heading: "Kenapa Memilih Kami",
           body: `${storeName} hadir untuk memberikan produk ${input.productCategory} terbaik dengan kualitas premium dan harga terjangkau. Kami percaya setiap pelanggan berhak mendapatkan produk berkualitas dengan pelayanan ramah khas Indonesia.`,
-          stats: [
-            { value: "500+", label: "Pelanggan Puas" },
-            { value: "4.9", label: "Rating Toko" },
-            { value: "100%", label: "Original" },
-          ],
-          columns: "2",
-          imageSlot: "right",
-          contentAlign: "left",
-          emphasis: "story",
+          // no stats — owner fills real numbers in the editor
         },
       },
       {
@@ -56,15 +65,13 @@ export async function mockAIGenerate(input: {
         type: "testimonial",
         variant: "default",
         content: {
-          blockId: "testimonial-shadcn-cards",
+          blockId: pick(TESTIMONIAL_BLOCKS),
           eyebrow: "✦ Testimoni",
           heading: "Apa Kata Pelanggan",
           items: [
             { quote: `Produk ${input.productCategory}-nya bagus banget! Pasti order lagi.`, name: "Budi S.", role: "Jakarta" },
             { quote: "Pelayanannya ramah dan cepat. Recommended!", name: "Sari W.", role: "Bandung" },
           ],
-          columns: "2",
-          style: "cards",
         },
       },
       {
@@ -75,8 +82,19 @@ export async function mockAIGenerate(input: {
           heading: "Siap Pesan?",
           subtitle: `Dapatkan produk ${input.productCategory} terbaik dari ${storeName}. Pesan sekarang!`,
           ctaText: "Pesan via WhatsApp",
-          style: "band",
-          background: "accent",
+        },
+      },
+      {
+        type: "faq",
+        variant: "default",
+        content: {
+          blockId: "faq-shadcn-accordion",
+          eyebrow: "✦ FAQ",
+          heading: "Pertanyaan Umum",
+          items: [
+            { question: "Bagaimana cara memesan?", answer: "Klik tombol pesan dan hubungi kami via WhatsApp." },
+            { question: "Apakah bisa kirim ke luar kota?", answer: "Bisa, kami melayani pengiriman ke seluruh Indonesia." },
+          ],
         },
       },
       {
@@ -89,18 +107,21 @@ export async function mockAIGenerate(input: {
           whatsapp: "6281234567890",
           address: "Jl. Contoh No. 123, Jakarta",
           hours: "Senin - Sabtu: 08:00 - 20:00 WIB",
-          columns: "2",
-          style: "cards",
         },
+      },
+      {
+        type: "footer",
+        variant: "default",
+        content: { blockId: pick(FOOTER_BLOCKS), tagline: "Terima kasih sudah berbelanja!" },
       },
     ],
     sampleProducts: getSampleProducts(input.productCategory, input.businessType),
     designTokens: {
-      accent: "#f97316",
-      bg: "#fdfcfa",
-      cardBg: "#ffffff",
-      text: "#1c1917",
-      textSecondary: "#78716c",
+      accent: theme.accent,
+      bg: theme.bg,
+      cardBg: theme.cardBg,
+      text: theme.text,
+      textSecondary: theme.textSecondary,
       ctaText: "#ffffff",
       borderRadius: "12px",
       buttonRadius: "9999px",

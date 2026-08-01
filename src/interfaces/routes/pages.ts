@@ -128,7 +128,7 @@ pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
 // POST /api/stores/:storeId/page/sections
 // ---------------------------------------------------------------------------
 pagesRouter.post("/:storeId/page/sections", zValidator("json", z.object({
-  type: z.enum(["hero", "about", "product-grid", "testimonial", "cta", "contact", "faq"]),
+  type: z.enum(["hero", "about", "product-grid", "testimonial", "cta", "contact", "faq", "footer"]),
   variant: z.string(),
   content: z.record(z.string(), z.unknown()),
   sortOrder: z.number().int().min(0).optional(),
@@ -218,32 +218,34 @@ pagesRouter.post("/:storeId/page/regenerate", async (c) => {
   const pageRepo = new D1PageRepository(db);
   const { RegeneratePage } = await import("../../application/page/regenerate-page");
   const { generateStore } = await import("../../infrastructure/ai/deepseek-client");
+  const { useRealAi } = await import("../../infrastructure/ai/ai-mode");
 
-  // Use LLM provider ONLY in production; dev/local falls back to mock (no API cost)
-  const isProd = c.env.NODE_ENV === "production";
-  const hasApiKey = isProd && c.env.LLM_API_KEY && c.env.LLM_API_KEY !== "sk-mock-key";
-  const aiFn = hasApiKey
+  // Load current page so regenerate can pick DIFFERENT blocks + theme (anti-repeat).
+  const existing = await pageRepo.findByStoreIdWithTokens(storeId);
+  const previousBlocks = existing
+    ? existing.page.sections.map((s) => ({ type: s.type as string, blockId: (s.content?.blockId as string) ?? "" }))
+    : undefined;
+  const previousTheme = existing?.designTokens as Record<string, string> | undefined;
+
+  // Use the real LLM whenever a valid key is configured (dev or prod).
+  const genInput = {
+    businessName: store.name,
+    businessType: store.businessType,
+    productCategory: "umum",
+    aesthetic: store.aestheticPreference,
+  };
+  const aiFn = useRealAi(c.env)
     ? async () => {
         const result = await generateStore({
           apiKey: c.env.LLM_API_KEY,
           model: c.env.LLM_MODEL,
           baseUrl: c.env.LLM_BASE_URL,
-        }, {
-          businessName: store.name,
-          businessType: store.businessType,
-          productCategory: "umum",
-          aesthetic: store.aestheticPreference,
-        });
+        }, { ...genInput, previousBlocks, previousTheme });
         return { sections: result.sections, designTokens: result.designTokens };
       }
     : async () => {
         const { mockAIGenerate } = await import("../../infrastructure/ai/llm-client");
-        const result = await mockAIGenerate({
-          businessName: store.name,
-          businessType: store.businessType,
-          productCategory: "umum",
-          aesthetic: store.aestheticPreference,
-        });
+        const result = await mockAIGenerate(genInput);
         return { sections: result.sections, designTokens: result.designTokens };
       };
 

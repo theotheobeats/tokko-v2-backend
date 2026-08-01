@@ -9,6 +9,21 @@ import { stores } from "../../infrastructure/db/schema";
 
 const authRouter = new Hono<{ Bindings: Env }>();
 
+/** Full store payload matching the frontend Store interface. */
+function serializeStoreRow(row: typeof stores.$inferSelect) {
+  return {
+    id: row.id,
+    name: row.name,
+    subdomain: row.subdomain,
+    description: row.description,
+    businessType: row.businessType,
+    aestheticPreference: row.aestheticPreference,
+    whatsappNumber: row.whatsappNumber,
+    status: row.status,
+    heroImageUrl: row.heroImageUrl,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
@@ -112,12 +127,7 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
         name: session.user.name,
         email: session.user.email,
       },
-      store: storeRow ? {
-        id: storeRow.id,
-        name: storeRow.name,
-        subdomain: storeRow.subdomain,
-        status: storeRow.status,
-      } : null,
+      store: storeRow ? serializeStoreRow(storeRow) : null,
     }, 200);
   } catch (error: any) {
     return c.json({
@@ -174,12 +184,7 @@ authRouter.get("/me", async (c) => {
       name: session.user.name,
       email: session.user.email,
     },
-    store: storeRow ? {
-      id: storeRow.id,
-      name: storeRow.name,
-      subdomain: storeRow.subdomain,
-      status: storeRow.status,
-    } : null,
+    store: storeRow ? serializeStoreRow(storeRow) : null,
   });
 });
 

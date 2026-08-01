@@ -34,7 +34,12 @@ export const ThemeSchema = z.object({
   buttonRadius: z.string(),  // e.g. "9999px"
 
   // -- Typography (1) --
-  fontStyle: z.enum(["sans-clean", "serif-classic", "mono-tech", "mixed-warm"]),
+  fontStyle: z.enum([
+    "sans-clean", "serif-classic", "mono-tech", "mixed-warm",
+    "modern-grotesk", "elegant-serif", "soft-rounded", "humanist-sans",
+    "display-bold", "editorial-luxe", "classic-book", "urban-condensed",
+    "retro-slab", "handwritten-casual",
+  ]),
 
   // -- Rhythm (1) --
   spacing: z.enum(["compact", "comfortable", "spacious"]),
@@ -192,6 +197,30 @@ export const FaqContent = z.object({
 }));
 export type FaqContent = z.infer<typeof FaqContent>;
 
+// Footer is intentionally permissive — microcopy-heavy with many optional
+// fields across variants; a strict schema would fight the catalog-driven editor.
+export const FooterContent = z.object({
+  blockId: z.string().optional(),
+  eyebrow: z.string().optional(),
+  heading: z.string().optional(),
+  tagline: z.string().optional(),
+  ctaHeading: z.string().optional(),
+  ctaText: z.string().optional(),
+  copyright: z.string().optional(),
+  madeWithText: z.string().optional(),
+  whatsapp: z.string().optional(),
+  address: z.string().optional(),
+  hours: z.string().optional(),
+  linksTitle: z.string().optional(),
+  links: z.array(z.object({ label: z.string(), href: z.string() })).optional(),
+  socials: z.array(z.object({ icon: z.string(), label: z.string(), href: z.string() })).optional(),
+  columns: z.array(z.object({
+    title: z.string(),
+    links: z.array(z.object({ label: z.string(), href: z.string() })).optional(),
+  })).optional(),
+}).passthrough();
+export type FooterContent = z.infer<typeof FooterContent>;
+
 // ---------------------------------------------------------------------------
 // Section registry: type → allowed variants + content schema
 // ---------------------------------------------------------------------------
@@ -225,6 +254,10 @@ export const SECTION_DEFINITIONS = {
     variants: ["default"] as const,
     content: FaqContent,
   },
+  footer: {
+    variants: ["default"] as const,
+    content: FooterContent,
+  },
 } as const;
 
 export type SectionKind = keyof typeof SECTION_DEFINITIONS;
@@ -244,6 +277,7 @@ export const GeneratedSectionSchema = z.object({
     "cta",
     "contact",
     "faq",
+    "footer",
   ]),
   variant: z.string(),
   content: z.record(z.string(), z.unknown()),

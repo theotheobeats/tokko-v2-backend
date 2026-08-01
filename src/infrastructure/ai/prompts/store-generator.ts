@@ -12,7 +12,7 @@ export function buildStorePrompt(designGuide: string, aesthetic: string): string
 Tugasmu: pilih TEMA visual + tulis KONTEN untuk setiap section. Kamu TIDAK menulis HTML/CSS — frontend sudah punya komponen desain yang bagus. Kamu hanya mengisi datanya.
 
 ⚠️ RULE PALING PENTING — BACA DULU:
-Output sections WAJIB berisi SEMUA 7 tipe berikut, di urutan ini:
+Output sections WAJIB berisi SEMUA 8 tipe berikut, di urutan ini:
 1. hero
 2. about
 3. product-grid
@@ -20,8 +20,16 @@ Output sections WAJIB berisi SEMUA 7 tipe berikut, di urutan ini:
 5. cta
 6. faq
 7. contact
+8. footer
 
-JANGAN pernah melewatkan satu pun. Selalu 7 sections lengkap. Tidak ada pengecualian.
+JANGAN pernah melewatkan satu pun. Selalu 8 sections lengkap. Tidak ada pengecualian.
+
+## VARIASI & ANTI-PENGULANGAN — PENTING
+Input bisa berisi field tambahan:
+- "arahKreatif": arah desain/copy yang HARUS kamu ikuti untuk hasil kali ini.
+- "variasiId": penanda unik — abaikan isinya, tapi perlakukan setiap request sebagai permintaan desain BARU.
+- "blokSebelumnya" + "temaSebelumnya": block & tema yang dipakai terakhir kali. Jika ada, kamu WAJIB memilih blockId yang BERBEDA untuk sebanyak mungkin section dan tema/warna yang berbeda, supaya hasil regenerate terasa baru, bukan salinan.
+Setiap request harus menghasilkan variasi yang berbeda — jangan mengulang kombinasi block, struktur copy, atau palet warna yang sama.
 
 ## REFERENSI DESAIN (tema "${aesthetic}")
 ${designGuide}
@@ -50,11 +58,21 @@ Ini adalah PALET LENGKAP yang mengontrol seluruh tampilan. Pilih dengan sengaja.
 "buttonRadius": e.g. "9999px"
 
 --- TIPOGRAFI (1 token) ---
-"fontStyle": pilih SATU — "sans-clean" | "serif-classic" | "mono-tech" | "mixed-warm"
-  - "sans-clean" = Inter/System, modern, bersih (cocok startup/tech)
-  - "serif-classic" = Georgia/Source Serif, editorial, berwibawa (cocok brand premium/tradisional)
-  - "mono-tech" = JetBrains Mono, teknis, presisi (cocok developer tool/gadget)
-  - "mixed-warm" = serif headline + sans body, hangat dan crafty (cocok artisan/F&B)
+"fontStyle": pilih SATU — "sans-clean" | "serif-classic" | "mono-tech" | "mixed-warm" | "modern-grotesk" | "elegant-serif" | "soft-rounded" | "humanist-sans" | "display-bold" | "editorial-luxe" | "classic-book" | "urban-condensed" | "retro-slab" | "handwritten-casual"
+  - "sans-clean" = Inter, modern, bersih (startup/tech)
+  - "serif-classic" = Georgia, editorial, berwibawa (brand premium/tradisional)
+  - "mono-tech" = monospace, teknis, presisi (developer tool/gadget)
+  - "mixed-warm" = serif headline + sans body, hangat dan crafty (artisan/F&B)
+  - "modern-grotesk" = Space Grotesk, geometris, tegas (brand modern/agen kreatif)
+  - "elegant-serif" = Playfair Display, mewah, high-contrast (fashion/beauty/jewelry)
+  - "soft-rounded" = Poppins, ramah, bulat (UMKM/keluarga/produk anak)
+  - "humanist-sans" = Nunito, hangat, approachable (jasa/komunitas/edukasi)
+  - "display-bold" = Archivo Black, punchy, poster-like (promo/streetwear/distro)
+  - "editorial-luxe" = Cormorant Garamond, refined, magazine (skincare/butik/high-end)
+  - "classic-book" = Lora, readable, warm (kuliner/kriya/brand bercerita)
+  - "urban-condensed" = Oswald, bold, sporty (F&B cepat/gym/otomotif)
+  - "retro-slab" = Roboto Slab, vintage, craft (kopi/barbershop/barang antik)
+  - "handwritten-casual" = Caveat, personal, homemade (warung/kue rumahan)
 
 --- IRAMA (1 token) ---
 "spacing": pilih SATU — "compact" | "comfortable" | "spacious"
@@ -91,38 +109,32 @@ Gunakan tabel di atas sebagai panduan — tiap layoutStyle punya kombinasi natur
    Semua block menerima content yang sama: { eyebrow?, title, subtitle, ctaText, blockId, imageSlot? }.
    "blockId" menentukan layout mana yang dipakai. PILIH SALAH SATU:
 
-   BLOCK CATALOG — HERO (13 pilihan):
-   - "hero-shadcn-centered": Centered — lingkaran dekoratif + heading + CTA + trust text. Serbaguna.
-   - "hero-shadcn-split": Split — teks kiri + visual kanan.
-   - "hero-shadcn-gradient": Gradient — centered di atas gradasi aksen + badge.
-   - "hero-shadcn-minimal": Minimal — kicker uppercase + headline 64px, tanpa gambar.
-   - "hero-shadcn-card": Card Overlay — image area + kartu konten tumpang tindih.
-   - "hero-split-reverse": Split Reverse — image kiri + teks kanan.
-   - "hero-fullscreen": Fullscreen — full-viewport centered + gradient fade.
-   - "hero-two-cta": Two CTAs — headline + 2 tombol (primary + outline).
-   - "hero-image-banner": Image Banner — full-width image/gradient + overlay text putih.
-   - "hero-float-badges": Floating Badges — centered + trust badge strip.
-   - "hero-stats-inline": Stats Inline — headline + CTA + stat row.
-   - "hero-dark-glow": Dark Glow — dark section + glowing CTA.
-   - "hero-asymmetric": Asymmetric — headline besar kiri + whitespace lega.
+   BLOCK CATALOG — HERO (11 pilihan):
+   - "hero-shadcn-centered": Centered — badge pill + headline besar + CTA + trust line. Serbaguna, aman.
+   - "hero-shadcn-minimal": Minimal — kicker uppercase + headline oversized rata kiri, tanpa gambar. Editorial.
+   - "hero-shadcn-split": Glass Split — teks kiri + kartu visual glass-morphism kanan dengan bentuk aksen melayang.
+   - "hero-image-banner": Image Banner — foto full-width (atau gradasi aksen) + overlay gelap + teks putih. Cocok jika toko punya foto hero.
+   - "hero-shadcn-card": 3D Card — kartu produk miring 3D melayang + badge rating & harga + stat row. Immersive.
+   - "hero-premium-mesh": Mesh Spotlight — headline rata kiri di atas blob gradasi lembut + CTA panah + trust chips. Premium, hangat.
+   - "hero-photo-collage": Photo Collage — teks kiri, kolase foto miring kanan (foto hero + produk terlaris) + kartu stat & badge harga melayang. Hidup dan personal.
+   - "hero-product-spotlight": Product Spotlight — headline dua warna (baris akhir gradasi), dual CTA, kartu produk di tengah dengan chip bukti melayang di atas ring arcs. Gaya fintech.
+   - "hero-highlight-marks": Highlight Marks — headline dengan highlight aksen di kata-kata akhir + panel art abstrak aksen di atas dot grid. Playful-modern, tanpa foto.
+   - "hero-card-cluster": Card Cluster — headline centered di atas cluster kartu bertumpuk miring (testimoni, stat, mini-kartu produk). Menampilkan bukti tanpa foto.
+   - "hero-dark-constellation": Dark Constellation — stage gelap, headline dua warna, monogram bercahaya dengan chip nilai mengorbit di garis sirkuit. Dramatis, tech.
 
-   Contoh: toko gadget → "hero-shadcn-card". Toko jasa → "hero-shadcn-minimal". Beauty → "hero-shadcn-gradient".
+   Contoh: toko gadget → "hero-dark-constellation" atau "hero-shadcn-card". Toko jasa → "hero-shadcn-minimal". Beauty/skincare → "hero-photo-collage" atau "hero-product-spotlight". F&B/warung → "hero-photo-collage" atau "hero-card-cluster". Toko tanpa foto sama sekali → "hero-highlight-marks" atau "hero-card-cluster".
 
-2. about — PILIH BLOCK (14 pilihan):
-   - "about-shadcn-split": Split — visual kiri + teks kanan + stat cards.
-   - "about-shadcn-centered": Centered — heading centered + body + stat grid.
-   - "about-shadcn-story": Story — kicker + headline besar + narasi.
-   - "about-split-reverse": Split Reverse — teks kiri + visual kanan.
-   - "about-features": Feature Cards — grid kartu icon/title/text (why choose us).
-   - "about-numbers": Numbers Band — band aksen + angka besar.
-   - "about-mission": Mission — statement centered + 2 kartu nilai.
-   - "about-checklist": Checklist — visual + daftar keunggulan.
-   - "about-quote": Pull Quote — kutipan besar italic.
-   - "about-team": Team — kartu anggota tim.
-   - "about-cards-stacked": Stacked Card — image atas + teks bawah satu kartu.
-   - "about-timeline": Timeline — langkah horizontal (berdiri→berkembang).
-   - "about-banner": Dark Banner — band gelap statement.
-   - "about-two-column": Two Columns — dua kolom body text.
+2. about — PILIH BLOCK (8 pilihan):
+   - "about-shadcn-centered": Centered — heading centered + body + stat grid. Aman, seimbang.
+   - "about-shadcn-split": Classic Split — visual kiri + teks kanan + stat cards.
+   - "about-coach-story": Founder Story — foto dengan chip bukti melayang, headline kata-aksen, lead bold, stat cards, CTA + tanda tangan founder. Personal & persuasif.
+   - "about-soft-panel": Soft Panel — kartu foto rounded + chip komunitas, di samping panel aksen lembut berisi heading, CTA, 2 tile nilai. Hangat & terpercaya.
+   - "about-editorial-columns": Editorial Columns — kicker '/ About', kolom heading/body asimetris, lalu baris 3 kartu media + tile CTA gelap. Gaya majalah.
+   - "about-word-collage": Word Collage — kicker + headline centered, foto produk miring di atas kata watermark raksasa. Artistik, brand-forward.
+   - "about-serif-manifesto": Serif Manifesto — statement serif besar, strip logo klien/mitra, body offset + link bergaris bawah. Kredibilitas studio/editorial.
+   - "about-minimal-statement": Statement Band — statement centered di atas band card + marquee logo. Kuat sebagai strip bukti di antara section berat.
+
+   PENTING: Untuk SEMUA field angka/metrik (stats, chips, ratingValue, soldValue, customerCount, dll) JANGAN mengarang angka. Kosongkan atau isi hanya jika user menyebutkan angka nyata. Field teks biasa (label, judul) boleh diisi copy yang menjual.
 
 3. product-grid — PILIH BLOCK (13 pilihan):
    - "product-grid-shadcn-cards": Cards — grid kartu produk + tombol pesan.
@@ -197,10 +209,20 @@ Gunakan tabel di atas sebagai panduan — tiap layoutStyle punya kombinasi natur
    - "faq-gradient": Gradient — kartu di gradasi.
    - "faq-2col-cards": 2 Col Cards — grid 2 kolom.
 
+8. footer — WAJIB (penutup halaman, selalu di urutan terakhir). PILIH BLOCK (7 pilihan):
+   - "footer-simple-centered": Simple Centered — nama toko + tagline + link kecil + kredit. Aman, default.
+   - "footer-link-columns": Link Columns — blurb brand kiri + 2-3 kolom link kanan + bottom bar.
+   - "footer-big-wordmark": Big Wordmark — CTA heading + nama toko raksasa terpotong di bawah. Bold.
+   - "footer-split-contact": Split Contact — kiri brand + WhatsApp/alamat/jam, kanan nav link.
+   - "footer-dark-cta": Dark CTA — band gelap penutup dengan CTA + bottom row minimal.
+   - "footer-minimal-bar": Minimal Bar — satu baris: © nama · link · kredit.
+   - "footer-social-grid": Social Grid — tile ikon sosial centered + tagline + kredit.
+
 ## ATURAN
-- WAJIB sertakan SEMUA 7 section: hero, about, product-grid, testimonial, cta, faq, contact. Tidak ada yang optional.
+- WAJIB sertakan SEMUA 8 section: hero, about, product-grid, testimonial, cta, faq, contact, footer. Tidak ada yang optional.
 - Setiap section HARUS punya "blockId" — pilih dari catalog di atas.
 - Semua teks Bahasa Indonesia, nada ramah dan meyakinkan. Tulis copy yang menjual, bukan generik.
+- PENTING: JANGAN mengarang angka/metrik (jumlah pelanggan, rating, terjual, tahun berdiri, dll). Field angka seperti stats/ratingValue/soldValue/customerCount dibiarkan KOSONG kecuali user menyebutkan angka nyata — user akan mengisinya sendiri di editor.
 - Harga dalam Rupiah angka bulat (mis. 85000), realistis untuk jenis bisnisnya.
 - JANGAN tulis HTML, CSS, atau tag apapun. Hanya teks/data biasa.
 - JANGAN pakai URL gambar eksternal — imageUrl boleh dikosongkan.
@@ -221,9 +243,10 @@ Gunakan tabel di atas sebagai panduan — tiap layoutStyle punya kombinasi natur
   },
   "sections": [
     { "type":"hero", "variant":"default", "content":{ "blockId":"hero-shadcn-centered", "eyebrow":"✦ Skincare Alami", "title":"Judul Besar yang Menjual", "subtitle":"Deskripsi singkat value proposition.", "ctaText":"Belanja Sekarang" } },
-    { "type":"about", "variant":"default", "content":{ "blockId":"about-shadcn-centered", "eyebrow":"✦ Tentang Kami", "heading":"Kenapa Memilih Kami", "body":"Cerita singkat bisnis.", "stats":[ { "value":"500+", "label":"Pelanggan" }, { "value":"4.9", "label":"Rating" } ] } },
+    { "type":"about", "variant":"default", "content":{ "blockId":"about-shadcn-centered", "eyebrow":"✦ Tentang Kami", "heading":"Kenapa Memilih Kami", "body":"Cerita singkat bisnis." } },
     { "type":"product-grid", "variant":"default", "content":{ "blockId":"product-grid-shadcn-cards", "eyebrow":"✦ Koleksi", "heading":"Produk Andalan" } },
-    { "type":"contact", "variant":"default", "content":{ "blockId":"contact-shadcn-cards", "eyebrow":"✦ Kontak", "heading":"Hubungi Kami", "whatsapp":"08123456789", "address":"Jl. Contoh No. 123" } }
+    { "type":"contact", "variant":"default", "content":{ "blockId":"contact-shadcn-cards", "eyebrow":"✦ Kontak", "heading":"Hubungi Kami", "whatsapp":"08123456789", "address":"Jl. Contoh No. 123" } },
+    { "type":"footer", "variant":"default", "content":{ "blockId":"footer-simple-centered", "tagline":"Terima kasih sudah berbelanja!", "copyright":"© 2024 Nama Toko" } }
   ],
   "sampleProducts": [ { "name":"Nama Produk", "description":"Deskripsi 2-3 kalimat.", "price":85000 } ]
 }`;
