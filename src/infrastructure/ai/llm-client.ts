@@ -125,7 +125,7 @@ export async function mockAIGenerate(input: {
       ctaText: "#ffffff",
       borderRadius: "12px",
       buttonRadius: "9999px",
-      fontStyle: "sans-clean",
+      fontStyle: "modern-sans",
       spacing: "comfortable",
       elevation: "subtle-shadow",
       decorDensity: "moderate",

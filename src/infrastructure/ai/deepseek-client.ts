@@ -53,9 +53,10 @@ async function chatCompletion(
       model: config.model ?? DEFAULT_MODEL,
       messages,
       temperature: options?.temperature ?? 0.7,
-      // Store pages are large (5 sections × inline-CSS HTML + 5 products).
-      // 2048 truncates the payload mid-string → unparseable. Default to 8192.
-      max_tokens: options?.maxTokens ?? 8192,
+      // Store pages are large (5 sections + 5 products) AND the model spends
+      // tokens on internal reasoning, so the output ceiling must be generous —
+      // 8192 could truncate mid-string → unparseable JSON.
+      max_tokens: options?.maxTokens ?? 16000,
       ...(options?.jsonMode ? { response_format: { type: "json_object" } } : {}),
     }),
   });
@@ -124,22 +125,26 @@ export async function generateStore(
     ...(input.previousTheme ? { temaSebelumnya: input.previousTheme } : {}),
   });
 
-  const raw = await chatCompletion(
-    config,
-    [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ],
-    { jsonMode: true, temperature: 0.8 }
-  );
-
-  try {
-    return parseStoreResponse(raw);
-  } catch (err: any) {
-    console.error("PARSE ERROR:", err.message);
-    console.error("RAW RESPONSE (first 500 chars):", raw.slice(0, 500));
-    throw err;
+  // LLM output is inherently non-deterministic — a single call can come back
+  // truncated or with a malformed structure. Retry (with a slightly calmer
+  // temperature) before surfacing a failure to the user.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const raw = await chatCompletion(
+      config,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      { jsonMode: true, temperature: attempt === 1 ? 0.8 : 0.5 }
+    );
+    try {
+      return parseStoreResponse(raw);
+    } catch (err: any) {
+      console.error(`PARSE ERROR (attempt ${attempt}/3):`, err.message);
+      console.error("RAW RESPONSE (first 500 chars):", raw.slice(0, 500));
+    }
   }
+  throw new Error("AI response is not valid JSON after 3 attempts");
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +378,7 @@ const FALLBACK_THEME = ThemeSchema.parse({
   ctaText: "#ffffff",
   borderRadius: "12px",
   buttonRadius: "9999px",
-  fontStyle: "sans-clean",
+  fontStyle: "modern-sans",
   spacing: "comfortable",
   elevation: "subtle-shadow",
   decorDensity: "moderate",

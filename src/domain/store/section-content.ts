@@ -35,10 +35,9 @@ export const ThemeSchema = z.object({
 
   // -- Typography (1) --
   fontStyle: z.enum([
-    "sans-clean", "serif-classic", "mono-tech", "mixed-warm",
-    "modern-grotesk", "elegant-serif", "soft-rounded", "humanist-sans",
-    "display-bold", "editorial-luxe", "classic-book", "urban-condensed",
-    "retro-slab", "handwritten-casual",
+    "modern-sans", "serif-classic", "mono-tech", "mixed-warm",
+    "elegant-serif", "display-bold", "editorial-luxe", "classic-book",
+    "urban-condensed", "handwritten-casual",
   ]),
 
   // -- Rhythm (1) --
@@ -76,7 +75,7 @@ export const LAYOUT_STYLE_GUIDE: Record<string, {
     vibe: "warm paper, serif headlines, narrow columns, hairline rules, ink-on-page — like a printed magazine or literary journal",
   },
   startup: {
-    fontStyle: "sans-clean",
+    fontStyle: "modern-sans",
     spacing: "comfortable",
     elevation: "subtle-shadow",
     decorDensity: "moderate",

@@ -7,7 +7,7 @@
  */
 
 export function buildStorePrompt(designGuide: string, aesthetic: string): string {
-  return `Kamu adalah Tokko, AI penulis konten untuk halaman toko online UMKM Indonesia.
+  return `Kamu adalah 7okko, AI penulis konten untuk halaman toko online UMKM Indonesia.
 
 Tugasmu: pilih TEMA visual + tulis KONTEN untuk setiap section. Kamu TIDAK menulis HTML/CSS — frontend sudah punya komponen desain yang bagus. Kamu hanya mengisi datanya.
 
@@ -58,20 +58,16 @@ Ini adalah PALET LENGKAP yang mengontrol seluruh tampilan. Pilih dengan sengaja.
 "buttonRadius": e.g. "9999px"
 
 --- TIPOGRAFI (1 token) ---
-"fontStyle": pilih SATU — "sans-clean" | "serif-classic" | "mono-tech" | "mixed-warm" | "modern-grotesk" | "elegant-serif" | "soft-rounded" | "humanist-sans" | "display-bold" | "editorial-luxe" | "classic-book" | "urban-condensed" | "retro-slab" | "handwritten-casual"
-  - "sans-clean" = Inter, modern, bersih (startup/tech)
+"fontStyle": pilih SATU — "modern-sans" | "serif-classic" | "mono-tech" | "mixed-warm" | "elegant-serif" | "display-bold" | "editorial-luxe" | "classic-book" | "urban-condensed" | "handwritten-casual"
+  - "modern-sans" = Instrument Sans, modern, bersih (serbaguna)
   - "serif-classic" = Georgia, editorial, berwibawa (brand premium/tradisional)
   - "mono-tech" = monospace, teknis, presisi (developer tool/gadget)
   - "mixed-warm" = serif headline + sans body, hangat dan crafty (artisan/F&B)
-  - "modern-grotesk" = Space Grotesk, geometris, tegas (brand modern/agen kreatif)
   - "elegant-serif" = Playfair Display, mewah, high-contrast (fashion/beauty/jewelry)
-  - "soft-rounded" = Poppins, ramah, bulat (UMKM/keluarga/produk anak)
-  - "humanist-sans" = Nunito, hangat, approachable (jasa/komunitas/edukasi)
   - "display-bold" = Archivo Black, punchy, poster-like (promo/streetwear/distro)
   - "editorial-luxe" = Cormorant Garamond, refined, magazine (skincare/butik/high-end)
   - "classic-book" = Lora, readable, warm (kuliner/kriya/brand bercerita)
   - "urban-condensed" = Oswald, bold, sporty (F&B cepat/gym/otomotif)
-  - "retro-slab" = Roboto Slab, vintage, craft (kopi/barbershop/barang antik)
   - "handwritten-casual" = Caveat, personal, homemade (warung/kue rumahan)
 
 --- IRAMA (1 token) ---
@@ -96,7 +92,7 @@ Ini adalah PALET LENGKAP yang mengontrol seluruh tampilan. Pilih dengan sengaja.
 "layoutStyle": pilih SATU — "editorial" | "startup" | "boutique"
 Ini adalah keputusan PALING PENTING. Pilih satu yang paling cocok dengan referensi desain:
   - "editorial" = serif, spacious, flat, minimal. Seperti majalah/jurnal cetak. Berwibawa, tenang, elegan.
-  - "startup" = sans-clean, comfortable, subtle-shadow, moderate. Seperti SaaS landing page. Modern, percaya diri.
+  - "startup" = modern-sans, comfortable, subtle-shadow, moderate. Seperti SaaS landing page. Modern, percaya diri.
   - "boutique" = mixed-warm, comfortable, soft-glow, rich. Seperti artisan shop. Premium, hangat, personal.
 
 ATURAN: fontStyle/spacing/elevation/decorDensity harus KONSISTEN dengan layoutStyle yang dipilih.
@@ -237,7 +233,7 @@ Gunakan tabel di atas sebagai panduan — tiap layoutStyle punya kombinasi natur
   "theme": {
     "accent":"#HEX", "bg":"#HEX", "cardBg":"#HEX", "text":"#HEX", "textSecondary":"#HEX",
     "ctaText":"#HEX", "borderRadius":"12px", "buttonRadius":"9999px",
-    "fontStyle":"sans-clean", "spacing":"comfortable",
+    "fontStyle":"modern-sans", "spacing":"comfortable",
     "elevation":"subtle-shadow", "decorDensity":"moderate",
     "layoutStyle":"startup"
   },
