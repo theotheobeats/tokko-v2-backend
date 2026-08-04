@@ -5,3 +5,4 @@ export { products } from "./products";
 export { pages } from "./pages";
 export { sections } from "./sections";
 export { orders } from "./orders";
+export { regions } from "./regions";
