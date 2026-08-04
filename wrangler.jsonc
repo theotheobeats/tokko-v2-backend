@@ -14,9 +14,10 @@
     { "binding": "IMAGES", "bucket_name": "tokko-images" }
   ],
   "vars": {
-    "LLM_MODEL": "gpt-4o-mini",
-    "BETTER_AUTH_URL": "https://tokko-api.asakvsa-idn.workers.dev",
-    "FRONTEND_URL": "https://tokko-v2-frontend.asakvsa-idn.workers.dev",
+    "LLM_MODEL": "deepseek-v4-flash",
+    "BETTER_AUTH_URL": "https://api.7okko.com",
+    "FRONTEND_URL": "https://7okko.com",
+    "RESEND_FROM": "no-reply@7okko.com",
     "NODE_ENV": "production"
   },
   "observability": {

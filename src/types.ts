@@ -18,6 +18,13 @@ export interface Env {
   LLM_MODEL: string;
   LLM_BASE_URL?: string;  // optional — defaults to DeepSeek
 
+  // Google OAuth (better-auth social sign-in)
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+
+  // Transactional email (Resend)
+  RESEND_API_KEY?: string;
+  RESEND_FROM?: string;
   // Frontend origin (deployed URL) — used for CORS + better-auth trusted origins
   FRONTEND_URL?: string;
   // Extra comma-separated CORS origins (optional, e.g. custom domain)
