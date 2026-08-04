@@ -243,7 +243,7 @@ ordersRouter.get("/:storeId/orders/export", async (c) => {
   ].join("\n");
 
   c.header("Content-Type", "text/csv");
-  c.header("Content-Disposition", `attachment; filename="tokko-orders-${storeId}.csv"`);
+  c.header("Content-Disposition", `attachment; filename="7okko-orders-${storeId}.csv"`);
   return c.body(csv);
 });
 

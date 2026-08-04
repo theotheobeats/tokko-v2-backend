@@ -24,7 +24,6 @@ app.use("*", (c, next) => {
   ];
   const exactOrigins = [
     "http://localhost:3000",          // Next.js dev server
-    "https://tokko.com",              // Legacy production dashboard
     "https://7okko.com",              // Production root domain
     "https://www.7okko.com",
     ...extraOrigins,                  // Deployed frontend origin(s)
@@ -39,7 +38,7 @@ app.use("*", (c, next) => {
       return undefined;
     },
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
     credentials: true,
@@ -96,11 +95,13 @@ import { productsRouter } from "./interfaces/routes/products";
 import { ordersRouter } from "./interfaces/routes/orders";
 import { pagesRouter } from "./interfaces/routes/pages";
 import { uploadsRouter } from "./interfaces/routes/uploads";
+import { regionsRouter } from "./interfaces/routes/regions";
 app.route("/api/stores", storesRouter);
 app.route("/api/stores", productsRouter);
 app.route("/api/stores", ordersRouter);
 app.route("/api/stores", pagesRouter);
 app.route("/api", uploadsRouter); // /api/images/:key + /api/stores/:id/upload
+app.route("/api/regions", regionsRouter); // public Indonesian region cascade
 
 // ---------------------------------------------------------------------------
 // Export

@@ -28,8 +28,9 @@ async function requireOwner(c: any, storeId: EntityId) {
 
 // ---------------------------------------------------------------------------
 // POST /api/stores/:storeId/upload
+// (mounted under /api — path below becomes /api/stores/:storeId/upload)
 // ---------------------------------------------------------------------------
-uploadsRouter.post("/:storeId/upload", async (c) => {
+uploadsRouter.post("/stores/:storeId/upload", async (c) => {
   const storeId = c.req.param("storeId") as EntityId;
   const owner = await requireOwner(c, storeId);
   if (owner instanceof Response) return owner;
@@ -66,10 +67,12 @@ uploadsRouter.post("/:storeId/upload", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/images/:key
+// GET /api/images/* — keys contain slashes (stores/<id>/<uuid>.png).
+// NOTE: Hono's `*` catch-all matches the route but does NOT expose a param in
+// this version, so the key is derived from the request path instead.
 // ---------------------------------------------------------------------------
-uploadsRouter.get("/images/:key", async (c) => {
-  const key = c.req.param("key");
+uploadsRouter.get("/images/*", async (c) => {
+  const key = c.req.path.replace(/^\/api\/images\//, "");
   const object = await c.env.IMAGES.get(key);
 
   if (!object) {
