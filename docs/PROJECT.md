@@ -1,8 +1,8 @@
-# Tokko — Project Definition
+# 7okko — Project Definition
 
 ## Overview
 
-**Tokko** is an AI-powered e-commerce creator for Indonesian business owners. Users describe their business, and AI generates a complete landing page / online store in seconds. No design skills needed. Think ScaleV meets AI — instead of bringing your own AI-generated HTML, Tokko *is* the AI generation layer.
+**7okko** is an AI-powered e-commerce creator for Indonesian business owners. Users describe their business, and AI generates a complete landing page / online store in seconds. No design skills needed. Think ScaleV meets AI — instead of bringing your own AI-generated HTML, 7okko *is* the AI generation layer.
 
 **Target market:** Indonesian UMKM owners (warung, boutique, catering, home bakery, etc.) who want to sell online but can't design or code. They currently operate via WhatsApp groups and Instagram DMs.
 
@@ -112,7 +112,7 @@ Handles customer orders. Lightweight for MVP — WhatsApp-based flow.
 - This is the input for AI generation
 
 ### 3. AI Store Generation
-- LLM receives quiz answers + a system prompt with Tokko's design language
+- LLM receives quiz answers + a system prompt with 7okko's design language
 - AI generates: store name, description, hero section copy, about section, suggested sections layout, and sample product descriptions (based on business type)
 - Output is structured JSON matching the `Page` section schema
 - User sees a live preview immediately after generation
@@ -141,7 +141,7 @@ Handles customer orders. Lightweight for MVP — WhatsApp-based flow.
 - No local disk — Workers filesystem is ephemeral
 
 ### 7. Public Store Page
-- Live at `{subdomain}.tokko.com`
+- Live at `{subdomain}.7okko.com`
 - Renders the AI-generated page with real products
 - Mobile-first responsive
 - No auth required to view
@@ -204,11 +204,11 @@ Handles customer orders. Lightweight for MVP — WhatsApp-based flow.
                           Cloudflare Edge (300+ locations)
 ┌──────────────────────────────────────────────────────────────────┐
 │                                                                  │
-│  *.tokko.com ──────►  Cloudflare DNS + Routing                   │
+│  *.7okko.com ──────►  Cloudflare DNS + Routing                   │
 │                           │                                      │
 │               ┌───────────┴───────────┐                          │
 │               │                       │                          │
-│     tokko.com /api/*           {subdomain}.tokko.com             │
+│     7okko.com /api/*           {subdomain}.7okko.com             │
 │               │                       │                          │
 │        ┌──────▼──────┐        ┌──────▼──────┐                    │
 │        │  Next.js    │        │  Next.js    │                    │
@@ -237,7 +237,7 @@ Handles customer orders. Lightweight for MVP — WhatsApp-based flow.
 
 ### Request Flow (Public Store)
 
-1. Browser hits `annas-bakery.tokko.com`
+1. Browser hits `annas-bakery.7okko.com`
 2. Cloudflare routes based on `Host` header to the Next.js Worker
 3. Next.js middleware extracts subdomain from hostname
 4. Server-side fetch: `GET /api/stores/by-subdomain?subdomain=annas-bakery`
@@ -258,7 +258,7 @@ Handles customer orders. Lightweight for MVP — WhatsApp-based flow.
 ## Project Structure (DDD-Influenced)
 
 ```
-tokko/
+7okko/
 ├── apps/
 │   ├── web/                          # Next.js frontend (Cloudflare Workers)
 │   │   ├── open-next.config.ts       # OpenNext Cloudflare adapter config
@@ -647,11 +647,11 @@ D1 is SQLite under the hood. No JSONB, no UUID type, no `ON DELETE CASCADE` in t
 ### Store Generation Prompt (System)
 
 ```
-You are Tokko, an AI e-commerce page generator for Indonesian UMKM businesses.
+You are 7okko, an AI e-commerce page generator for Indonesian UMKM businesses.
 Given a business profile, generate a complete landing page structure.
 
 RULES:
-- Output must be valid JSON matching the Tokko Section Schema
+- Output must be valid JSON matching the 7okko Section Schema
 - All text must be in Bahasa Indonesia unless business name is English
 - Prices are in Indonesian Rupiah
 - Tone: friendly, approachable, not corporate
@@ -689,18 +689,18 @@ No Docker, no Nginx, no Postgres. Two Workers, one `wrangler deploy` each.
 
 ```jsonc
 {
-  "name": "tokko-api",
+  "name": "7okko-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-07",
   "compatibility_flags": ["nodejs_compat"],
   "routes": [
-    { "pattern": "api.tokko.com/*", "custom_domain": true }
+    { "pattern": "api.7okko.com/*", "custom_domain": true }
   ],
   "d1_databases": [
-    { "binding": "DB", "database_name": "tokko-db", "database_id": "<db-id>" }
+    { "binding": "DB", "database_name": "7okko-db", "database_id": "<db-id>" }
   ],
   "r2_buckets": [
-    { "binding": "IMAGES", "bucket_name": "tokko-images" }
+    { "binding": "IMAGES", "bucket_name": "7okko-images" }
   ],
   "vars": {
     "LLM_MODEL": "gpt-4o-mini"
@@ -715,7 +715,7 @@ No Docker, no Nginx, no Postgres. Two Workers, one `wrangler deploy` each.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
-  "name": "tokko-web",
+  "name": "7okko-web",
   "compatibility_date": "2026-07-07",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
@@ -723,18 +723,18 @@ No Docker, no Nginx, no Postgres. Two Workers, one `wrangler deploy` each.
     "binding": "ASSETS"
   },
   "routes": [
-    { "pattern": "tokko.com/*" },
-    { "pattern": "*.tokko.com/*" }
+    { "pattern": "7okko.com/*" },
+    { "pattern": "*.7okko.com/*" }
   ],
   "vars": {
-    "API_URL": "https://api.tokko.com"
+    "API_URL": "https://api.7okko.com"
   }
 }
 ```
 
 ### Subdomain Routing
 
-Cloudflare handles wildcard `*.tokko.com` DNS — no Nginx needed. Next.js middleware reads the `Host` header to extract the subdomain for store resolution.
+Cloudflare handles wildcard `*.7okko.com` DNS — no Nginx needed. Next.js middleware reads the `Host` header to extract the subdomain for store resolution.
 
 ### Image Upload Flow
 
@@ -742,14 +742,14 @@ Cloudflare handles wildcard `*.tokko.com` DNS — no Nginx needed. Next.js middl
 2. Hono Worker receives `multipart/form-data`
 3. Writes to R2 bucket via `env.IMAGES.put(key, file)`
 4. Returns the R2 public URL (or signed URL)
-5. Image served directly from `api.tokko.com/images/:key` or via R2 public bucket
+5. Image served directly from `api.7okko.com/images/:key` or via R2 public bucket
 
 ### Secrets & Environment
 
 ```bash
 # Set once per Worker
-npx wrangler secret put LLM_API_KEY --name tokko-api
-npx wrangler secret put SESSION_SECRET --name tokko-api
+npx wrangler secret put LLM_API_KEY --name 7okko-api
+npx wrangler secret put SESSION_SECRET --name 7okko-api
 
 # Local dev
 npx wrangler dev --remote  # uses real D1 + R2
@@ -783,7 +783,7 @@ jobs:
 3. User sees a live preview of their AI-generated page immediately
 4. User can edit section text inline and reorder sections
 5. User can add/edit/delete products with name, price, image, description
-6. Store goes live at `{subdomain}.tokko.com`
+6. Store goes live at `{subdomain}.7okko.com`
 7. Customer can view the store and submit an order (WhatsApp flow)
 8. Store owner sees incoming orders and can update status
 9. Store owner can export orders to CSV

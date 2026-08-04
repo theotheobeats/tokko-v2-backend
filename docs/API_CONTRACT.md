@@ -1,7 +1,7 @@
-# Tokko API Contract — Frontend Integration Guide
+# 7okko API Contract — Frontend Integration Guide
 
 > **Status:** Backend verified & running. All endpoints tested against local D1.
-> **Base URL:** `http://localhost:8787` (dev) · `https://api.tokko.com` (prod)
+> **Base URL:** `http://localhost:8787` (dev) · `https://api.7okko.com` (prod)
 
 ---
 

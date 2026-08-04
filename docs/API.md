@@ -1,9 +1,9 @@
-# Tokko — Backend API Contract
+# 7okko — Backend API Contract
 
 Derived from the frontend screens. Every endpoint here has a corresponding mock-data swap point in the UI.
 
-**Base URL:** `https://api.tokko.com` (dev: `http://localhost:8787`)
-**Auth:** Session cookie (`tokko_session`, HttpOnly, SameSite=Lax) — set on login/register, sent automatically.
+**Base URL:** `https://api.7okko.com` (dev: `http://localhost:8787`)
+**Auth:** Session cookie (`7okko_session`, HttpOnly, SameSite=Lax) — set on login/register, sent automatically.
 **Content type:** `application/json` everywhere except `POST /upload` (`multipart/form-data`).
 
 ## Conventions
@@ -253,7 +253,7 @@ Errors: `400 INVALID_STATUS_TRANSITION`
 ### `GET .../orders/export`
 ```http
 ← 200 text/csv
-  Content-Disposition: attachment; filename="tokko-orders-{storeId}.csv"
+  Content-Disposition: attachment; filename="7okko-orders-{storeId}.csv"
 ```
 Columns: `customer,phone,items,total,status,date` (matches current frontend export format).
 
@@ -279,7 +279,7 @@ field "file": JPG/PNG, max 2MB, magic-byte validated
 field "purpose": "product" | "hero"
 ```
 ```json
-// ← 201 { "key": "stores/store_001/abc123.jpg", "url": "https://api.tokko.com/api/images/stores/store_001/abc123.jpg" }
+// ← 201 { "key": "stores/store_001/abc123.jpg", "url": "https://api.7okko.com/api/images/stores/store_001/abc123.jpg" }
 ```
 Errors: `400 FILE_TOO_LARGE` · `400 INVALID_FILE_TYPE`
 
