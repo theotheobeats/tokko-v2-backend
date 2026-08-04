@@ -2,9 +2,9 @@
  * Product entity — belongs to Store aggregate.
  */
 
-import type { EntityId } from "../shared/types";
-import { createEntityId } from "../shared/types";
-import { isValidPrice } from "./rules";
+import type { EntityId, ProductType as ProductTypeT } from "../shared/types";
+import { createEntityId, ProductType } from "../shared/types";
+import { isValidPrice, isValidProductType } from "./rules";
 
 export interface ProductProps {
   id: EntityId;
@@ -14,6 +14,7 @@ export interface ProductProps {
   price: number; // Rupiah
   imageUrl: string | null;
   isAvailable: boolean;
+  type: ProductTypeT;
 }
 
 export class Product {
@@ -25,9 +26,13 @@ export class Product {
     description?: string;
     price: number;
     imageUrl?: string;
+    type?: ProductTypeT;
   }): Product {
     if (!params.name.trim()) throw new Error("Product name is required");
     if (!isValidPrice(params.price)) throw new Error("Price must be >= 0");
+
+    const type = params.type ?? ProductType.Product;
+    if (!isValidProductType(type)) throw new Error("Invalid product type");
 
     return new Product({
       id: createEntityId(),
@@ -37,6 +42,7 @@ export class Product {
       price: params.price,
       imageUrl: params.imageUrl ?? null,
       isAvailable: true,
+      type,
     });
   }
 
@@ -51,6 +57,7 @@ export class Product {
   get price() { return this.props.price; }
   get imageUrl() { return this.props.imageUrl; }
   get isAvailable() { return this.props.isAvailable; }
+  get type() { return this.props.type; }
 
   updatePrice(newPrice: number): Product {
     if (!isValidPrice(newPrice)) throw new Error("Price must be >= 0");
@@ -67,10 +74,15 @@ export class Product {
     name?: string;
     description?: string | null;
     imageUrl?: string | null;
+    type?: ProductTypeT;
   }): Product {
     if (params.name !== undefined) this.props.name = params.name;
     if (params.description !== undefined) this.props.description = params.description;
     if (params.imageUrl !== undefined) this.props.imageUrl = params.imageUrl;
+    if (params.type !== undefined) {
+      if (!isValidProductType(params.type)) throw new Error("Invalid product type");
+      this.props.type = params.type;
+    }
     return this;
   }
 

@@ -2,10 +2,11 @@
  * UpdateProduct use case.
  */
 
-import type { EntityId } from "../../domain/shared/types";
+import type { EntityId, ProductType as ProductTypeT } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import { Product } from "../../domain/store/product";
+import { isValidProductType } from "../../domain/shared/types";
 import type { ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 
 export interface UpdateProductInput {
@@ -15,6 +16,7 @@ export interface UpdateProductInput {
   description?: string | null;
   imageUrl?: string | null;
   isAvailable?: boolean;
+  type?: ProductTypeT;
 }
 
 export interface UpdateProductError {
@@ -40,12 +42,18 @@ export class UpdateProduct {
       product.updatePrice(input.price);
     }
 
+    // Validate type if provided
+    if (input.type !== undefined && !isValidProductType(input.type)) {
+      return err({ code: "VALIDATION", message: "Tipe produk tidak valid.", field: "type" });
+    }
+
     // Update details
-    if (input.name !== undefined || input.description !== undefined || input.imageUrl !== undefined) {
+    if (input.name !== undefined || input.description !== undefined || input.imageUrl !== undefined || input.type !== undefined) {
       product.updateDetails({
         name: input.name,
         description: input.description,
         imageUrl: input.imageUrl,
+        type: input.type,
       });
     }
 

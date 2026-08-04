@@ -7,6 +7,7 @@ import type { Env } from "../../types";
 import { SubmitOrder } from "../../application/order/submit-order";
 import { ListOrders } from "../../application/order/list-orders";
 import { UpdateOrderStatus } from "../../application/order/update-order-status";
+import { UpdateOrderFulfillment } from "../../application/order/update-order-fulfillment";
 import { D1OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import { D1ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
@@ -32,10 +33,19 @@ const submitSchema = z.object({
     quantity: z.number().int().min(1),
   })).min(1),
   notes: z.string().optional(),
+  shippingAddress: z.string().optional(),
 });
 
 const updateStatusSchema = z.object({
   status: z.enum(["pending", "contacted", "completed"]),
+});
+
+const fulfillmentSchema = z.object({
+  trackingNumber: z.string().optional(),
+  courier: z.string().optional(),
+  paymentConfirmed: z.boolean().optional(),
+  paymentNote: z.string().optional(),
+  queueNumber: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -66,6 +76,7 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
     customerPhone: input.customerPhone,
     items: input.items.map((i) => ({ productId: i.productId as EntityId, quantity: i.quantity })),
     notes: input.notes,
+    shippingAddress: input.shippingAddress,
   });
 
   if (!result.ok) {
@@ -75,9 +86,10 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
 
   // Build WhatsApp deep link for the store owner
   const waMessage = encodeURIComponent(
-    `Halo! Pesanan baru dari ${result.value.customerName}:\n\n` +
+    `Halo! Pesanan baru ${result.value.orderCode} dari ${result.value.customerName}:\n\n` +
     result.value.items.map((i: any) => `- ${i.productName} x${i.quantity} = Rp ${i.quantity * i.unitPrice}`).join("\n") +
     `\n\nTotal: Rp ${result.value.totalAmount}` +
+    (result.value.shippingAddress ? `\n\nAlamat kirim: ${result.value.shippingAddress}` : "") +
     (result.value.notes ? `\n\nCatatan: ${result.value.notes}` : "")
   );
   const waDeepLink = `https://wa.me/${store.whatsappNumber.replace(/\D/g, "")}?text=${waMessage}`;
@@ -151,6 +163,55 @@ ordersRouter.patch("/:storeId/orders/:id", zValidator("json", updateStatusSchema
 });
 
 // ---------------------------------------------------------------------------
+// PUT /api/stores/:storeId/orders/:id/fulfillment (auth, owner)
+// Attach resi / payment confirmation / queue number, then get a WhatsApp
+// deep link to notify the customer.
+// ---------------------------------------------------------------------------
+ordersRouter.put("/:storeId/orders/:id/fulfillment", zValidator("json", fulfillmentSchema), async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("storeId") as EntityId;
+  const orderId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND" } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN" } }, 403);
+  }
+
+  const input = c.req.valid("json");
+  const orderRepo = new D1OrderRepository(db);
+  const useCase = new UpdateOrderFulfillment(orderRepo);
+
+  const result = await useCase.execute({ orderId, ...input });
+
+  if (!result.ok) {
+    const httpStatus = result.error.code === "NOT_FOUND" ? 404 : 400;
+    return c.json({ error: result.error }, httpStatus);
+  }
+
+  // Build a WhatsApp deep link to the customer with the confirmation message
+  const order = result.value;
+  const parts: string[] = [`Halo ${order.customerName}! Pesanan ${order.orderCode} kamu:`];
+  if (order.trackingNumber) {
+    parts.push(`nomor resi: ${order.trackingNumber}${order.courier ? ` (${order.courier})` : ""}`);
+  }
+  if (order.paymentConfirmed) {
+    parts.push(`pembayaran sudah kami konfirmasi ✅`);
+  }
+  if (order.queueNumber) {
+    parts.push(`nomor antrian kamu: ${order.queueNumber}`);
+  }
+  parts.push("Terima kasih sudah berbelanja di toko kami! 💛");
+  const waDeepLink = `https://wa.me/${order.customerPhone.replace(/\D/g, "")}?text=${encodeURIComponent(parts.join("\n"))}`;
+
+  return c.json({ order, waDeepLink });
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/stores/:storeId/orders/export (auth, owner)
 // ---------------------------------------------------------------------------
 ordersRouter.get("/:storeId/orders/export", async (c) => {
@@ -174,10 +235,10 @@ ordersRouter.get("/:storeId/orders/export", async (c) => {
   if (!result.ok) return c.json({ error: { code: "UNKNOWN" } }, 500);
 
   const csv = [
-    "customer,phone,items,total,status,date",
+    "orderCode,customer,phone,shippingAddress,items,total,status,trackingNumber,courier,paymentConfirmed,queueNumber,date",
     ...result.value.orders.map((o) => {
       const items = o.items.map((i: any) => `${i.productName} x${i.quantity}`).join("; ");
-      return `"${o.customerName}","${o.customerPhone}","${items}",${o.totalAmount},${o.status},${o.createdAt}`;
+      return `"${o.orderCode}","${o.customerName}","${o.customerPhone}","${o.shippingAddress ?? ""}","${items}",${o.totalAmount},${o.status},"${o.trackingNumber ?? ""}","${o.courier ?? ""}",${o.paymentConfirmed ? "yes" : ""},"${o.queueNumber ?? ""}",${o.createdAt}`;
     }),
   ].join("\n");
 

@@ -144,4 +144,56 @@ describe("CreateProduct use case", () => {
 
     expect(result.ok).toBe(true);
   });
+
+  // PRODUCT TYPE
+  it("should default to product type", async () => {
+    const result = await useCase.execute({
+      storeId,
+      name: "Cake",
+      price: 50000,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe("product");
+  });
+
+  it("should create a service type product", async () => {
+    const result = await useCase.execute({
+      storeId,
+      name: "Potong Rambut",
+      price: 50000,
+      type: "service",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe("service");
+  });
+
+  it("should create a booking type product", async () => {
+    const result = await useCase.execute({
+      storeId,
+      name: "Konsultasi",
+      price: 0,
+      type: "booking",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe("booking");
+  });
+
+  it("should reject invalid product type", async () => {
+    const result = await useCase.execute({
+      storeId,
+      name: "Cake",
+      price: 50000,
+      type: "digital" as never,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION");
+      expect(result.error.field).toBe("type");
+    }
+    expect(repo.save).not.toHaveBeenCalled();
+  });
 });

@@ -58,6 +58,7 @@ type Rupiah = number;
 
 type StoreStatus = "draft" | "published";
 type OrderStatus = "pending" | "contacted" | "completed";
+type ProductType = "product" | "service" | "booking";
 type Aesthetic = "minimal" | "warm" | "bold";
 type BusinessType = "food" | "fashion" | "gift" | "beauty" | "craft" | "gadget" | "home" | "service";
 type SectionType = "hero" | "about" | "product-grid" | "testimonial" | "cta" | "contact" | "faq";
@@ -88,6 +89,7 @@ interface Product {
   price: Rupiah;
   imageUrl: string | null;
   isAvailable: boolean;
+  type: ProductType; // determines checkout + fulfillment flow
 }
 
 interface OrderItem {
@@ -95,17 +97,25 @@ interface OrderItem {
   productName: string;
   quantity: number;
   unitPrice: Rupiah;
+  productType: ProductType; // snapshot of the product kind at order time
 }
 
 interface Order {
   id: ID;
   storeId: ID;
+  orderCode: string; // human-friendly ref, e.g. "TK-8F3K2"
   customerName: string;
   customerPhone: string;
   items: OrderItem[];
   totalAmount: Rupiah;
   status: OrderStatus;
   notes: string | null;
+  shippingAddress: string | null; // required for product orders
+  trackingNumber: string | null; // nomor resi — filled by admin (product)
+  courier: string | null; // jasa kirim — filled by admin (product)
+  paymentConfirmed: boolean; // filled by admin (service)
+  paymentNote: string | null; // filled by admin (service)
+  queueNumber: string | null; // nomor antrian — filled by admin (booking)
   createdAt: string; // ISO 8601
 }
 
@@ -319,9 +329,12 @@ All under `/api/stores/:storeId/products`.
   "name": "Rainbow Cake",
   "price": 85000,
   "description": "Optional description",
-  "imageUrl": "stores/abc/cake.jpg"
+  "imageUrl": "stores/abc/cake.jpg",
+  "type": "product"
 }
 ```
+
+`type` is optional, defaults to `"product"`. One of `"product" | "service" | "booking"`.
 
 **Response `201`:**
 ```json
@@ -410,20 +423,23 @@ All under `/api/stores/:storeId/orders`.
   "items": [
     { "productId": "prod_uuid", "quantity": 2 }
   ],
+  "shippingAddress": "Jl. Merdeka No. 1, Jakarta 10110",
   "notes": "Tolong bungkus kado"
 }
 ```
 
+`shippingAddress` is **required** when the order contains a physical product (`type: "product"`); ignored otherwise.
+
 **Response `201`:**
 ```json
 {
-  "order": { /* Order object, status: "pending" */ },
+  "order": { /* Order object, status: "pending", includes orderCode */ },
   "waDeepLink": "https://wa.me/6281234567890?text=Halo%20..."
 }
 ```
-`waDeepLink` is a pre-built WhatsApp URL to the store owner. Frontend renders it as a success action button.
+`waDeepLink` is a pre-built WhatsApp URL to the store owner (includes orderCode + shipping address). Frontend renders it as a success action button, and shows the `orderCode` as the customer's reference.
 
-**Errors:** `400 VALIDATION` · `400 PRODUCT_UNAVAILABLE`
+**Errors:** `400 VALIDATION` (incl. missing shippingAddress) · `400 PRODUCT_UNAVAILABLE`
 
 ---
 
@@ -458,12 +474,44 @@ All under `/api/stores/:storeId/orders`.
 
 **Valid transitions:** `pending → contacted → completed`. Cannot skip or go backward.
 
+**Completion gate:** transitioning to `completed` is rejected unless the order's fulfillment data is present, per the ordered item's type:
+- `product` → `trackingNumber` (nomor resi) must be set
+- `service` → `paymentConfirmed` must be true
+- `booking` → `queueNumber` must be set
+
 **Response `200`:**
 ```json
 { "order": { /* updated Order */ } }
 ```
 
-**Errors:** `400 INVALID_STATUS_TRANSITION` · `404 NOT_FOUND`
+**Errors:** `400 INVALID_STATUS_TRANSITION` · `400 FULFILLMENT_INCOMPLETE` · `404 NOT_FOUND`
+
+---
+
+### `PUT /api/stores/:storeId/orders/:id/fulfillment`
+**Requires auth, owner only.** Attach fulfillment data (resi / payment confirmation / queue number) and get a WhatsApp deep link to notify the customer.
+
+**Request** (all fields optional — send only what applies to this order):
+```json
+{
+  "trackingNumber": "JNE123456",
+  "courier": "JNE",
+  "paymentConfirmed": true,
+  "paymentNote": "BCA a.n. Anna",
+  "queueNumber": "A-001"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "order": { /* updated Order with fulfillment fields */ },
+  "waDeepLink": "https://wa.me/62811...?text=Halo%20Rina!%20Pesanan%20TK-8F3K2%20kamu..."
+}
+```
+`waDeepLink` is pre-filled with the confirmation message for the customer (resi / payment confirmed / queue number).
+
+**Errors:** `400 VALIDATION` · `404 NOT_FOUND`
 
 ---
 
@@ -472,7 +520,7 @@ All under `/api/stores/:storeId/orders`.
 
 **Response `200`:** `text/csv` with `Content-Disposition: attachment`.
 
-CSV columns: `customer,phone,items,total,status,date`
+CSV columns: `orderCode,customer,phone,shippingAddress,items,total,status,trackingNumber,courier,paymentConfirmed,queueNumber,date`
 
 ---
 

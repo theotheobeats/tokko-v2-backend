@@ -6,6 +6,7 @@ import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import { Order } from "../../domain/order/order";
+import type { Product } from "../../domain/store/product";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import type { ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 
@@ -15,6 +16,7 @@ export interface SubmitOrderInput {
   customerPhone: string;
   items: { productId: EntityId; quantity: number }[];
   notes?: string;
+  shippingAddress?: string;
 }
 
 export interface SubmitOrderError {
@@ -42,7 +44,7 @@ export class SubmitOrder {
     }
 
     // Fetch products from DB (never trust client prices)
-    const orderItems: { productId: EntityId; productName: string; quantity: number; unitPrice: number }[] = [];
+    const orderItems: { productId: EntityId; productName: string; quantity: number; unitPrice: number; productType: Product["type"] }[] = [];
 
     for (const item of input.items) {
       const product = await this.productRepo.findById(item.productId);
@@ -58,7 +60,14 @@ export class SubmitOrder {
         productName: product.name,
         quantity: item.quantity,
         unitPrice: product.price, // Price from DB — never trust client
+        productType: product.type,
       });
+    }
+
+    // Physical products must always carry a shipping address
+    const hasPhysicalItem = orderItems.some((i) => i.productType === "product");
+    if (hasPhysicalItem && !input.shippingAddress?.trim()) {
+      return err({ code: "VALIDATION", message: "Alamat pengiriman wajib diisi.", field: "shippingAddress" });
     }
 
     // Create order
@@ -68,6 +77,7 @@ export class SubmitOrder {
       customerPhone: input.customerPhone,
       items: orderItems,
       notes: input.notes,
+      shippingAddress: input.shippingAddress,
     });
 
     await this.orderRepo.save(order);

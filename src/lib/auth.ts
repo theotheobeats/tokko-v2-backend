@@ -6,6 +6,10 @@ import type { Env } from "../types";
 
 export function createAuth(env: Env) {
   const db = drizzle(env.DB, { schema });
+  const frontendUrl = env.FRONTEND_URL ?? "http://localhost:3000";
+  // Local dev (localhost:8787) keeps Lax cookies; anything remote gets
+  // cross-site cookies (frontend + API live on different origins).
+  const isLocal = env.BETTER_AUTH_URL.includes("localhost");
 
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
@@ -16,7 +20,22 @@ export function createAuth(env: Env) {
     emailAndPassword: {
       enabled: true,
     },
-    trustedOrigins: [env.BETTER_AUTH_URL, "http://localhost:3000"],
+    trustedOrigins: [
+      env.BETTER_AUTH_URL,
+      frontendUrl,
+      "http://localhost:3000",
+      "https://7okko.com",
+      "https://www.7okko.com",
+      "https://*.7okko.com", // store subdomains (annas-bakery.7okko.com)
+    ],
+    advanced: isLocal
+      ? {}
+      : {
+          useSecureCookies: true,
+          // Frontend and API are on different origins (workers.dev) → the
+          // session cookie must be SameSite=None + Secure to be sent cross-site.
+          defaultCookieAttributes: { sameSite: "none", secure: true },
+        },
   });
 }
 

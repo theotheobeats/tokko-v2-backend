@@ -112,6 +112,37 @@ describe("UpdateProduct use case", () => {
     }
     expect(repo.save).not.toHaveBeenCalled();
   });
+
+  it("should update product type", async () => {
+    const product = makeProduct();
+    (repo.findById as any).mockResolvedValue(product);
+
+    const result = await useCase.execute({
+      productId: product.id,
+      type: "booking",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe("booking");
+    expect(repo.save).toHaveBeenCalledOnce();
+  });
+
+  it("should reject invalid product type on update", async () => {
+    const product = makeProduct();
+    (repo.findById as any).mockResolvedValue(product);
+
+    const result = await useCase.execute({
+      productId: product.id,
+      type: "digital" as never,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION");
+      expect(result.error.field).toBe("type");
+    }
+    expect(repo.save).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------

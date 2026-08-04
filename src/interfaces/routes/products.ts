@@ -28,6 +28,7 @@ const createSchema = z.object({
   price: z.number().int().min(0),
   description: z.string().optional(),
   imageUrl: z.string().optional(),
+  type: z.enum(["product", "service", "booking"]).optional(),
 });
 
 const updateSchema = z.object({
@@ -36,6 +37,7 @@ const updateSchema = z.object({
   description: z.string().nullable().optional(),
   imageUrl: z.string().nullable().optional(),
   isAvailable: z.boolean().optional(),
+  type: z.enum(["product", "service", "booking"]).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -95,6 +97,7 @@ productsRouter.post("/:storeId/products", zValidator("json", createSchema), asyn
     price: input.price,
     description: input.description,
     imageUrl: input.imageUrl,
+    type: input.type,
   });
 
   if (!result.ok) {

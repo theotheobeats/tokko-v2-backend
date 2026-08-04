@@ -18,6 +18,11 @@ export interface Env {
   LLM_MODEL: string;
   LLM_BASE_URL?: string;  // optional — defaults to DeepSeek
 
+  // Frontend origin (deployed URL) — used for CORS + better-auth trusted origins
+  FRONTEND_URL?: string;
+  // Extra comma-separated CORS origins (optional, e.g. custom domain)
+  ALLOWED_ORIGINS?: string;
+
   // Environment
   NODE_ENV?: string;
 }

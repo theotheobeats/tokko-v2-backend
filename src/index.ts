@@ -16,20 +16,35 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 // Global middleware
 // ---------------------------------------------------------------------------
 app.use(logger());
-app.use(
-  "*",
-  cors({
-    origin: [
-      "http://localhost:3000",        // Next.js dev server
-      "https://tokko.com",            // Production dashboard
-    ],
+app.use("*", (c, next) => {
+  const env = c.env as Env;
+  const extraOrigins = [
+    ...(env.FRONTEND_URL ? [env.FRONTEND_URL] : []),
+    ...(env.ALLOWED_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
+  ];
+  const exactOrigins = [
+    "http://localhost:3000",          // Next.js dev server
+    "https://tokko.com",              // Legacy production dashboard
+    "https://7okko.com",              // Production root domain
+    "https://www.7okko.com",
+    ...extraOrigins,                  // Deployed frontend origin(s)
+  ];
+  // Store subdomains: https://<store>.7okko.com
+  const STORE_SUBDOMAIN_RE = /^https:\/\/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+7okko\.com$/;
+  return cors({
+    origin: (origin) => {
+      if (!origin) return undefined;
+      if (exactOrigins.includes(origin)) return origin;
+      if (STORE_SUBDOMAIN_RE.test(origin)) return origin;
+      return undefined;
+    },
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
     credentials: true,
-  })
-);
+  })(c, next);
+});
 
 // ---------------------------------------------------------------------------
 // Health check

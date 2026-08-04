@@ -15,3 +15,15 @@ export const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   contacted: ["completed"],
   completed: [],
 };
+
+/** Fulfillment fields the admin can attach per order type */
+export type FulfillmentField = "trackingNumber" | "paymentConfirmed" | "queueNumber";
+
+/** Fulfillment data attached by the store owner (admin) */
+export interface FulfillmentData {
+  trackingNumber?: string | null;
+  courier?: string | null;
+  paymentConfirmed?: boolean;
+  paymentNote?: string | null;
+  queueNumber?: string | null;
+}

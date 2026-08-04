@@ -9,6 +9,7 @@ import type { OrderItemProps } from "../../domain/order/order-item";
 import type { OrderStatus } from "../../domain/order/types";
 import type { DbClient } from "../db/drizzle";
 import { orders } from "../db/schema";
+import { generateOrderCode } from "../../domain/order/rules";
 
 export interface OrderRepository {
   findById(id: EntityId): Promise<Order | null>;
@@ -84,12 +85,19 @@ export class D1OrderRepository implements OrderRepository {
     return Order.from({
       id: row.id as EntityId,
       storeId: row.storeId as EntityId,
+      orderCode: row.orderCode ?? generateOrderCode(),
       customerName: row.customerName,
       customerPhone: row.customerPhone,
       items: JSON.parse(row.items) as OrderItemProps[],
       totalAmount: row.totalAmount,
       status: row.status as OrderStatus,
       notes: row.notes,
+      shippingAddress: row.shippingAddress,
+      trackingNumber: row.trackingNumber,
+      courier: row.courier,
+      paymentConfirmed: row.paymentConfirmed === 1,
+      paymentNote: row.paymentNote,
+      queueNumber: row.queueNumber,
       createdAt: row.createdAt,
     });
   }
@@ -98,12 +106,19 @@ export class D1OrderRepository implements OrderRepository {
     return {
       id: props.id as string,
       storeId: props.storeId as string,
+      orderCode: props.orderCode,
       customerName: props.customerName,
       customerPhone: props.customerPhone,
       items: JSON.stringify(props.items),
       totalAmount: props.totalAmount,
       status: props.status,
       notes: props.notes,
+      shippingAddress: props.shippingAddress,
+      trackingNumber: props.trackingNumber,
+      courier: props.courier,
+      paymentConfirmed: props.paymentConfirmed ? 1 : 0,
+      paymentNote: props.paymentNote,
+      queueNumber: props.queueNumber,
     };
   }
 }

@@ -10,6 +10,19 @@ export function createEntityId(): EntityId {
   return crypto.randomUUID() as EntityId;
 }
 
+/** Product kind — determines the checkout + fulfillment flow */
+export const ProductType = {
+  Product: "product",
+  Service: "service",
+  Booking: "booking",
+} as const;
+export type ProductType = (typeof ProductType)[keyof typeof ProductType];
+
+/** Check a value is a valid ProductType */
+export function isValidProductType(value: unknown): value is ProductType {
+  return value === ProductType.Product || value === ProductType.Service || value === ProductType.Booking;
+}
+
 /** Base result type for domain operations that can fail */
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 

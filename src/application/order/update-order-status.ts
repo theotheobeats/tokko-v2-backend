@@ -15,7 +15,7 @@ export interface UpdateOrderStatusInput {
 }
 
 export interface UpdateOrderStatusError {
-  code: "NOT_FOUND" | "INVALID_STATUS_TRANSITION";
+  code: "NOT_FOUND" | "INVALID_STATUS_TRANSITION" | "FULFILLMENT_INCOMPLETE";
   message: string;
 }
 
@@ -34,6 +34,14 @@ export class UpdateOrderStatus {
       return err({
         code: "INVALID_STATUS_TRANSITION",
         message: `Status tidak valid. Hanya bisa: ${allowed.join(", ")}.`,
+      });
+    }
+
+    // Completion requires fulfillment info (resi / payment confirmation / queue number)
+    if (input.status === "completed" && !order.isFulfillmentComplete) {
+      return err({
+        code: "FULFILLMENT_INCOMPLETE",
+        message: "Lengkapi data pesanan terlebih dahulu (nomor resi / konfirmasi pembayaran / nomor antrian).",
       });
     }
 

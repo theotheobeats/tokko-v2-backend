@@ -104,8 +104,12 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
       c.header("set-cookie", setCookie);
     }
 
-    // Get the session to access user
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    // Get the session using the NEW cookie from the sign-in response — the
+    // original request headers carry no session cookie yet, so querying with
+    // them always returns null and login would always 401.
+    const session = await auth.api.getSession({
+      headers: new Headers({ cookie: setCookie ?? "" }),
+    });
 
     if (!session) {
       return c.json({

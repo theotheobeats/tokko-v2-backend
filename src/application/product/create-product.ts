@@ -2,10 +2,11 @@
  * CreateProduct use case.
  */
 
-import type { EntityId } from "../../domain/shared/types";
+import type { EntityId, ProductType as ProductTypeT } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import { Product } from "../../domain/store/product";
+import { isValidProductType } from "../../domain/shared/types";
 import type { ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 
 export interface CreateProductInput {
@@ -14,6 +15,7 @@ export interface CreateProductInput {
   price: number;
   description?: string;
   imageUrl?: string;
+  type?: ProductTypeT;
 }
 
 export interface CreateProductError {
@@ -34,6 +36,11 @@ export class CreateProduct {
       return err({ code: "VALIDATION", message: "Harga harus >= 0.", field: "price" });
     }
 
+    // Validate type if provided
+    if (input.type !== undefined && !isValidProductType(input.type)) {
+      return err({ code: "VALIDATION", message: "Tipe produk tidak valid.", field: "type" });
+    }
+
     // Check limit
     const count = await this.productRepo.countByStoreId(input.storeId);
     if (count >= 20) {
@@ -47,6 +54,7 @@ export class CreateProduct {
       price: input.price,
       description: input.description,
       imageUrl: input.imageUrl,
+      type: input.type,
     });
 
     await this.productRepo.save(product);

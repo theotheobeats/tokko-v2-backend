@@ -8,14 +8,15 @@
     { "type": "Text", "globs": ["**/*.md"], "fallthrough": true }
   ],
   "d1_databases": [
-    { "binding": "DB", "database_name": "tokko-db", "database_id": "tokko-db-local" }
+    { "binding": "DB", "database_name": "tokko-db", "database_id": "ec6935de-2435-4bf9-a0e1-e3e801a70ebb" }
   ],
   "r2_buckets": [
     { "binding": "IMAGES", "bucket_name": "tokko-images" }
   ],
   "vars": {
     "LLM_MODEL": "gpt-4o-mini",
-    "BETTER_AUTH_URL": "http://localhost:8787",
+    "BETTER_AUTH_URL": "https://tokko-api.asakvsa-idn.workers.dev",
+    "FRONTEND_URL": "https://tokko-v2-frontend.asakvsa-idn.workers.dev",
     "NODE_ENV": "production"
   },
   "observability": {

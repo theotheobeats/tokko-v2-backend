@@ -56,6 +56,7 @@ describe("SubmitOrder use case", () => {
       customerName: "Rina",
       customerPhone: "+628111222333",
       items: [{ productId: product.id, quantity: 2 }],
+      shippingAddress: "Jl. Test No. 1",
     });
 
     expect(result.ok).toBe(true);
@@ -74,6 +75,7 @@ describe("SubmitOrder use case", () => {
       customerName: "",
       customerPhone: "+62",
       items: [{ productId: product.id, quantity: 1 }],
+      shippingAddress: "Jl. Test No. 1",
     });
 
     expect(result.ok).toBe(false);
@@ -86,6 +88,7 @@ describe("SubmitOrder use case", () => {
       customerName: "Rina",
       customerPhone: "",
       items: [{ productId: product.id, quantity: 1 }],
+      shippingAddress: "Jl. Test No. 1",
     });
 
     expect(result.ok).toBe(false);
@@ -97,6 +100,7 @@ describe("SubmitOrder use case", () => {
       customerName: "Rina",
       customerPhone: "+62",
       items: [],
+      shippingAddress: "Jl. Test No. 1",
     });
 
     expect(result.ok).toBe(false);
@@ -112,6 +116,7 @@ describe("SubmitOrder use case", () => {
       customerName: "Rina",
       customerPhone: "+62",
       items: [{ productId: createEntityId(), quantity: 1 }],
+      shippingAddress: "Jl. Test No. 1",
     });
 
     expect(result.ok).toBe(false);
@@ -128,6 +133,7 @@ describe("SubmitOrder use case", () => {
       customerName: "Rina",
       customerPhone: "+62",
       items: [{ productId: product.id, quantity: 1 }],
+      shippingAddress: "Jl. Test No. 1",
     });
 
     expect(result.ok).toBe(false);
@@ -140,6 +146,7 @@ describe("SubmitOrder use case", () => {
       customerName: "Rina",
       customerPhone: "+62",
       items: [{ productId: product.id, quantity: 1 }],
+      shippingAddress: "Jl. Test No. 1",
       notes: "Tolong bungkus kado",
     });
 
@@ -157,10 +164,72 @@ describe("SubmitOrder use case", () => {
       customerName: "Rina",
       customerPhone: "+62",
       items: [{ productId: expensiveProduct.id, quantity: 3 }],
+      shippingAddress: "Jl. Test No. 1",
     });
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.totalAmount).toBe(1500000); // 3 * 500000
+  });
+
+  it("should reject product orders without a shipping address", async () => {
+    const result = await useCase.execute({
+      storeId,
+      customerName: "Rina",
+      customerPhone: "+62",
+      items: [{ productId: product.id, quantity: 1 }],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION");
+      expect(result.error.field).toBe("shippingAddress");
+    }
+    expect(orderRepo.save).not.toHaveBeenCalled();
+  });
+
+  it("should include the shipping address in the order", async () => {
+    const result = await useCase.execute({
+      storeId,
+      customerName: "Rina",
+      customerPhone: "+62",
+      items: [{ productId: product.id, quantity: 1 }],
+      shippingAddress: "Jl. Melati No. 9, Bandung",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.shippingAddress).toBe("Jl. Melati No. 9, Bandung");
+  });
+
+  it("should not require a shipping address for service orders", async () => {
+    const serviceProduct = Product.create({ storeId, name: "Potong Rambut", price: 50000, type: "service" });
+    const serviceRepo = mockProductRepo({ findById: vi.fn().mockResolvedValue(serviceProduct) });
+    const uc = new SubmitOrder(orderRepo, serviceRepo);
+
+    const result = await uc.execute({
+      storeId,
+      customerName: "Rina",
+      customerPhone: "+62",
+      items: [{ productId: serviceProduct.id, quantity: 1 }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.shippingAddress).toBeNull();
+      expect(result.value.items[0].productType).toBe("service");
+    }
+  });
+
+  it("should snapshot the product type on order items", async () => {
+    const result = await useCase.execute({
+      storeId,
+      customerName: "Rina",
+      customerPhone: "+62",
+      items: [{ productId: product.id, quantity: 1 }],
+      shippingAddress: "Jl. Test No. 1",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.items[0].productType).toBe("product");
   });
 });
 
@@ -215,7 +284,8 @@ describe("UpdateOrderStatus use case", () => {
       storeId,
       customerName: "Rina",
       customerPhone: "+62",
-      items: [{ productId: product.id, productName: "Cake", quantity: 1, unitPrice: 85000 }],
+      items: [{ productId: product.id, productName: "Cake", quantity: 1, unitPrice: 85000, productType: "product" as const }],
+      shippingAddress: "Jl. Test No. 1",
     });
     (repo.findById as any).mockResolvedValue(order);
 
@@ -236,7 +306,8 @@ describe("UpdateOrderStatus use case", () => {
       storeId,
       customerName: "Rina",
       customerPhone: "+62",
-      items: [{ productId: product.id, productName: "Cake", quantity: 1, unitPrice: 85000 }],
+      items: [{ productId: product.id, productName: "Cake", quantity: 1, unitPrice: 85000, productType: "product" as const }],
+      shippingAddress: "Jl. Test No. 1",
     });
     // Order is pending — can't jump to completed
     (repo.findById as any).mockResolvedValue(order);
@@ -261,5 +332,50 @@ describe("UpdateOrderStatus use case", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("NOT_FOUND");
+  });
+
+  it("should reject completing an order without fulfillment info", async () => {
+    const order = Order.create({
+      storeId,
+      customerName: "Rina",
+      customerPhone: "+62",
+      items: [{ productId: product.id, productName: "Cake", quantity: 1, unitPrice: 85000, productType: "product" as const }],
+      shippingAddress: "Jl. Test No. 1",
+    });
+    order.markContacted();
+    (repo.findById as any).mockResolvedValue(order);
+
+    const result = await useCase.execute({
+      orderId: order.id,
+      status: "completed",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("FULFILLMENT_INCOMPLETE");
+    }
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it("should complete an order once fulfillment is complete", async () => {
+    const order = Order.create({
+      storeId,
+      customerName: "Rina",
+      customerPhone: "+62",
+      items: [{ productId: product.id, productName: "Cake", quantity: 1, unitPrice: 85000, productType: "product" as const }],
+      shippingAddress: "Jl. Test No. 1",
+    });
+    order.markContacted();
+    order.updateFulfillment({ trackingNumber: "JNE123" });
+    (repo.findById as any).mockResolvedValue(order);
+
+    const result = await useCase.execute({
+      orderId: order.id,
+      status: "completed",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.status).toBe("completed");
+    expect(repo.save).toHaveBeenCalledOnce();
   });
 });

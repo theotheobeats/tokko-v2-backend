@@ -73,6 +73,7 @@ export class D1ProductRepository implements ProductRepository {
       price: row.price,
       imageUrl: row.imageUrl,
       isAvailable: row.isAvailable === 1,
+      type: (row.type ?? "product") as Product["type"],
     });
   }
 
@@ -85,6 +86,7 @@ export class D1ProductRepository implements ProductRepository {
       price: props.price,
       imageUrl: props.imageUrl,
       isAvailable: props.isAvailable ? 1 : 0,
+      type: props.type,
     };
   }
 }

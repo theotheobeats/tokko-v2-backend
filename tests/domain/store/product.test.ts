@@ -161,4 +161,53 @@ describe("Product entity", () => {
       expect(json.isAvailable).toBe(true);
     });
   });
+
+  describe("product type", () => {
+    it("should default to type product", () => {
+      const product = Product.create({ storeId, name: "Cake", price: 1000 });
+      expect(product.type).toBe("product");
+      expect(product.toJSON().type).toBe("product");
+    });
+
+    it("should create with explicit service type", () => {
+      const service = Product.create({ storeId, name: "Potong Rambut", price: 50000, type: "service" });
+      expect(service.type).toBe("service");
+    });
+
+    it("should create with explicit booking type", () => {
+      const booking = Product.create({ storeId, name: "Konsultasi", price: 0, type: "booking" });
+      expect(booking.type).toBe("booking");
+    });
+
+    it("should throw on invalid type", () => {
+      expect(() =>
+        Product.create({ storeId, name: "X", price: 100, type: "digital" as never })
+      ).toThrow("Invalid product type");
+    });
+
+    it("should update type via updateDetails", () => {
+      const product = Product.create({ storeId, name: "Cake", price: 1000 });
+      product.updateDetails({ type: "service" });
+      expect(product.type).toBe("service");
+    });
+
+    it("should throw on invalid type in updateDetails", () => {
+      const product = Product.create({ storeId, name: "Cake", price: 1000 });
+      expect(() => product.updateDetails({ type: "digital" as never })).toThrow("Invalid product type");
+    });
+
+    it("should reconstitute type from props", () => {
+      const product = Product.from({
+        id: createEntityId(),
+        storeId,
+        name: "Recon",
+        description: null,
+        price: 999,
+        imageUrl: null,
+        isAvailable: true,
+        type: "booking",
+      });
+      expect(product.type).toBe("booking");
+    });
+  });
 });

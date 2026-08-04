@@ -62,3 +62,10 @@ export function canStoreBePublished(productCount: number): boolean {
 export function isValidPrice(price: number): boolean {
   return price >= 0 && Number.isInteger(price);
 }
+
+/**
+ * Validate that a product type is one of the supported kinds.
+ */
+export function isValidProductType(value: unknown): boolean {
+  return value === "product" || value === "service" || value === "booking";
+}

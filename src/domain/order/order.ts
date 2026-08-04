@@ -2,20 +2,29 @@
  * Order aggregate root.
  */
 
-import type { EntityId } from "../shared/types";
-import { createEntityId } from "../shared/types";
+import type { EntityId, ProductType as ProductTypeT } from "../shared/types";
+import { createEntityId, ProductType } from "../shared/types";
 import { OrderStatus, VALID_TRANSITIONS, type OrderStatus as OrderStatusType } from "./types";
+import type { FulfillmentData, FulfillmentField } from "./types";
 import { OrderItem, type OrderItemProps } from "./order-item";
+import { generateOrderCode } from "./rules";
 
 export interface OrderProps {
   id: EntityId;
   storeId: EntityId;
+  orderCode: string;
   customerName: string;
   customerPhone: string;
   items: OrderItem[];
   totalAmount: number;
   status: OrderStatusType;
   notes: string | null;
+  shippingAddress: string | null;
+  trackingNumber: string | null;
+  courier: string | null;
+  paymentConfirmed: boolean;
+  paymentNote: string | null;
+  queueNumber: string | null;
   createdAt?: string;
 }
 
@@ -26,12 +35,21 @@ export class Order {
     storeId: EntityId;
     customerName: string;
     customerPhone: string;
-    items: { productId: EntityId; productName: string; quantity: number; unitPrice: number }[];
+    items: { productId: EntityId; productName: string; quantity: number; unitPrice: number; productType: ProductTypeT }[];
     notes?: string;
+    shippingAddress?: string;
+    orderCode?: string;
   }): Order {
     if (!params.customerName.trim()) throw new Error("Customer name is required");
     if (!params.customerPhone.trim()) throw new Error("Customer phone is required");
     if (params.items.length === 0) throw new Error("Order must have at least 1 item");
+
+    // Physical products must always carry a shipping address
+    const hasPhysicalItem = params.items.some((i) => i.productType === ProductType.Product);
+    const shippingAddress = params.shippingAddress?.trim() || null;
+    if (hasPhysicalItem && !shippingAddress) {
+      throw new Error("Shipping address is required for product orders");
+    }
 
     const orderItems = params.items.map((i) => OrderItem.create(i));
     const totalAmount = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
@@ -39,12 +57,19 @@ export class Order {
     return new Order({
       id: createEntityId(),
       storeId: params.storeId,
+      orderCode: params.orderCode ?? generateOrderCode(),
       customerName: params.customerName.trim(),
       customerPhone: params.customerPhone.trim(),
       items: orderItems,
       totalAmount,
       status: OrderStatus.Pending,
-      notes: params.notes ?? null,
+      notes: params.notes?.trim() || null,
+      shippingAddress,
+      trackingNumber: null,
+      courier: null,
+      paymentConfirmed: false,
+      paymentNote: null,
+      queueNumber: null,
       createdAt: new Date().toISOString(),
     });
   }
@@ -52,18 +77,85 @@ export class Order {
   static from(props: Omit<OrderProps, 'items'> & { items: OrderItemProps[] }): Order {
     return new Order({
       ...props,
-      items: props.items.map((i) => OrderItem.create(i)),
+      orderCode: props.orderCode ?? generateOrderCode(),
+      shippingAddress: props.shippingAddress ?? null,
+      trackingNumber: props.trackingNumber ?? null,
+      courier: props.courier ?? null,
+      paymentConfirmed: props.paymentConfirmed ?? false,
+      paymentNote: props.paymentNote ?? null,
+      queueNumber: props.queueNumber ?? null,
+      // Legacy persisted orders (pre-productType schema) may have items without
+      // productType — default to "product" so reconstruction never throws and
+      // the orders list / dashboard stays available. Matches the repo default
+      // (row.type ?? "product") and the frontend (product.type ?? "product").
+      items: props.items.map((i) =>
+        OrderItem.create({ ...i, productType: i.productType ?? ProductType.Product })
+      ),
     });
   }
 
   get id() { return this.props.id; }
   get storeId() { return this.props.storeId; }
+  get orderCode() { return this.props.orderCode; }
   get customerName() { return this.props.customerName; }
   get customerPhone() { return this.props.customerPhone; }
   get items() { return [...this.props.items]; }
   get totalAmount() { return this.props.totalAmount; }
   get status() { return this.props.status; }
   get notes() { return this.props.notes; }
+  get shippingAddress() { return this.props.shippingAddress; }
+  get trackingNumber() { return this.props.trackingNumber; }
+  get courier() { return this.props.courier; }
+  get paymentConfirmed() { return this.props.paymentConfirmed; }
+  get paymentNote() { return this.props.paymentNote; }
+  get queueNumber() { return this.props.queueNumber; }
+
+  /**
+   * Fulfillment fields required before this order can be completed,
+   * derived from the ordered items' product types:
+   *  - product  → nomor resi (trackingNumber)
+   *  - service  → payment confirmation
+   *  - booking  → queue number (nomor antrian)
+   */
+  get requiredFulfillment(): FulfillmentField[] {
+    const required = new Set<FulfillmentField>();
+    for (const item of this.props.items) {
+      if (item.productType === ProductType.Product) required.add("trackingNumber");
+      else if (item.productType === ProductType.Service) required.add("paymentConfirmed");
+      else if (item.productType === ProductType.Booking) required.add("queueNumber");
+    }
+    return [...required];
+  }
+
+  /** True when every required fulfillment field is satisfied */
+  get isFulfillmentComplete(): boolean {
+    for (const field of this.requiredFulfillment) {
+      if (field === "trackingNumber" && !this.props.trackingNumber?.trim()) return false;
+      if (field === "paymentConfirmed" && !this.props.paymentConfirmed) return false;
+      if (field === "queueNumber" && !this.props.queueNumber?.trim()) return false;
+    }
+    return true;
+  }
+
+  /** Attach fulfillment data (resi / payment confirmation / queue number) */
+  updateFulfillment(data: FulfillmentData): Order {
+    if (data.trackingNumber !== undefined) {
+      this.props.trackingNumber = data.trackingNumber?.trim() || null;
+    }
+    if (data.courier !== undefined) {
+      this.props.courier = data.courier?.trim() || null;
+    }
+    if (data.paymentConfirmed !== undefined) {
+      this.props.paymentConfirmed = data.paymentConfirmed;
+    }
+    if (data.paymentNote !== undefined) {
+      this.props.paymentNote = data.paymentNote?.trim() || null;
+    }
+    if (data.queueNumber !== undefined) {
+      this.props.queueNumber = data.queueNumber?.trim() || null;
+    }
+    return this;
+  }
 
   /** Transition to a new status */
   advanceStatus(): Order {
@@ -84,10 +176,13 @@ export class Order {
     return this;
   }
 
-  /** Mark as completed */
+  /** Mark as completed — requires fulfillment info for the ordered items */
   markCompleted(): Order {
     if (this.props.status !== OrderStatus.Contacted) {
       throw new Error("Only contacted orders can be marked as completed");
+    }
+    if (!this.isFulfillmentComplete) {
+      throw new Error("Order cannot be completed without fulfillment info");
     }
     this.props.status = OrderStatus.Completed;
     return this;
@@ -97,12 +192,19 @@ export class Order {
     return {
       id: this.props.id,
       storeId: this.props.storeId,
+      orderCode: this.props.orderCode,
       customerName: this.props.customerName,
       customerPhone: this.props.customerPhone,
       items: this.props.items.map((i) => i.toJSON()),
       totalAmount: this.props.totalAmount,
       status: this.props.status,
       notes: this.props.notes,
+      shippingAddress: this.props.shippingAddress,
+      trackingNumber: this.props.trackingNumber,
+      courier: this.props.courier,
+      paymentConfirmed: this.props.paymentConfirmed,
+      paymentNote: this.props.paymentNote,
+      queueNumber: this.props.queueNumber,
       createdAt: this.props.createdAt,
     };
   }
