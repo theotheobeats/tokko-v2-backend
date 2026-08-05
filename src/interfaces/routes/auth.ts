@@ -5,7 +5,11 @@ import { createAuth } from "../../lib/auth";
 import { createDb } from "../../infrastructure/db/drizzle";
 import type { Env } from "../../types";
 import { eq } from "drizzle-orm";
-import { stores } from "../../infrastructure/db/schema";
+import { stores, consents } from "../../infrastructure/db/schema";
+
+// Versi dokumen legal yang sedang berlaku — dicatat pada consent log.
+const TERMS_VERSION = "1.0";
+const PRIVACY_VERSION = "1.0";
 
 const authRouter = new Hono<{ Bindings: Env }>();
 
@@ -32,6 +36,8 @@ const registerSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  // Persetujuan S&K + Privasi — wajib (UU PDP Pasal 22 & 24).
+  consent: z.boolean().refine((v) => v === true, "Consent to terms is required"),
 });
 
 const loginSchema = z.object({
@@ -63,6 +69,31 @@ authRouter.post("/register", zValidator("json", registerSchema), async (c) => {
     const session = await auth.api.getSession({
       headers: new Headers({ cookie: setCookie ?? "" }),
     });
+
+    // Catat bukti persetujuan S&K + Privasi (UU PDP Pasal 22 & 24 —
+    // consent tanpa bukti = tidak ada).
+    if (session) {
+      try {
+        const db = createDb(c.env.DB);
+        const ip =
+          c.req.header("cf-connecting-ip") ??
+          c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+          "unknown";
+        await db.insert(consents).values({
+          id: crypto.randomUUID(),
+          userId: session.user.id,
+          type: "terms_privacy",
+          termsVersion: TERMS_VERSION,
+          privacyVersion: PRIVACY_VERSION,
+          ip,
+          userAgent: c.req.header("user-agent") ?? null,
+        });
+      } catch (consentErr) {
+        console.error("CONSENT LOG ERROR:", consentErr);
+        // Jangan gagalkan registrasi karena kegagalan pencatatan consent —
+        // tapi log error untuk investigasi.
+      }
+    }
 
     return c.json({
       user: {

@@ -1,4 +1,5 @@
 export { user } from "./users";
+export { consents } from "./consents";
 export { session, account, verification } from "./auth";
 export { stores } from "./stores";
 export { products } from "./products";
