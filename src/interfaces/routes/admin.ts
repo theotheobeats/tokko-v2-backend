@@ -13,6 +13,7 @@ import { D1OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import { D1TicketRepository } from "../../infrastructure/repos/d1-ticket-repo";
 import { D1ReportRepository } from "../../infrastructure/repos/d1-report-repo";
 import { D1ConsentRepository } from "../../infrastructure/repos/d1-consent-repo";
+import { D1PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import { createAuth } from "../../lib/auth";
 import { GetAdminStats } from "../../application/admin/admin-stats";
 import {
@@ -274,8 +275,20 @@ adminRouter.get("/orders", async (c) => {
     }
   }
 
+  // Enrich with the latest payment attempt per order.
+  const paymentRepo = new D1PaymentRepository(db);
+  const paymentByOrder: Record<string, ReturnType<import("../../domain/payment/payment").Payment["toJSON"]>> = {};
+  for (const o of orders) {
+    const payments = await paymentRepo.findByOrderId(o.id);
+    if (payments.length > 0) paymentByOrder[o.id] = payments[payments.length - 1].toJSON();
+  }
+
   return c.json({
-    orders: orders.map((o) => ({ ...o.toJSON(), storeName: storeNames[o.storeId] ?? "—" })),
+    orders: orders.map((o) => ({
+      ...o.toJSON(),
+      storeName: storeNames[o.storeId] ?? "—",
+      payment: paymentByOrder[o.id] ?? null,
+    })),
     total,
   });
 });
