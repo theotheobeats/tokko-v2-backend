@@ -168,6 +168,8 @@ export class UpdatePage {
 
     const newSlug = input.newSlug?.trim() ?? input.slug;
     if (newSlug !== input.slug) {
+      // The home page slug is fixed — only its title can change.
+      if (input.slug === HOME_SLUG) return err(new PageSlugInvalidError());
       if (!isValidSlug(newSlug)) return err(new PageSlugInvalidError());
       const clash = await this.pageRepo.findByStoreIdAndSlug(input.storeId, newSlug);
       if (clash) return err(new PageSlugTakenError(newSlug));

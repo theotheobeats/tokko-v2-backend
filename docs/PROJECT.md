@@ -211,9 +211,11 @@ tables with domain meaning: **Regions** (checkout address cascade) and **Consent
 - Invariants: price ≥ 0; name required
 
 **`Page`** (Entity within Store aggregate)
-- Identity: `id`; one page per store (`storeId` unique)
-- State: `sections` (ordered list of Section values) + `designTokens` (the Theme)
-- Behavior: `reorderSections()`, `updateSection()`, `addSection()`, `removeSection()`
+- Identity: `id`, `slug` (URL segment; `beranda` = home), `title`
+- State: `sections` (ordered list of Section values); a store has **multiple** pages
+  (free-form — any page is any ordered set of the existing section blocks)
+- Behavior: `reorderSections()`, `updateSection()`, `addSection()`, `removeSection()`, `rename()`
+- The **visual theme is site-wide**: it lives on the Store (`designTokens`), shared by all pages
 
 **`Section`** (Value Object)
 - Types (8, fixed order in generation): `hero`, `about`, `product-grid`, `testimonial`, `cta`,
@@ -223,7 +225,8 @@ tables with domain meaning: **Regions** (checkout address cascade) and **Consent
 - The AI only writes content; it never writes markup. See `section-content.ts` for the typed
   content schemas and `FRONTEND_RENDERING.md` for the renderer contract.
 
-**Theme / design tokens** — a 14-token JSON blob stored on the Page:
+**Theme / design tokens** — a 14-token JSON blob stored on the **Store** (`stores.design_tokens`),
+shared by every page of the store:
 - 8 color tokens: `accent`, `bg`, `cardBg`, `text`, `textSecondary`, `ctaText`, `borderRadius`,
   `buttonRadius`
 - 1 typography token: `fontStyle` (10 options: modern-sans … handwritten-casual)
@@ -326,8 +329,11 @@ entity, when) so moderation is accountable.
 ### 4. Store Editor (`/dashboard/editor`)
 - Block-based editor: every section is an editable block with a **field editor** (text inputs,
   array item editors for stats/FAQ/testimonials/links), **image upload**, and block switching
+- **Multi-page**: page tabs (switch/add/delete), add-page modal with templates
+  (Tentang / Produk / Kontak / FAQ / kosong); section editing + regenerate target the
+  active page via `?page=`
 - **Theme editor** (`/dashboard/settings`): per-token controls (colors, radius, spacing,
-  elevation, decoration, layout style, navbar style)
+  elevation, decoration, layout style, navbar style) — site-wide
 - Reorder sections, add new sections from the catalog, delete sections, regenerate the page
 - Every mutation replaces client state with the server-returned Page (never patch locally)
 
@@ -343,10 +349,13 @@ entity, when) so moderation is accountable.
 
 ### 7. Public Store Page (`{subdomain}.7okko.com`)
 - Hostname-based routing in `middleware.ts` (reserved subdomains: app, www, admin, api, …)
-- Client-side fetch of `{ store, sections, products, theme }`, rendered by `StoreRenderer`
+- **Multi-page**: `{sub}.7okko.com` = home, `{sub}.7okko.com/{slug}` = inner pages
+  (middleware preserves the path); the navbar shows links to all pages when there is
+  more than one; unknown page → "Halaman tidak ditemukan"
+- Client-side fetch of `{ store, sections, products, theme, pages }`, rendered by `StoreRenderer`
 - Navbar (6 variants via `theme.navbarStyle`), scroll-triggered section animations, font loader
   (per `fontStyle`), footer always rendered from the footer block catalog
-- Not found / not published → friendly Indonesian error page
+- Not found / not published / suspended → friendly Indonesian error page
 
 ### 8. Cart + WhatsApp Checkout
 - Cart drawer + floating button (themed), quantities persisted per store in localStorage
@@ -441,6 +450,7 @@ are `TEXT`; booleans are `INTEGER` 0/1; FKs enforced in application code. Migrat
 | heroImageUrl | TEXT NULL | R2 key |
 | **suspendedAt** | TEXT NULL | moderation takedown timestamp |
 | **suspendedReason** | TEXT NULL | why it was suspended |
+| **designTokens** | TEXT NULL | **site-wide theme (14 tokens), shared by all pages** |
 | createdAt / updatedAt | TEXT | ISO 8601 |
 
 ### `products`
@@ -460,8 +470,10 @@ are `TEXT`; booleans are `INTEGER` 0/1; FKs enforced in application code. Migrat
 | Column | Type | Notes |
 |--------|------|-------|
 | id | TEXT PK | |
-| storeId | TEXT NOT NULL UNIQUE → stores.id | one page per store |
-| designTokens | TEXT NULL | JSON theme (14 tokens) |
+| storeId | TEXT NOT NULL → stores.id | **UNIQUE(store_id, slug)** — multiple pages per store |
+| slug | TEXT NOT NULL DEFAULT 'beranda' | URL segment; home = beranda |
+| title | TEXT NULL | display title for the navbar |
+| designTokens | TEXT NULL | legacy/unused — theme lives on stores |
 | createdAt / updatedAt | TEXT | |
 
 ### `sections`

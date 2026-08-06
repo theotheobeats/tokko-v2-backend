@@ -300,19 +300,23 @@ Live subdomain availability check during onboarding.
 
 ---
 
-### `GET /api/stores/by-subdomain?subdomain=annas-bakery`
+### `GET /api/stores/by-subdomain?subdomain=annas-bakery&page=tentang`
 **Public.** Returns published store with sections and products. Hot path — used by store pages.
+`page` is optional (default `beranda`); unknown page → `404 PAGE_NOT_FOUND`.
 
 **Response `200`:**
 ```json
 {
   "store": { /* Store object */ },
-  "sections": [ /* Section[] */ ],
-  "products": [ /* Product[] */ ]
+  "sections": [ /* Section[] of the requested page */ ],
+  "products": [ /* Product[] */ ],
+  "theme": { /* site-wide design tokens (from the store) */ },
+  "pages": [ { "slug": "beranda", "title": null }, { "slug": "tentang", "title": "Tentang Kami" } ],
+  "pageSlug": "tentang"
 }
 ```
 
-**Errors:** `404 STORE_NOT_FOUND` · `404 STORE_NOT_PUBLISHED` (drafts are hidden)
+**Errors:** `404 STORE_NOT_FOUND` · `404 STORE_NOT_PUBLISHED` · `404 STORE_SUSPENDED` · `404 PAGE_NOT_FOUND`
 
 ---
 
@@ -526,7 +530,19 @@ CSV columns: `orderCode,customer,phone,shippingAddress,items,total,status,tracki
 
 ## 7. Page / Section Endpoints
 
-All under `/api/stores/:storeId/page`.
+All under `/api/stores/:storeId/page`. **Multi-page:** section routes accept
+`?page=<slug>` (default `beranda`) to target a specific page. The visual theme
+is **site-wide** — `PATCH /page/theme` writes `stores.design_tokens`.
+
+### Page management (free-form multi-page)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/api/stores/:storeId/pages` | `{ slug, title?, template? }` — template: `about\|products\|contact\|faq\|empty`; `409 PAGE_SLUG_TAKEN`; `400 PAGE_SLUG_INVALID` (slug = lowercase a-z0-9 + hyphens, 2-40 chars, `beranda` reserved) |
+| PATCH | `/api/stores/:storeId/pages/:slug` | `{ slug?, title? }` rename (home slug is fixed); `409` on clash |
+| DELETE | `/api/stores/:storeId/pages/:slug` | `400 LAST_PAGE` when it's the only page |
+
+All require auth + owner. Responses return `{ page, pages }` (the serialized page + updated page list).
 
 ### `GET /api/stores/:storeId/page`
 Public if store is published. Auth required for drafts (owner only).
