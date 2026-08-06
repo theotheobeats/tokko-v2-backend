@@ -44,6 +44,7 @@ export interface XenditEnv {
   XENDIT_SECRET_KEY?: string;
   XENDIT_WEBHOOK_TOKEN?: string;
   XENDIT_FORCE_MOCK?: string;
+  NODE_ENV?: string;
 }
 
 const XENDIT_API = "https://api.xendit.co";
@@ -134,10 +135,25 @@ export class MockXenditClient implements PaymentProviderClient {
   }
 }
 
-/** Pick the client based on env (mock when no key / forced). */
+/**
+ * Production without a configured key — payments are unavailable and must
+ * fail loudly, NOT pretend with a dead mock URL (customers would click a
+ * fake checkout page). The UI falls back to the WhatsApp flow.
+ */
+export class UnavailablePaymentProvider implements PaymentProviderClient {
+  async createInvoice(): Promise<InvoiceResult> {
+    throw new Error("Pembayaran online belum tersedia di toko ini");
+  }
+
+  async getInvoice(): Promise<InvoiceStatusResult> {
+    throw new Error("Pembayaran online belum tersedia di toko ini");
+  }
+}
+
+/** Pick the client based on env: real key → Xendit; dev/test → mock; prod → unavailable. */
 export function createPaymentProvider(env: XenditEnv): PaymentProviderClient {
   const key = env.XENDIT_SECRET_KEY;
-  return useRealPayments(env) && key
-    ? new XenditClient(key)
-    : new MockXenditClient();
+  if (useRealPayments(env) && key) return new XenditClient(key);
+  if (env.NODE_ENV === "production") return new UnavailablePaymentProvider();
+  return new MockXenditClient();
 }
