@@ -4,7 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { createAuth } from "../../lib/auth";
 import { createDb } from "../../infrastructure/db/drizzle";
 import type { Env } from "../../types";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { stores, consents } from "../../infrastructure/db/schema";
 
 // Versi dokumen legal yang sedang berlaku — dicatat pada consent log.
@@ -170,10 +170,17 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
       .where(eq(stores.ownerId, session.user.id))
       .get();
 
+    const consentRow = await db
+      .select({ c: count() })
+      .from(consents)
+      .where(eq(consents.userId, session.user.id))
+      .get();
+
     return c.json({
       user: serializeUser(session.user),
       store: storeRow ? serializeStoreRow(storeRow) : null,
-    }, 200);
+      hasConsent: (consentRow?.c ?? 0) > 0,
+    });
   } catch (error: any) {
     return c.json({
       error: { code: "INVALID_CREDENTIALS", message: "Email atau password salah." },
@@ -205,6 +212,41 @@ authRouter.post("/logout", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/auth/consent — log terms+privacy consent for the current user.
+// Used after OAuth (Google) signups, where registration happens server-side
+// and the register route's consent log doesn't run. UU PDP Pasal 22 & 24.
+// ---------------------------------------------------------------------------
+authRouter.post("/consent", async (c) => {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    return c.json({ error: { code: "UNAUTHORIZED", message: "Silakan login terlebih dahulu." } }, 401);
+  }
+
+  try {
+    const db = createDb(c.env.DB);
+    const ip =
+      c.req.header("cf-connecting-ip") ??
+      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+      "unknown";
+    await db.insert(consents).values({
+      id: crypto.randomUUID(),
+      userId: session.user.id,
+      type: "terms_privacy",
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
+      ip,
+      userAgent: c.req.header("user-agent") ?? null,
+    });
+  } catch (consentErr) {
+    console.error("CONSENT LOG ERROR:", consentErr);
+    return c.json({ error: { code: "UNKNOWN", message: "Gagal mencatat persetujuan." } }, 500);
+  }
+
+  return c.json({ logged: true });
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/auth/me
 // ---------------------------------------------------------------------------
 authRouter.get("/me", async (c) => {
@@ -223,9 +265,16 @@ authRouter.get("/me", async (c) => {
     .where(eq(stores.ownerId, session.user.id))
     .get();
 
+  const consentRow = await db
+    .select({ c: count() })
+    .from(consents)
+    .where(eq(consents.userId, session.user.id))
+    .get();
+
   return c.json({
     user: serializeUser(session.user),
     store: storeRow ? serializeStoreRow(storeRow) : null,
+    hasConsent: (consentRow?.c ?? 0) > 0,
   });
 });
 
