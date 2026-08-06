@@ -3,6 +3,7 @@ export { consents } from "./consents";
 export { adminLogs } from "./admin-logs";
 export { tickets, ticketMessages } from "./tickets";
 export { reports } from "./reports";
+export { payments } from "./payments";
 export { session, account, verification } from "./auth";
 export { stores } from "./stores";
 export { products } from "./products";

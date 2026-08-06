@@ -1,0 +1,143 @@
+/**
+ * Xendit payment provider client.
+ *
+ * Uses the Invoices API (hosted checkout page). Sandbox-safe: real calls
+ * when a XENDIT_SECRET_KEY is configured; a deterministic mock otherwise
+ * (mirrors the AI layer's mock pattern so dev/tests work without keys).
+ *
+ * Env:
+ *   XENDIT_SECRET_KEY    (secret) — sandbox or production secret key
+ *   XENDIT_WEBHOOK_TOKEN (secret) — verified on incoming webhooks
+ *   XENDIT_FORCE_MOCK    (var)    — "1" forces mock even with a key
+ */
+
+export interface CreateInvoiceInput {
+  externalId: string;
+  amount: number;
+  description: string;
+  customer?: { givenNames?: string; email?: string; mobileNumber?: string };
+  /** Restrict the invoice to these Xendit payment methods. */
+  paymentMethods?: string[];
+  successRedirectUrl?: string;
+  failureRedirectUrl?: string;
+}
+
+export interface InvoiceResult {
+  externalId: string;
+  invoiceUrl: string;
+}
+
+export type XenditInvoiceStatus = "PENDING" | "PAID" | "EXPIRED" | "FAILED";
+
+export interface InvoiceStatusResult {
+  status: XenditInvoiceStatus;
+  paidAt?: string;
+  paymentMethod?: string;
+}
+
+export interface PaymentProviderClient {
+  createInvoice(input: CreateInvoiceInput): Promise<InvoiceResult>;
+  getInvoice(externalId: string): Promise<InvoiceStatusResult>;
+}
+
+export interface XenditEnv {
+  XENDIT_SECRET_KEY?: string;
+  XENDIT_WEBHOOK_TOKEN?: string;
+  XENDIT_FORCE_MOCK?: string;
+}
+
+const XENDIT_API = "https://api.xendit.co";
+
+/** Real payments are used whenever a non-mock key is configured. */
+export function useRealPayments(env: XenditEnv): boolean {
+  if (env.XENDIT_FORCE_MOCK === "1" || env.XENDIT_FORCE_MOCK === "true") return false;
+  const key = env.XENDIT_SECRET_KEY;
+  return !!key && !key.startsWith("xnd_mock");
+}
+
+export class XenditClient implements PaymentProviderClient {
+  constructor(private readonly secretKey: string) {}
+
+  private async request(path: string, init?: RequestInit): Promise<any> {
+    const res = await fetch(`${XENDIT_API}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Basic ${btoa(`${this.secretKey}:`)}`,
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Xendit ${res.status}: ${body.slice(0, 300)}`);
+    }
+    return res.json();
+  }
+
+  async createInvoice(input: CreateInvoiceInput): Promise<InvoiceResult> {
+    const data = await this.request("/v2/invoices", {
+      method: "POST",
+      body: JSON.stringify({
+        external_id: input.externalId,
+        amount: input.amount,
+        currency: "IDR",
+        description: input.description,
+        ...(input.customer
+          ? {
+              customer: {
+                given_names: input.customer.givenNames,
+                email: input.customer.email,
+                mobile_number: input.customer.mobileNumber,
+              },
+            }
+          : {}),
+        ...(input.paymentMethods?.length
+          ? { payment_methods: input.paymentMethods }
+          : {}),
+        ...(input.successRedirectUrl ? { success_redirect_url: input.successRedirectUrl } : {}),
+        ...(input.failureRedirectUrl ? { failure_redirect_url: input.failureRedirectUrl } : {}),
+      }),
+    });
+
+    return {
+      externalId: data.external_id,
+      invoiceUrl: data.invoice_url,
+    };
+  }
+
+  async getInvoice(externalId: string): Promise<InvoiceStatusResult> {
+    const data = await this.request(`/v2/invoices/${encodeURIComponent(externalId)}`);
+    return {
+      status: data.status,
+      paidAt: data.paid_at,
+      paymentMethod: data.payment_method,
+    };
+  }
+}
+
+/**
+ * Deterministic mock for dev/tests — no network, no keys.
+ * Generates a realistic-looking invoice URL (not reachable).
+ */
+export class MockXenditClient implements PaymentProviderClient {
+  constructor(private readonly prefix = "xnd_mock") {}
+
+  async createInvoice(input: CreateInvoiceInput): Promise<InvoiceResult> {
+    return {
+      externalId: input.externalId,
+      invoiceUrl: `https://checkout.xendit.co/web/${this.prefix}-${input.externalId}`,
+    };
+  }
+
+  async getInvoice(_externalId: string): Promise<InvoiceStatusResult> {
+    return { status: "PENDING" };
+  }
+}
+
+/** Pick the client based on env (mock when no key / forced). */
+export function createPaymentProvider(env: XenditEnv): PaymentProviderClient {
+  const key = env.XENDIT_SECRET_KEY;
+  return useRealPayments(env) && key
+    ? new XenditClient(key)
+    : new MockXenditClient();
+}

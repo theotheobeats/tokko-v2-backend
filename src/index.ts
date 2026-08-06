@@ -100,6 +100,7 @@ import { uploadsRouter } from "./interfaces/routes/uploads";
 import { regionsRouter } from "./interfaces/routes/regions";
 import { ticketsRouter, reportsRouter } from "./interfaces/routes/support";
 import { adminRouter } from "./interfaces/routes/admin";
+import { paymentsRouter } from "./interfaces/routes/payments";
 app.route("/api/stores", storesRouter);
 app.route("/api/stores", productsRouter);
 app.route("/api/stores", ordersRouter);
@@ -109,6 +110,7 @@ app.route("/api/regions", regionsRouter); // public Indonesian region cascade
 app.route("/api", ticketsRouter); // /api/tickets/* (user-facing support)
 app.route("/api", reportsRouter); // /api/stores/:storeId/report (public moderation)
 app.route("/api/admin", adminRouter); // admin panel (requireAdmin guard)
+app.route("/api", paymentsRouter); // payments + Xendit webhook
 
 // ---------------------------------------------------------------------------
 // Export
