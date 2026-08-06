@@ -43,20 +43,22 @@ async function chatCompletion(
   options?: { jsonMode?: boolean; maxTokens?: number; temperature?: number }
 ): Promise<string> {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  // A stalled provider must fail fast — without a timeout the worker request
+  // hangs and the browser is stuck on the "generating" screen forever.
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiKey}`,
     },
+    signal: AbortSignal.timeout(75_000), // 75s per attempt
     body: JSON.stringify({
       model: config.model ?? DEFAULT_MODEL,
       messages,
       temperature: options?.temperature ?? 0.7,
-      // Store pages are large (5 sections + 5 products) AND the model spends
-      // tokens on internal reasoning, so the output ceiling must be generous —
-      // 8192 could truncate mid-string → unparseable JSON.
-      max_tokens: options?.maxTokens ?? 16000,
+      // Generous but bounded — too low truncates mid-string (unparseable
+      // JSON, retried); too high makes the model ramble for minutes.
+      max_tokens: options?.maxTokens ?? 12000,
       ...(options?.jsonMode ? { response_format: { type: "json_object" } } : {}),
     }),
   });
