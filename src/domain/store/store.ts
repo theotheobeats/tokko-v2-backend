@@ -25,6 +25,7 @@ export interface StoreProps {
   suspendedAt: string | null;
   suspendedReason: string | null;
   createdAt: string;
+  designTokens: Record<string, string> | null;
 }
 
 export class Store {
@@ -57,6 +58,7 @@ export class Store {
       suspendedAt: null,
       suspendedReason: null,
       createdAt: new Date().toISOString(),
+      designTokens: null,
     });
   }
 
@@ -80,6 +82,7 @@ export class Store {
   get suspendedAt() { return this.props.suspendedAt; }
   get suspendedReason() { return this.props.suspendedReason; }
   get createdAt() { return this.props.createdAt; }
+  get designTokens() { return this.props.designTokens; }
 
   /** Publish the store — requires at least 1 product */
   publish(): Result<Store, StoreMustHaveProductsError> {
@@ -117,6 +120,12 @@ export class Store {
   /** Update the internal product count reference */
   setProductCount(count: number): Store {
     this.props.productCount = count;
+    return this;
+  }
+
+  /** Set the site-wide design tokens (theme). */
+  setDesignTokens(tokens: Record<string, string> | null): Store {
+    this.props.designTokens = tokens;
     return this;
   }
 

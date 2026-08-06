@@ -17,9 +17,14 @@ function makePage() {
 function mockPageRepo(page: Page | null = null): PageRepository {
   return {
     findByStoreId: vi.fn().mockResolvedValue(page),
-    findByStoreIdWithTokens: vi.fn().mockResolvedValue(page ? { page, designTokens: null } : null),
+    findByStoreIdAndSlug: vi.fn().mockResolvedValue(page),
+    listByStoreId: vi.fn().mockResolvedValue(page ? [{ id: page.id, slug: page.slug, title: page.title }] : []),
+    countByStoreId: vi.fn().mockResolvedValue(page ? 1 : 0),
+    getDesignTokens: vi.fn().mockResolvedValue(null),
+    saveDesignTokens: vi.fn().mockResolvedValue(undefined),
     save: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
+    deleteByStoreId: vi.fn().mockResolvedValue(undefined),
   };
 }
 

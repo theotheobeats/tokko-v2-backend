@@ -5,25 +5,29 @@ import { AddSection } from "../../../src/application/page/add-section";
 import { RemoveSection } from "../../../src/application/page/remove-section";
 import { ReorderSections } from "../../../src/application/page/reorder-sections";
 import type { PageRepository } from "../../../src/infrastructure/repos/d1-page-repo";
-import { Page } from "../../../src/domain/store/page";
+import { Page, HOME_SLUG } from "../../../src/domain/store/page";
 import { Section, SectionType } from "../../../src/domain/store/section";
 import { createEntityId } from "../../../src/domain/shared/types";
 
 function mockPageRepo(overrides?: Partial<PageRepository>): PageRepository {
   const base: PageRepository = {
     findByStoreId: vi.fn().mockResolvedValue(null),
-    findByStoreIdWithTokens: vi.fn().mockResolvedValue(null),
+    findByStoreIdAndSlug: vi.fn().mockResolvedValue(null),
+    listByStoreId: vi.fn().mockResolvedValue([]),
+    countByStoreId: vi.fn().mockResolvedValue(0),
+    getDesignTokens: vi.fn().mockResolvedValue(null),
+    saveDesignTokens: vi.fn().mockResolvedValue(undefined),
     save: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
+    deleteByStoreId: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 
-  // If a test overrides findByStoreId but not findByStoreIdWithTokens,
-  // derive the tokens-aware variant from it (designTokens = null).
-  if (overrides?.findByStoreId && !overrides?.findByStoreIdWithTokens) {
-    base.findByStoreIdWithTokens = vi.fn(async (...args: any[]) => {
-      const page = await (base.findByStoreId as any)(...args);
-      return page ? { page, designTokens: null } : null;
+  // Derive findByStoreIdAndSlug from a findByStoreId override (home page only).
+  if (overrides?.findByStoreId && !overrides?.findByStoreIdAndSlug) {
+    base.findByStoreIdAndSlug = vi.fn(async (_storeId: any, slug: string) => {
+      const page = await (base.findByStoreId as any)(_storeId);
+      return page && slug === HOME_SLUG ? page : null;
     });
   }
 
@@ -37,24 +41,30 @@ function s(type: SectionType, label: string, order: number = 0): Section {
 }
 
 // ---------------------------------------------------------------------------
-// GetPage
-// ---------------------------------------------------------------------------
 describe("GetPage use case", () => {
-  it("should return page with sections", async () => {
+  it("should return the page with sections + page list", async () => {
     const page = Page.create(storeId, [s(SectionType.Hero, "H", 0), s(SectionType.About, "A", 1)]);
-    const repo = mockPageRepo({ findByStoreId: vi.fn().mockResolvedValue(page) });
+    const repo = mockPageRepo({
+      findByStoreId: vi.fn().mockResolvedValue(page),
+      listByStoreId: vi.fn().mockResolvedValue([{ id: page.id, slug: page.slug, title: null }]),
+    });
     const useCase = new GetPage(repo);
     const result = await useCase.execute({ storeId });
+
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value!.sections).toHaveLength(2);
+    if (result.ok) {
+      expect(result.value.page!.sections).toHaveLength(2);
+      expect(result.value.pages).toHaveLength(1);
+      expect(result.value.pages[0].slug).toBe("beranda");
+    }
   });
 
-  it("should return null when page not found", async () => {
+  it("should return null page when not found", async () => {
     const repo = mockPageRepo();
     const useCase = new GetPage(repo);
     const result = await useCase.execute({ storeId });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toBeNull();
+    if (result.ok) expect(result.value.page).toBeNull();
   });
 
   it("should serialize page with structured sections and theme", async () => {
@@ -68,19 +78,19 @@ describe("GetPage use case", () => {
     ]);
     const theme = { accent: "#e07b39", bg: "#f6f5f4" };
     const repo = mockPageRepo({
-      findByStoreIdWithTokens: vi.fn().mockResolvedValue({ page, designTokens: theme }),
+      findByStoreId: vi.fn().mockResolvedValue(page),
+      getDesignTokens: vi.fn().mockResolvedValue(theme),
     });
     const useCase = new GetPage(repo);
     const result = await useCase.execute({ storeId });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const section = result.value!.sections[0] as any;
-      // Component-based: no html — the frontend renders type+variant+content
+      const section = result.value.page!.sections[0] as any;
       expect(section.html).toBeUndefined();
       expect(section.variant).toBe("split");
       expect(section.content.title).toBe("Hello");
-      expect(result.value!.theme).toEqual(theme);
+      expect(result.value.page!.theme).toEqual(theme);
     }
   });
 });
@@ -109,14 +119,14 @@ describe("UpdateSection use case", () => {
   it("should return error when page not found", async () => {
     const emptyRepo = mockPageRepo();
     const useCase = new UpdateSection(emptyRepo);
-    const result = await useCase.execute({ storeId, sectionId: createEntityId(), slots: { x: "y" } });
+    const result = await useCase.execute({ storeId, sectionId: createEntityId(), content: { title: "x" } });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("PAGE_NOT_FOUND");
   });
 
   it("should return error when section not found", async () => {
     const useCase = new UpdateSection(repo);
-    const result = await useCase.execute({ storeId, sectionId: createEntityId(), slots: { x: "y" } });
+    const result = await useCase.execute({ storeId, sectionId: createEntityId(), content: { title: "x" } });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("SECTION_NOT_FOUND");
   });
@@ -131,8 +141,11 @@ describe("AddSection use case", () => {
     const repo = mockPageRepo({ findByStoreId: vi.fn().mockResolvedValue(page) });
     const useCase = new AddSection(repo);
     const result = await useCase.execute({
-      storeId, type: SectionType.Faq,
-      template: "<div>{{q}}</div>", slots: { q: "Question?" }, sortOrder: 2,
+      storeId,
+      type: SectionType.Faq,
+      variant: "default",
+      content: { question: "Question?" },
+      sortOrder: 2,
     });
     expect(result.ok).toBe(true);
     expect(repo.save).toHaveBeenCalledOnce();
@@ -141,7 +154,7 @@ describe("AddSection use case", () => {
   it("should return error when page not found", async () => {
     const repo = mockPageRepo();
     const useCase = new AddSection(repo);
-    const result = await useCase.execute({ storeId, type: SectionType.Hero, template: "<div>{{x}}</div>", slots: { x: "y" } });
+    const result = await useCase.execute({ storeId, type: SectionType.Hero, variant: "default", content: {} });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("PAGE_NOT_FOUND");
   });

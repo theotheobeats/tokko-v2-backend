@@ -146,6 +146,7 @@ export class D1StoreRepository implements StoreRepository {
       suspendedAt: row.suspendedAt,
       suspendedReason: row.suspendedReason,
       createdAt: row.createdAt,
+      designTokens: row.designTokens ? (JSON.parse(row.designTokens) as Record<string, string>) : null,
     });
   }
 
@@ -164,6 +165,7 @@ export class D1StoreRepository implements StoreRepository {
       suspendedAt: props.suspendedAt,
       suspendedReason: props.suspendedReason,
       createdAt: props.createdAt,
+      designTokens: props.designTokens ? JSON.stringify(props.designTokens) : null,
     };
   }
 }

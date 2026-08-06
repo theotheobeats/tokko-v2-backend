@@ -52,6 +52,7 @@ export class GetAdminStore {
         owner: { id: string; name: string; email: string; banned: boolean } | null;
         products: { id: string; name: string; price: number; isAvailable: boolean; type: string }[];
         page: { sections: unknown[]; theme: Record<string, string> | null } | null;
+        pages: { id: string; slug: string; title: string | null }[];
         orders: { all: number; pending: number; contacted: number; completed: number };
       },
       StoreNotFoundError
@@ -60,10 +61,11 @@ export class GetAdminStore {
     const store = await this.storeRepo.findById(input.storeId);
     if (!store) return err(new StoreNotFoundError());
 
-    const [owner, products, pageData, orderCounts] = await Promise.all([
+    const [owner, products, homePage, pages, orderCounts] = await Promise.all([
       this.userRepo.findById(store.ownerId),
       this.productRepo.findByStoreId(store.id),
-      this.pageRepo.findByStoreIdWithTokens(store.id),
+      this.pageRepo.findByStoreId(store.id),
+      this.pageRepo.listByStoreId(store.id),
       this.orderRepo.countByStoreId(store.id),
     ]);
 
@@ -77,7 +79,8 @@ export class GetAdminStore {
         isAvailable: p.isAvailable,
         type: p.type,
       })),
-      page: pageData ? serializePage(pageData.page, pageData.designTokens) : null,
+      page: homePage ? serializePage(homePage, store.designTokens) : null,
+      pages: pages.map((p) => ({ id: p.id, slug: p.slug, title: p.title })),
       orders: orderCounts,
     });
   }

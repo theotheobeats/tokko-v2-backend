@@ -182,11 +182,19 @@ storesRouter.get("/by-subdomain", async (c) => {
     return c.json({ error: { code: "STORE_SUSPENDED", message: "Toko sedang ditinjau." } }, 404);
   }
 
-  // Get products and page
+  // Get the requested page (default home) + the page list for the navbar.
+  const pageSlug = c.req.query("page") ?? "beranda";
   const productRepo = new D1ProductRepository(db);
   const pageRepo = new D1PageRepository(db);
   const products = await productRepo.findByStoreId(store.id);
-  const pageData = await pageRepo.findByStoreIdWithTokens(store.id);
+  const [page, pages] = await Promise.all([
+    pageRepo.findByStoreIdAndSlug(store.id, pageSlug),
+    pageRepo.listByStoreId(store.id),
+  ]);
+
+  if (!page) {
+    return c.json({ error: { code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan." } }, 404);
+  }
 
   return c.json({
     store: {
@@ -200,9 +208,7 @@ storesRouter.get("/by-subdomain", async (c) => {
       status: store.status,
       heroImageUrl: store.heroImageUrl,
     },
-    sections: pageData
-      ? serializePage(pageData.page, pageData.designTokens).sections
-      : [],
+    sections: serializePage(page, store.designTokens).sections,
     products: products.map((p) => ({
       id: p.id,
       storeId: p.storeId,
@@ -212,7 +218,9 @@ storesRouter.get("/by-subdomain", async (c) => {
       imageUrl: p.imageUrl,
       isAvailable: p.isAvailable,
     })),
-    theme: pageData?.designTokens ?? undefined,
+    theme: store.designTokens ?? undefined,
+    pages: pages.map((p) => ({ slug: p.slug, title: p.title })),
+    pageSlug: page.slug,
   });
 });
 

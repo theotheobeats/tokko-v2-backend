@@ -132,10 +132,11 @@ export class GenerateStore {
     );
     const page = Page.create(store.id, sections);
 
-    // 6. Persist
+    // 6. Persist (theme lives on the store — site-wide)
+    store.setDesignTokens(aiResult.designTokens ?? null);
     await this.storeRepo.save(store);
     await Promise.all(products.map((p) => this.productRepo.save(p)));
-    await this.pageRepo.save(page, aiResult.designTokens);
+    await this.pageRepo.save(page);
 
     // 7. Serialize the page (structured sections + theme)
     return ok({

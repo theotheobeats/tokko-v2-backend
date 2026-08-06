@@ -17,6 +17,8 @@ export type SerializedSection = SectionProps;
 export interface SerializedPage {
   id: EntityId;
   storeId: EntityId;
+  slug: string;
+  title: string | null;
   sections: SerializedSection[];
   theme: Record<string, string> | null;
 }
@@ -29,6 +31,8 @@ export function serializePage(
   return {
     id: page.id,
     storeId: page.storeId,
+    slug: page.slug,
+    title: page.title,
     sections: page.toJSON().sections,
     theme: theme ?? null,
   };

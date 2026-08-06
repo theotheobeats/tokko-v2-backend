@@ -6,6 +6,7 @@ import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import { Section, type SectionType } from "../../domain/store/section";
+import { HOME_SLUG } from "../../domain/store/page";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import {
   serializePage,
@@ -15,6 +16,7 @@ import {
 
 export interface AddSectionInput {
   storeId: EntityId;
+  slug?: string;
   type: SectionType;
   variant: string;
   content: Record<string, unknown>;
@@ -35,11 +37,11 @@ export class AddSection {
   constructor(private readonly pageRepo: PageRepository) {}
 
   async execute(input: AddSectionInput): Promise<Result<AddSectionOutput, AddSectionError>> {
-    const result = await this.pageRepo.findByStoreIdWithTokens(input.storeId);
-    if (!result) {
+    const page = await this.pageRepo.findByStoreIdAndSlug(input.storeId, input.slug ?? HOME_SLUG);
+    if (!page) {
       return err({ code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan." });
     }
-    const { page, designTokens } = result;
+    const designTokens = await this.pageRepo.getDesignTokens(input.storeId);
 
     const section = Section.create({
       type: input.type,

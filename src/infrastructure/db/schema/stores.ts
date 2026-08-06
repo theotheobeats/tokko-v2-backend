@@ -20,6 +20,8 @@ export const stores = sqliteTable("stores", {
   heroImageUrl: text("hero_image_url"),
   suspendedAt: text("suspended_at"),
   suspendedReason: text("suspended_reason"),
+  /** Site-wide visual theme (design tokens), shared by all pages. */
+  designTokens: text("design_tokens"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
