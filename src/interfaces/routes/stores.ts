@@ -177,6 +177,11 @@ storesRouter.get("/by-subdomain", async (c) => {
     return c.json({ error: { code: "STORE_NOT_PUBLISHED", message: "Toko belum dipublikasikan." } }, 404);
   }
 
+  // Suspended by moderation → hidden from the public storefront.
+  if (store.isSuspended) {
+    return c.json({ error: { code: "STORE_SUSPENDED", message: "Toko sedang ditinjau." } }, 404);
+  }
+
   // Get products and page
   const productRepo = new D1ProductRepository(db);
   const pageRepo = new D1PageRepository(db);

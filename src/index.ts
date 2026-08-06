@@ -24,8 +24,10 @@ app.use("*", (c, next) => {
   ];
   const exactOrigins = [
     "http://localhost:3000",          // Next.js dev server
+    "http://localhost:3001",          // Admin dev server
     "https://7okko.com",              // Production root domain
     "https://www.7okko.com",
+    "https://admin.7okko.com",        // Admin panel
     ...extraOrigins,                  // Deployed frontend origin(s)
   ];
   // Store subdomains: https://<store>.7okko.com
@@ -96,12 +98,17 @@ import { ordersRouter } from "./interfaces/routes/orders";
 import { pagesRouter } from "./interfaces/routes/pages";
 import { uploadsRouter } from "./interfaces/routes/uploads";
 import { regionsRouter } from "./interfaces/routes/regions";
+import { ticketsRouter, reportsRouter } from "./interfaces/routes/support";
+import { adminRouter } from "./interfaces/routes/admin";
 app.route("/api/stores", storesRouter);
 app.route("/api/stores", productsRouter);
 app.route("/api/stores", ordersRouter);
 app.route("/api/stores", pagesRouter);
 app.route("/api", uploadsRouter); // /api/images/:key + /api/stores/:id/upload
 app.route("/api/regions", regionsRouter); // public Indonesian region cascade
+app.route("/api", ticketsRouter); // /api/tickets/* (user-facing support)
+app.route("/api", reportsRouter); // /api/stores/:storeId/report (public moderation)
+app.route("/api/admin", adminRouter); // admin panel (requireAdmin guard)
 
 // ---------------------------------------------------------------------------
 // Export

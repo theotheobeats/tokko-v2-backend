@@ -22,6 +22,9 @@ export interface StoreProps {
   status: StoreStatus;
   heroImageUrl: string | null;
   productCount: number;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
+  createdAt: string;
 }
 
 export class Store {
@@ -51,6 +54,9 @@ export class Store {
       status: StoreStatus.Draft,
       heroImageUrl: null,
       productCount: 0,
+      suspendedAt: null,
+      suspendedReason: null,
+      createdAt: new Date().toISOString(),
     });
   }
 
@@ -71,6 +77,9 @@ export class Store {
   get status() { return this.props.status; }
   get heroImageUrl() { return this.props.heroImageUrl; }
   get productCount() { return this.props.productCount; }
+  get suspendedAt() { return this.props.suspendedAt; }
+  get suspendedReason() { return this.props.suspendedReason; }
+  get createdAt() { return this.props.createdAt; }
 
   /** Publish the store — requires at least 1 product */
   publish(): Result<Store, StoreMustHaveProductsError> {
@@ -114,6 +123,31 @@ export class Store {
   /** Check if store is published */
   get isPublished(): boolean {
     return this.props.status === StoreStatus.Published;
+  }
+
+  /** Check if store is suspended (taken down by moderation). */
+  get isSuspended(): boolean {
+    return Boolean(this.props.suspendedAt);
+  }
+
+  /** Suspend the store — hides it from the public storefront. */
+  suspend(reason: string): Store {
+    if (this.props.suspendedAt) {
+      throw new Error("Store is already suspended");
+    }
+    this.props.suspendedAt = new Date().toISOString();
+    this.props.suspendedReason = reason.trim() || null;
+    return this;
+  }
+
+  /** Lift a suspension — the store becomes visible again. */
+  unsuspend(): Store {
+    if (!this.props.suspendedAt) {
+      throw new Error("Store is not suspended");
+    }
+    this.props.suspendedAt = null;
+    this.props.suspendedReason = null;
+    return this;
   }
 
   /** Snapshot for serialization */

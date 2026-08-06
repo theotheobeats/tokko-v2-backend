@@ -1,5 +1,8 @@
 export { user } from "./users";
 export { consents } from "./consents";
+export { adminLogs } from "./admin-logs";
+export { tickets, ticketMessages } from "./tickets";
+export { reports } from "./reports";
 export { session, account, verification } from "./auth";
 export { stores } from "./stores";
 export { products } from "./products";

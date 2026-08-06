@@ -2,10 +2,10 @@
  * D1 Store Repository — implements StoreRepository using Drizzle + D1.
  */
 
-import { eq } from "drizzle-orm";
-import type { StoreRepository } from "../../application/store/store-repo";
+import { eq, and, or, like, sql } from "drizzle-orm";
 import type { EntityId } from "../../domain/shared/types";
 import { Store, type StoreProps } from "../../domain/store/store";
+import type { StoreRepository, StoreListFilters } from "../../application/store/store-repo";
 import type { DbClient } from "../db/drizzle";
 import { stores } from "../db/schema";
 
@@ -74,6 +74,58 @@ export class D1StoreRepository implements StoreRepository {
     return result?.count ?? 0;
   }
 
+  /** Admin: list stores across all owners with filters + pagination. */
+  async listAll(filters: StoreListFilters = {}): Promise<{ stores: Store[]; total: number }> {
+    const { count } = await import("drizzle-orm");
+    const conditions = [];
+    if (filters.status) conditions.push(eq(stores.status, filters.status));
+    if (filters.suspended === true) conditions.push(sql`${stores.suspendedAt} IS NOT NULL`);
+    if (filters.suspended === false) conditions.push(sql`${stores.suspendedAt} IS NULL`);
+    if (filters.q?.trim()) {
+      const likeQ = `%${filters.q.trim()}%`;
+      conditions.push(or(like(stores.name, likeQ), like(stores.subdomain, likeQ))!);
+    }
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const totalRow = await this.db
+      .select({ count: count() })
+      .from(stores)
+      .where(where)
+      .get();
+
+    const rows = await this.db
+      .select()
+      .from(stores)
+      .where(where)
+      .orderBy(sql`${stores.createdAt} DESC`)
+      .limit(filters.limit ?? 50)
+      .offset(filters.offset ?? 0)
+      .all();
+
+    const list = rows.map((r) => this._toDomain(r));
+    // Attach product counts in parallel (admin tables show product counts).
+    await Promise.all(list.map((s) => this.countProducts(s.id).then((n) => s.setProductCount(n))));
+
+    return { stores: list, total: totalRow?.count ?? 0 };
+  }
+
+  /** Admin: aggregate counts for the dashboard. */
+  async countAll(): Promise<{ total: number; published: number; draft: number; suspended: number }> {
+    const { count } = await import("drizzle-orm");
+    const [totalRow, publishedRow, draftRow, suspendedRow] = await Promise.all([
+      this.db.select({ count: count() }).from(stores).get(),
+      this.db.select({ count: count() }).from(stores).where(eq(stores.status, "published")).get(),
+      this.db.select({ count: count() }).from(stores).where(eq(stores.status, "draft")).get(),
+      this.db.select({ count: count() }).from(stores).where(sql`${stores.suspendedAt} IS NOT NULL`).get(),
+    ]);
+    return {
+      total: totalRow?.count ?? 0,
+      published: publishedRow?.count ?? 0,
+      draft: draftRow?.count ?? 0,
+      suspended: suspendedRow?.count ?? 0,
+    };
+  }
+
   // -----------------------------------------------------------------------
   // Mapping helpers
   // -----------------------------------------------------------------------
@@ -91,6 +143,9 @@ export class D1StoreRepository implements StoreRepository {
       status: row.status as StoreProps["status"],
       heroImageUrl: row.heroImageUrl,
       productCount: 0, // populated separately via countProducts()
+      suspendedAt: row.suspendedAt,
+      suspendedReason: row.suspendedReason,
+      createdAt: row.createdAt,
     });
   }
 
@@ -106,6 +161,9 @@ export class D1StoreRepository implements StoreRepository {
       whatsappNumber: props.whatsappNumber,
       status: props.status,
       heroImageUrl: props.heroImageUrl,
+      suspendedAt: props.suspendedAt,
+      suspendedReason: props.suspendedReason,
+      createdAt: props.createdAt,
     };
   }
 }

@@ -28,6 +28,24 @@ function serializeStoreRow(row: typeof stores.$inferSelect) {
   };
 }
 
+/** Serialize the better-auth session user (admin plugin adds role + banned). */
+function serializeUser(u: {
+  id: string;
+  name: string;
+  email: string;
+  role?: string | null;
+  banned?: boolean | null;
+  image?: string | null;
+}) {
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role ?? "user",
+    banned: u.banned ?? false,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
@@ -96,11 +114,7 @@ authRouter.post("/register", zValidator("json", registerSchema), async (c) => {
     }
 
     return c.json({
-      user: {
-        id: session!.user.id,
-        name: session!.user.name,
-        email: session!.user.email,
-      },
+      user: serializeUser(session!.user),
     }, 201);
   } catch (error: any) {
     console.error("REGISTER ERROR:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
@@ -157,11 +171,7 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
       .get();
 
     return c.json({
-      user: {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-      },
+      user: serializeUser(session.user),
       store: storeRow ? serializeStoreRow(storeRow) : null,
     }, 200);
   } catch (error: any) {
@@ -214,11 +224,7 @@ authRouter.get("/me", async (c) => {
     .get();
 
   return c.json({
-    user: {
-      id: session.user.id,
-      name: session.user.name,
-      email: session.user.email,
-    },
+    user: serializeUser(session.user),
     store: storeRow ? serializeStoreRow(storeRow) : null,
   });
 });

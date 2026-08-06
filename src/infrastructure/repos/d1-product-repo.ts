@@ -13,6 +13,7 @@ export interface ProductRepository {
   findByStoreId(storeId: EntityId): Promise<Product[]>;
   save(product: Product): Promise<void>;
   delete(id: EntityId): Promise<void>;
+  deleteByStoreId(storeId: EntityId): Promise<void>;
   countByStoreId(storeId: EntityId): Promise<number>;
 }
 
@@ -52,6 +53,11 @@ export class D1ProductRepository implements ProductRepository {
 
   async delete(id: EntityId): Promise<void> {
     await this.db.delete(products).where(eq(products.id, id as string));
+  }
+
+  /** Admin: remove every product of a store (store deletion cascade). */
+  async deleteByStoreId(storeId: EntityId): Promise<void> {
+    await this.db.delete(products).where(eq(products.storeId, storeId as string));
   }
 
   async countByStoreId(storeId: EntityId): Promise<number> {

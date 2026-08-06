@@ -14,6 +14,8 @@ export interface PageRepository {
   findByStoreIdWithTokens(storeId: EntityId): Promise<{ page: Page; designTokens: Record<string, string> | null } | null>;
   save(page: Page, designTokens?: Record<string, string>): Promise<void>;
   delete(id: EntityId): Promise<void>;
+  /** Admin: delete the store's page + its sections (store deletion cascade). */
+  deleteByStoreId(storeId: EntityId): Promise<void>;
 }
 
 export class D1PageRepository implements PageRepository {
@@ -99,5 +101,17 @@ export class D1PageRepository implements PageRepository {
     // Delete sections first, then the page
     await this.db.delete(sections).where(eq(sections.pageId, id as string));
     await this.db.delete(pages).where(eq(pages.id, id as string));
+  }
+
+  /** Admin: delete the store's page + sections (store deletion cascade). */
+  async deleteByStoreId(storeId: EntityId): Promise<void> {
+    const pageRow = await this.db
+      .select({ id: pages.id })
+      .from(pages)
+      .where(eq(pages.storeId, storeId as string))
+      .get();
+    if (pageRow) {
+      await this.delete(pageRow.id as EntityId);
+    }
   }
 }

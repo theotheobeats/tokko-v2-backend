@@ -18,6 +18,8 @@ export const stores = sqliteTable("stores", {
   whatsappNumber: text("whatsapp_number").notNull(),
   status: text("status").notNull().default("draft"),
   heroImageUrl: text("hero_image_url"),
+  suspendedAt: text("suspended_at"),
+  suspendedReason: text("suspended_reason"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

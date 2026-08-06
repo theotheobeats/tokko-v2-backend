@@ -718,6 +718,17 @@ Each section type has a specific `data` shape:
 | `FILE_TOO_LARGE` | 400 | Image > 2MB |
 | `INVALID_FILE_TYPE` | 400 | Not JPG/PNG/WebP |
 | `AI_GENERATION_FAILED` | 422 | AI call failed (retry allowed) |
+| `BANNED` | 403 | Account is banned |
+| `SELF_ACTION` | 400 | Admin tried to ban/demote self |
+| `STORE_SUSPENDED` | 404 | Store taken down by moderation |
+| `SELF_REPORT` | 400 | Cannot report own store |
+| `TICKET_NOT_FOUND` | 404 | Ticket doesn't exist |
+| `TICKET_FORBIDDEN` | 403 | Not the ticket owner |
+| `TICKET_INVALID` | 400 | Invalid ticket transition / closed ticket |
+| `REPORT_NOT_FOUND` | 404 | Report doesn't exist |
+| `REPORT_INVALID` | 400 | Invalid report transition |
+| `USER_NOT_FOUND` | 404 | User doesn't exist |
+| `ALREADY_ONBOARDED` | 409 | User already has a store |
 
 ---
 
@@ -754,7 +765,104 @@ export class ApiError extends Error {
 
 ---
 
-## 12. Build Priority (what to wire first)
+## 12. Admin & Support Endpoints
+
+**Auth:** every `/api/admin/*` route requires an admin session (`role === "admin"`, not banned). Non-admin → `401 UNAUTHORIZED` / `403 FORBIDDEN` / `403 BANNED`. Every admin mutation writes an `admin_logs` row (audit trail).
+
+### User-facing support
+
+#### `POST /api/tickets` (auth)
+Open a support ticket.
+
+**Request:**
+```json
+{ "subject": "Tidak bisa publish", "category": "technical", "priority": "normal", "storeId": "<storeId?>", "message": "Muncul error saat publish" }
+```
+**Response `201`:** `{ ticket }` — ticket with `ticketCode` (`SUP-XXXXX`), status `open`, 1 message.
+
+#### `GET /api/tickets/mine?status=&limit=&offset=` (auth)
+List the caller's tickets, newest updated first. Returns `{ tickets, total }`.
+
+#### `GET /api/tickets/:id` (owner or admin)
+Full thread. Others → `403 TICKET_FORBIDDEN`.
+
+#### `POST /api/tickets/:id/reply` (owner or admin) — `{ "body": "..." }`
+Appends a message (`authorRole` = `admin` for admins). Closed tickets → `400 TICKET_INVALID`.
+
+#### `PATCH /api/tickets/:id/status` (owner or admin) — `{ "status": "open|in_progress|resolved|closed" }`
+Validated transitions: `open→in_progress|closed`, `in_progress→resolved|closed`, `resolved→closed|open`, `closed→open`.
+
+#### `POST /api/stores/:storeId/report` (public, auth optional)
+Content-moderation report. Self-reports rejected (`400 SELF_REPORT`).
+
+**Request:**
+```json
+{ "targetType": "store|product|section|user", "targetId": "...", "reason": "spam|inappropriate|fraud|copyright|other", "details": "opsional" }
+```
+**Response `201`:** `{ report }` — status `open`.
+
+### Admin endpoints
+
+#### `GET /api/admin/stats`
+Dashboard aggregates:
+```json
+{
+  "stats": {
+    "users": { "total": 10, "admins": 1, "banned": 2, "new7d": 3, "new30d": 5 },
+    "stores": { "total": 5, "published": 4, "draft": 1, "suspended": 1 },
+    "orders": { "total": 20, "pending": 5, "contacted": 5, "completed": 10, "gmv": 2500000, "orders7d": 7, "gmv7d": 700000, "orders30d": 12, "gmv30d": 1300000 },
+    "tickets": { "open": 3, "in_progress": 1, "resolved": 2, "closed": 9 },
+    "reports": { "open": 4, "reviewing": 1, "resolved": 0, "dismissed": 2 }
+  }
+}
+```
+
+#### Users
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/admin/users?q=&role=&banned=&limit=&offset=` | `{ users, total }`; `q` searches name/email |
+| GET | `/api/admin/users/:id` | `{ user, store, orders }` — store + order counts |
+| PATCH | `/api/admin/users/:id` | `{ action: "ban"\|"unban"\|"setRole", reason?, role? }`; self ban/demote → `400 SELF_ACTION`; bans via better-auth (sessions revoked) |
+
+#### Stores (moderation)
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/admin/stores?status=&suspended=&q=&limit=&offset=` | `{ stores, total }`; `q` searches name/subdomain |
+| GET | `/api/admin/stores/:id` | `{ store, owner, products, page, orders }` full detail |
+| POST | `/api/admin/stores/:id/suspend` | `{ reason }` — hides from public storefront (`by-subdomain` → `404 STORE_SUSPENDED`) |
+| POST | `/api/admin/stores/:id/unsuspend` | restores visibility |
+| DELETE | `/api/admin/stores/:id` | cascades products + page/sections + orders + store |
+
+#### Orders
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/admin/orders?status=&storeId=&limit=&offset=` | `{ orders, total }` — each order carries `storeName` |
+
+#### Tickets (admin inbox)
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/admin/tickets?status=&q=&limit=&offset=` | `{ tickets, total }` — enriched with `userEmail` |
+| GET | `/api/admin/tickets/:id` | `{ ticket, userEmail, userName }` |
+| POST | `/api/admin/tickets/:id/reply` | `{ body }` — authorRole `admin` |
+| PATCH | `/api/admin/tickets/:id` | `{ status?, priority? }` |
+
+#### Reports (moderation queue)
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/admin/reports?status=&limit=&offset=` | `{ reports, total }` — enriched with `storeName`/`storeSubdomain` |
+| GET | `/api/admin/reports/:id` | `{ report }` |
+| POST | `/api/admin/reports/:id/review` | open → reviewing |
+| POST | `/api/admin/reports/:id/resolve` | `{ resolution: "suspended"\|"warned"\|"dismissed", suspendReason? }` — `suspended` also suspends the store |
+
+#### Audit
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/admin/consents?userId=` | UU PDP consent log for a user |
+| GET | `/api/admin/logs?adminId=&action=&targetType=&limit=&offset=` | admin action audit trail |
+
+---
+
+## 13. Build Priority (what to wire first)
 
 | Phase | Endpoints | Unlocks |
 |-------|-----------|---------|

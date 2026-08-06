@@ -16,6 +16,16 @@ export interface OrderRepository {
   findByStoreId(storeId: EntityId, filters?: { status?: OrderStatus; limit?: number; offset?: number }): Promise<Order[]>;
   countByStoreId(storeId: EntityId, filters?: { status?: OrderStatus }): Promise<{ all: number; pending: number; contacted: number; completed: number }>;
   save(order: Order): Promise<void>;
+  /** Admin: list orders across all stores. */
+  listAll(filters?: { status?: OrderStatus; storeId?: EntityId; limit?: number; offset?: number }): Promise<Order[]>;
+  /** Admin: per-status counts across all stores. */
+  countAll(): Promise<Record<string, number>>;
+  /** Admin: total GMV (sum of total_amount). */
+  sumTotalAll(): Promise<number>;
+  /** Admin: orders + GMV created within the last N days. */
+  since(daysAgo: number): Promise<{ orders: number; gmv: number }>;
+  /** Admin: remove every order of a store (store deletion cascade). */
+  deleteByStoreId(storeId: EntityId): Promise<void>;
 }
 
 export class D1OrderRepository implements OrderRepository {
@@ -79,6 +89,68 @@ export class D1OrderRepository implements OrderRepository {
     } else {
       await this.db.insert(orders).values(data);
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // Admin queries (all stores)
+  // -----------------------------------------------------------------------
+
+  async listAll(filters: { status?: OrderStatus; storeId?: EntityId; limit?: number; offset?: number } = {}): Promise<Order[]> {
+    const conditions = [];
+    if (filters.status) conditions.push(eq(orders.status, filters.status));
+    if (filters.storeId) conditions.push(eq(orders.storeId, filters.storeId as string));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const rows = await this.db
+      .select()
+      .from(orders)
+      .where(where)
+      .orderBy(sql`${orders.createdAt} DESC`)
+      .limit(filters.limit ?? 50)
+      .offset(filters.offset ?? 0)
+      .all();
+
+    return rows.map((r) => this._toDomain(r));
+  }
+
+  async countAll(): Promise<Record<string, number>> {
+    const { count } = await import("drizzle-orm");
+    const rows = await this.db
+      .select({ status: orders.status, count: count() })
+      .from(orders)
+      .groupBy(orders.status)
+      .all();
+    const out: Record<string, number> = { pending: 0, contacted: 0, completed: 0, all: 0 };
+    for (const r of rows) {
+      out[r.status] = r.count;
+      out.all += r.count;
+    }
+    return out;
+  }
+
+  async sumTotalAll(): Promise<number> {
+    const { sum } = await import("drizzle-orm");
+    const row = await this.db
+      .select({ total: sum(orders.totalAmount) })
+      .from(orders)
+      .get();
+    return Number(row?.total ?? 0);
+  }
+
+  async since(daysAgo: number): Promise<{ orders: number; gmv: number }> {
+    const { count, sum } = await import("drizzle-orm");
+    const cutoff = sql`datetime('now', '-${sql.raw(String(daysAgo))} days')`;
+    const row = await this.db
+      .select({ orders: count(), gmv: sum(orders.totalAmount) })
+      .from(orders)
+      .where(sql`${orders.createdAt} >= ${cutoff}`)
+      .get();
+    return { orders: row?.orders ?? 0, gmv: Number(row?.gmv ?? 0) };
+  }
+
+  /** Admin: remove every order of a store (store deletion cascade). */
+  async deleteByStoreId(storeId: EntityId): Promise<void> {
+    await this.db.delete(orders).where(eq(orders.storeId, storeId as string));
   }
 
   private _toDomain(row: typeof orders.$inferSelect): Order {

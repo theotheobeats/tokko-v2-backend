@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { admin } from "better-auth/plugins";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../infrastructure/db/schema";
@@ -44,6 +45,16 @@ export function createAuth(env: Env) {
     emailAndPassword: {
       enabled: true,
     },
+    // Admin plugin — adds `role` (user|admin) + ban state to users and
+    // exposes built-in admin endpoints under /api/auth/admin/* (protected by
+    // the plugin itself). Our own /api/admin/* routes do the heavy lifting;
+    // the plugin provides the role/ban data model + ban enforcement on login.
+    plugins: [
+      admin({
+        defaultRole: "user",
+        adminRoles: ["admin"],
+      }),
+    ],
     ...(googleConfigured
       ? {
           socialProviders: {
@@ -87,8 +98,10 @@ export function createAuth(env: Env) {
       env.BETTER_AUTH_URL,
       frontendUrl,
       "http://localhost:3000",
+      "http://localhost:3001",
       "https://7okko.com",
       "https://www.7okko.com",
+      "https://admin.7okko.com",
       "https://*.7okko.com", // store subdomains (annas-bakery.7okko.com)
     ],
     advanced: crossSite
