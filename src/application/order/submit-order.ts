@@ -10,17 +10,24 @@ import type { Product } from "../../domain/store/product";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import type { ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 
+export interface SubmitOrderItemInput {
+  productId: EntityId;
+  /** Optional chosen variant (size/color). Price snapshots the variant. */
+  variantId?: EntityId | null;
+  quantity: number;
+}
+
 export interface SubmitOrderInput {
   storeId: EntityId;
   customerName: string;
   customerPhone: string;
-  items: { productId: EntityId; quantity: number }[];
+  items: SubmitOrderItemInput[];
   notes?: string;
   shippingAddress?: string;
 }
 
 export interface SubmitOrderError {
-  code: "VALIDATION" | "PRODUCT_UNAVAILABLE";
+  code: "VALIDATION" | "PRODUCT_UNAVAILABLE" | "STOCK_INSUFFICIENT" | "VARIANT_NOT_FOUND";
   message: string;
   field?: string;
 }
@@ -44,10 +51,26 @@ export class SubmitOrder {
     }
 
     // Fetch products from DB (never trust client prices)
-    const orderItems: { productId: EntityId; productName: string; quantity: number; unitPrice: number; productType: Product["type"] }[] = [];
+    const productIds = input.items.map((i) => i.productId);
+    const products = await Promise.all(productIds.map((id) => this.productRepo.findById(id)));
+    const byId = new Map(products.filter((p): p is Product => !!p).map((p) => [p.id as string, p]));
+    // All variants for the ordered products — used to resolve variant prices.
+    const variants = await this.productRepo.findVariantsByProductIds(productIds);
+    const variantById = new Map(variants.map((v) => [v.id as string, v]));
+
+    const orderItems: {
+      productId: EntityId;
+      productName: string;
+      quantity: number;
+      unitPrice: number;
+      productType: Product["type"];
+      variantName?: string | null;
+    }[] = [];
+    // Products whose stock was reserved — persisted after the order is saved.
+    const reserved: Product[] = [];
 
     for (const item of input.items) {
-      const product = await this.productRepo.findById(item.productId);
+      const product = byId.get(item.productId as string);
       if (!product || !product.isAvailable) {
         return err({ code: "PRODUCT_UNAVAILABLE", message: `Produk tidak tersedia.`, field: "items" });
       }
@@ -55,12 +78,34 @@ export class SubmitOrder {
         return err({ code: "VALIDATION", message: "Jumlah minimal 1.", field: "items" });
       }
 
+      // Stock gate — never oversell tracked products.
+      if (product.stock !== null && product.stock < item.quantity) {
+        return err({ code: "STOCK_INSUFFICIENT", message: `Stok ${product.name} tidak mencukupi (sisa ${product.stock}).`, field: "items" });
+      }
+      if (product.stock !== null) {
+        product.reserveStock(item.quantity);
+        reserved.push(product);
+      }
+
+      // Resolve the chosen variant (if any) — price snapshots the variant.
+      let unitPrice = product.effectivePrice;
+      let variantName: string | null = null;
+      if (item.variantId) {
+        const variant = variantById.get(item.variantId as string);
+        if (!variant || variant.productId !== product.id) {
+          return err({ code: "VARIANT_NOT_FOUND", message: "Varian produk tidak ditemukan.", field: "items" });
+        }
+        unitPrice = variant.price ?? product.effectivePrice;
+        variantName = variant.name;
+      }
+
       orderItems.push({
         productId: product.id,
         productName: product.name,
         quantity: item.quantity,
-        unitPrice: product.price, // Price from DB — never trust client
+        unitPrice,
         productType: product.type,
+        variantName,
       });
     }
 
@@ -81,6 +126,12 @@ export class SubmitOrder {
     });
 
     await this.orderRepo.save(order);
+
+    // Persist reserved stock (only for tracked products).
+    for (const p of reserved) {
+      await this.productRepo.save(p);
+    }
+
     return ok(order.toJSON());
   }
 }

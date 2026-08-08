@@ -94,6 +94,16 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
   );
   const waDeepLink = `https://wa.me/${store.whatsappNumber.replace(/\D/g, "")}?text=${waMessage}`;
 
+  // Notify the store owner by email (best-effort, never blocks the response).
+  const { notifyStoreOwnerOfNewOrder } = await import("../../application/order/notify-order");
+  notifyStoreOwnerOfNewOrder({
+    db,
+    env: c.env as Env,
+    ownerId: store.ownerId as string,
+    storeName: store.name,
+    order: result.value,
+  }).catch(() => {});
+
   return c.json({
     order: result.value,
     waDeepLink,

@@ -23,6 +23,10 @@ function mockProductRepo(overrides?: Partial<ProductRepository>): ProductReposit
   return {
     findById: vi.fn().mockResolvedValue(null),
     findByStoreId: vi.fn().mockResolvedValue([]),
+    findByStoreSlug: vi.fn().mockResolvedValue(null),
+    findVariantsByProductIds: vi.fn().mockResolvedValue([]),
+    replaceVariants: vi.fn().mockResolvedValue(undefined),
+    deleteVariantsByProductId: vi.fn().mockResolvedValue(undefined),
     save: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
     countByStoreId: vi.fn().mockResolvedValue(0),

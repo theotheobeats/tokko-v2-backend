@@ -11,6 +11,7 @@ export interface OrderItemProps {
   quantity: number;
   unitPrice: number; // Rupiah
   productType: ProductTypeT; // snapshot of the product kind at order time
+  variantName?: string | null; // snapshot of the chosen variant (e.g. "Size M")
 }
 
 export class OrderItem {
@@ -21,7 +22,7 @@ export class OrderItem {
     if (params.unitPrice < 0) throw new Error("Unit price must be >= 0");
     if (!isValidProductType(params.productType)) throw new Error("Invalid product type");
 
-    return new OrderItem({ ...params });
+    return new OrderItem({ ...params, variantName: params.variantName ?? null });
   }
 
   get productId() { return this.props.productId; }
@@ -29,6 +30,7 @@ export class OrderItem {
   get quantity() { return this.props.quantity; }
   get unitPrice() { return this.props.unitPrice; }
   get productType() { return this.props.productType; }
+  get variantName() { return this.props.variantName ?? null; }
 
   /** Total for this line item */
   get subtotal(): number {

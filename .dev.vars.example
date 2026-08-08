@@ -1,0 +1,27 @@
+# Local dev environment for tokko-api (wrangler dev loads this file).
+# Copy to `.dev.vars` and fill in real values. NEVER commit .dev.vars.
+
+# Auth
+BETTER_AUTH_SECRET=super-secret-32+chars
+BETTER_AUTH_URL=http://localhost:8787
+NODE_ENV=development
+
+# LLM (product descriptions / AI store generation) — optional, mock used when absent
+LLM_API_KEY=
+LLM_MODEL=deepseek-chat
+
+# Google OAuth — optional; the Google button 404s until these are set.
+# Create at https://console.cloud.google.com → Credentials → OAuth client ID (Web app)
+# Redirect URIs must include:
+#   http://localhost:8787/api/auth/callback/google
+#   https://api.7okko.com/api/auth/callback/google
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Resend email (verification emails) — optional, skipped when absent
+RESEND_API_KEY=
+
+# Xendit payments — optional; payments fall back to WhatsApp flow when absent.
+# Webhook URL to register: https://api.7okko.com/api/webhooks/xendit
+XENDIT_SECRET_KEY=
+XENDIT_WEBHOOK_TOKEN=

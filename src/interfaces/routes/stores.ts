@@ -8,6 +8,8 @@ import { GenerateStore, AIGenerationFailedError } from "../../application/store/
 import { serializePage } from "../../application/page/render-section";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
 import { D1ProductRepository } from "../../infrastructure/repos/d1-product-repo";
+import { D1CategoryRepository } from "../../infrastructure/repos/d1-category-repo";
+import { ListProducts } from "../../application/product/list-products";
 import { D1PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import { SubdomainAlreadyTakenError, generateSubdomain } from "../../domain/store/rules";
 import { eq } from "drizzle-orm";
@@ -186,10 +188,13 @@ storesRouter.get("/by-subdomain", async (c) => {
   const pageSlug = c.req.query("page") ?? "beranda";
   const productRepo = new D1ProductRepository(db);
   const pageRepo = new D1PageRepository(db);
-  const products = await productRepo.findByStoreId(store.id);
-  const [page, pages] = await Promise.all([
+  const listProducts = new ListProducts(productRepo);
+  const productsResult = await listProducts.execute({ storeId: store.id });
+  const products = productsResult.ok ? productsResult.value : [];
+  const [page, pages, categories] = await Promise.all([
     pageRepo.findByStoreIdAndSlug(store.id, pageSlug),
     pageRepo.listByStoreId(store.id),
+    new D1CategoryRepository(db).findByStoreId(store.id),
   ]);
 
   if (!page) {
@@ -210,6 +215,7 @@ storesRouter.get("/by-subdomain", async (c) => {
     },
     sections: serializePage(page, store.designTokens).sections,
     products: products.map((p) => ({
+      ...p,
       id: p.id,
       storeId: p.storeId,
       name: p.name,
@@ -217,9 +223,11 @@ storesRouter.get("/by-subdomain", async (c) => {
       price: p.price,
       imageUrl: p.imageUrl,
       isAvailable: p.isAvailable,
+      type: p.type,
     })),
     theme: store.designTokens ?? undefined,
     pages: pages.map((p) => ({ slug: p.slug, title: p.title })),
+    categories: categories.map((c) => c.toJSON()),
     pageSlug: page.slug,
   });
 });

@@ -63,9 +63,35 @@ export function isValidPrice(price: number): boolean {
   return price >= 0 && Number.isInteger(price);
 }
 
+/** Validate a stock count (null = unlimited; must be a non-negative integer). */
+export function isValidStock(stock: number): boolean {
+  return Number.isInteger(stock) && stock >= 0;
+}
+
 /**
  * Validate that a product type is one of the supported kinds.
  */
 export function isValidProductType(value: unknown): boolean {
   return value === "product" || value === "service" || value === "booking";
+}
+
+/**
+ * Generate a URL-safe slug from a product name (mirrors the frontend
+ * slugify so dashboard and storefront agree).
+ */
+export function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .substring(0, 80);
+}
+
+/** Validate a slug is URL-safe (lowercase letters, digits, hyphens). */
+export function isValidSlug(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0) return false;
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }
