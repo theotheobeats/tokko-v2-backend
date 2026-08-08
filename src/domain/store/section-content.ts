@@ -237,6 +237,10 @@ export const SECTION_DEFINITIONS = {
     variants: ["default"] as const,
     content: ProductGridContent,
   },
+  "category-grid": {
+    variants: ["default"] as const,
+    content: z.record(z.string(), z.unknown()),
+  },
   testimonial: {
     variants: ["default"] as const,
     content: TestimonialContent,
@@ -272,6 +276,7 @@ export const GeneratedSectionSchema = z.object({
     "hero",
     "about",
     "product-grid",
+    "category-grid",
     "testimonial",
     "cta",
     "contact",

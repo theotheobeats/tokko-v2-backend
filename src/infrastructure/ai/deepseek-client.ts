@@ -317,6 +317,18 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
     throw new Error("AI response has no valid sections");
   }
 
+  // Force the fixed reference structure — hero / category strip / product-grid
+  // always use the editorial blocks regardless of what the model returned.
+  const FORCED_BLOCKS: Record<string, Record<string, unknown>> = {
+    hero: { blockId: "hero-slideshow", style: "editorial", slides: [] },
+    "product-grid": { blockId: "product-grid-carousel-row", eyebrow: "Koleksi", heading: "Product Bestseller", browseAllText: "Browse All", variantLabel: "Warna" },
+    footer: { blockId: "footer-storeku" },
+  };
+  for (const s of sections) {
+    const forced = FORCED_BLOCKS[s.type];
+    if (forced) s.content = { ...forced, ...s.content, blockId: forced.blockId };
+  }
+
   // Ensure the mandatory section types are always present (footer included).
   // The AI sometimes drops sections when the prompt is long — fill defaults
   // so the page is always complete and always ends with a footer.
@@ -324,11 +336,11 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
   // so we never fabricate numbers — the owner fills real data in the editor.
   const MANDATORY_TYPES: SectionKind[] = ["hero", "about", "product-grid", "contact", "footer"];
   const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
-    hero: { blockId: "hero-shadcn-centered", eyebrow: "Selamat Datang", title: "Produk Terbaik untuk Anda", subtitle: "Kualitas premium dengan harga terjangkau. Pesan sekarang!", ctaText: "Pesan Sekarang" },
+    hero: FORCED_BLOCKS.hero,
     about: { blockId: "about-shadcn-centered", eyebrow: "Tentang Kami", heading: "Kenapa Memilih Kami", body: "Kami berkomitmen memberikan produk dan layanan terbaik untuk kepuasan Anda." },
-    "product-grid": { blockId: "product-grid-shadcn-cards", eyebrow: "Koleksi Kami", heading: "Produk Andalan" },
+    "product-grid": FORCED_BLOCKS["product-grid"],
     contact: { blockId: "contact-shadcn-cards", eyebrow: "Kontak", heading: "Hubungi Kami", whatsapp: "", address: "Alamat toko", hours: "08.00 - 20.00" },
-    footer: { blockId: "footer-simple-centered", tagline: "Terima kasih sudah berbelanja!" },
+    footer: FORCED_BLOCKS.footer,
   };
   const existingTypes = new Set(sections.map((s) => s.type));
   for (const t of MANDATORY_TYPES) {
@@ -337,6 +349,7 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
       sections.push({ type: t, variant: def.variants[0], content: DEFAULT_CONTENT[t] });
     }
   }
+
 
   // Validate + sanitize products
   const sampleProducts = (data.sampleProducts as Array<Record<string, unknown>>)
@@ -357,10 +370,14 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
     ? data.theme
     : data.designTokens) as Record<string, unknown> | undefined;
 
-  const themeParsed = ThemeSchema.safeParse(themeSrc ?? {});
-  const theme = themeParsed.success
-    ? themeParsed.data
-    : FALLBACK_THEME;
+  // Theme is FIXED editorial-monochrome — the AI may only choose fontStyle.
+  // All color/layout tokens are forced so every generated store matches the
+  // marketplace reference look. navbarStyle is forced to the editorial navbar.
+  const fontParsed = ThemeSchema.shape.fontStyle.safeParse(themeSrc?.fontStyle);
+  const theme = {
+    ...FALLBACK_THEME,
+    fontStyle: fontParsed.success ? fontParsed.data : FALLBACK_THEME.fontStyle,
+  };
 
   // Flatten to string-keyed map (the rest of the system expects Record<string,string>).
   const designTokens: Record<string, string> = {};
@@ -371,20 +388,21 @@ function parseStoreResponse(raw: string): AIGeneratedPage {
   return { sections, sampleProducts, designTokens };
 }
 
+// Editorial-monochrome fallback — square corners, flat, ink-on-paper.
 const FALLBACK_THEME = ThemeSchema.parse({
-  accent: "#f97316",
-  bg: "#fdfcfa",
+  accent: "#1a1a1a",
+  bg: "#ffffff",
   cardBg: "#ffffff",
-  text: "#1c1917",
-  textSecondary: "#78716c",
+  text: "#111111",
+  textSecondary: "#737373",
   ctaText: "#ffffff",
-  borderRadius: "12px",
-  buttonRadius: "9999px",
+  borderRadius: "0px",
+  buttonRadius: "0px",
   fontStyle: "modern-sans",
   spacing: "comfortable",
-  elevation: "subtle-shadow",
-  decorDensity: "moderate",
-  layoutStyle: "startup",
+  elevation: "flat",
+  decorDensity: "minimal",
+  layoutStyle: "editorial",
 });
 
 // ---------------------------------------------------------------------------

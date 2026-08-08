@@ -14,11 +14,13 @@ const ABOUT_BLOCKS = ["about-shadcn-centered", "about-shadcn-split", "about-coac
 const TESTIMONIAL_BLOCKS = ["testimonial-shadcn-cards", "testimonial-shadcn-quote", "testimonial-big-center", "testimonial-avatar-row"];
 const FOOTER_BLOCKS = ["footer-simple-centered", "footer-split-contact", "footer-social-grid", "footer-minimal-bar"];
 
+// Mock-generation palettes — editorial-monochrome default plus a few muted,
+// desaturated accents (no candy brights; those read as template-y).
 const THEMES = [
-  { accent: "#f97316", bg: "#fdfcfa", cardBg: "#ffffff", text: "#1c1917", textSecondary: "#78716c" },
-  { accent: "#0ea5e9", bg: "#f8fafc", cardBg: "#ffffff", text: "#0f172a", textSecondary: "#64748b" },
-  { accent: "#16a34a", bg: "#f7fee7", cardBg: "#ffffff", text: "#14532d", textSecondary: "#4d7c0f" },
-  { accent: "#e11d48", bg: "#fff1f2", cardBg: "#ffffff", text: "#4c0519", textSecondary: "#9f1239" },
+  { accent: "#1a1a1a", bg: "#ffffff", cardBg: "#ffffff", text: "#111111", textSecondary: "#737373" },
+  { accent: "#44403c", bg: "#fafaf9", cardBg: "#ffffff", text: "#1c1917", textSecondary: "#78716c" },
+  { accent: "#3f3f46", bg: "#fafafa", cardBg: "#ffffff", text: "#18181b", textSecondary: "#71717a" },
+  { accent: "#292524", bg: "#f5f5f4", cardBg: "#ffffff", text: "#0c0a09", textSecondary: "#78716c" },
 ];
 
 export async function mockAIGenerate(input: {
@@ -37,13 +39,7 @@ export async function mockAIGenerate(input: {
       {
         type: "hero",
         variant: "default",
-        content: {
-          blockId: pick(HERO_BLOCKS),
-          eyebrow: "✦ " + input.productCategory,
-          title: `Selamat Datang di ${storeName}`,
-          subtitle: `${getTagline(input.businessType)}. Pesan sekarang via WhatsApp!`,
-          ctaText: "Pesan Sekarang",
-        },
+        content: { blockId: "hero-slideshow", style: "editorial", slides: [] },
       },
       {
         type: "about",
@@ -59,7 +55,7 @@ export async function mockAIGenerate(input: {
       {
         type: "product-grid",
         variant: "default",
-        content: { blockId: "product-grid-shadcn-cards", eyebrow: "✦ Koleksi", heading: "Produk Unggulan Kami" },
+        content: { blockId: "product-grid-carousel-row", eyebrow: "Koleksi", heading: "Product Bestseller", browseAllText: "Browse All", variantLabel: "Warna" },
       },
       {
         type: "testimonial",
@@ -112,7 +108,7 @@ export async function mockAIGenerate(input: {
       {
         type: "footer",
         variant: "default",
-        content: { blockId: pick(FOOTER_BLOCKS), tagline: "Terima kasih sudah berbelanja!" },
+        content: { blockId: "footer-storeku", heading: storeName, tagline: `${getTagline(input.businessType)}.`, copyright: `© ${new Date().getFullYear()} ${storeName}`, madeWithText: "Dibuat dengan 7okko", columns: [{ title: "Menu", links: [{ label: "Semua Produk", href: "/koleksi" }, { label: "Kontak", href: "#kontak" }] }], links: [{ label: "Koleksi", href: "/koleksi" }] },
       },
     ],
     sampleProducts: getSampleProducts(input.productCategory, input.businessType),
@@ -123,13 +119,14 @@ export async function mockAIGenerate(input: {
       text: theme.text,
       textSecondary: theme.textSecondary,
       ctaText: "#ffffff",
-      borderRadius: "12px",
-      buttonRadius: "9999px",
+      borderRadius: "0px",
+      buttonRadius: "0px",
       fontStyle: "modern-sans",
       spacing: "comfortable",
-      elevation: "subtle-shadow",
-      decorDensity: "moderate",
-      layoutStyle: "startup",
+      elevation: "flat",
+      decorDensity: "minimal",
+      layoutStyle: "editorial",
+      navbarStyle: "navbar-editorial",
     },
   };
 }

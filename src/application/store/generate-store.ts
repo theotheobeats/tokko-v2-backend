@@ -132,8 +132,11 @@ export class GenerateStore {
     );
     const page = Page.create(store.id, sections);
 
-    // 6. Persist (theme lives on the store — site-wide)
-    store.setDesignTokens(aiResult.designTokens ?? null);
+    // 6. Persist (theme lives on the store — site-wide). Force the editorial
+    // navbar — it's the platform default and the AI never emits it.
+    const designTokens = { ...(aiResult.designTokens ?? {}) };
+    if (!designTokens.navbarStyle) designTokens.navbarStyle = "navbar-editorial";
+    store.setDesignTokens(designTokens);
     await this.storeRepo.save(store);
     await Promise.all(products.map((p) => this.productRepo.save(p)));
     await this.pageRepo.save(page);
@@ -141,7 +144,7 @@ export class GenerateStore {
     // 7. Serialize the page (structured sections + theme)
     return ok({
       store: store.toJSON(),
-      page: serializePage(page, aiResult.designTokens ?? null),
+      page: serializePage(page, designTokens),
       products: products.map((p) => p.toJSON()),
     });
   }

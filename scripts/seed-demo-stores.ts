@@ -48,7 +48,11 @@ interface DemoStore {
   desc: string;
   whatsapp: string;
   accent: string;
+  /** Background tint (near-white paper for warm stores, pure white for fashion). */
+  bg?: string;
   fontStyle: string;
+  /** Hero slideshow photos (editorial mode — image only, no text overlay). */
+  heroSlides: string[];
   hero: { eyebrow: string; title: string; subtitle: string; ctaText: string };
   categories: { name: string; slug: string }[];
   products: DemoProduct[];
@@ -64,7 +68,8 @@ const stores: DemoStore[] = [
     id: "demo-store-dapur", ownerId: "demo-user-dapur", name: "Dapur", subdomain: "dapur",
     businessType: "food", aesthetic: "warm",
     desc: "Roti artisan, kue custom & cookies — dipanggang setiap pagi dengan bahan pilihan.",
-    whatsapp: "081234567890", accent: "#b45309", fontStyle: "classic-book",
+    whatsapp: "081234567890", accent: "#b45309", bg: "#faf8f5", fontStyle: "classic-book",
+    heroSlides: [u("photo-1509440159596-0249088772ff", 1400), u("photo-1555507036-ab1f4038808a", 1400)],
     hero: { eyebrow: "✦ Fresh dari oven", title: "Roti & Kue Artisan", subtitle: "Sourdough, croissant, dan kue custom yang dipanggang setiap pagi dengan bahan pilihan. Pesan sebelum jam 3 sore untuk pengiriman hari yang sama.", ctaText: "Lihat Menu" },
     categories: [
       { name: "Roti Artisan", slug: "roti-artisan" },
@@ -90,7 +95,8 @@ const stores: DemoStore[] = [
     id: "demo-store-kopikita", ownerId: "demo-user-kopikita", name: "Kopi Kita", subdomain: "kopikita",
     businessType: "food", aesthetic: "minimal",
     desc: "Kedai kopi & minuman segar — seduh sendiri di rumah dengan biji pilihan.",
-    whatsapp: "081298765432", accent: "#c2410c", fontStyle: "mixed-warm",
+    whatsapp: "081298765432", accent: "#44403c", bg: "#faf9f7", fontStyle: "mixed-warm",
+    heroSlides: [u("photo-1509042239860-f550ce710b93", 1400), u("photo-1447933601403-0c6688de566e", 1400)],
     hero: { eyebrow: "✦ Seduh segar setiap hari", title: "Kopi Kita", subtitle: "Biji pilihan, seduhan manual, dan minuman segar untuk menemani harimu. Antar cepat di area Bandung.", ctaText: "Pesan Kopi" },
     categories: [
       { name: "Kopi", slug: "kopi" },
@@ -112,7 +118,8 @@ const stores: DemoStore[] = [
     id: "demo-store-glowskin", ownerId: "demo-user-glowskin", name: "Glow Skin", subdomain: "glowskin",
     businessType: "beauty", aesthetic: "minimal",
     desc: "Skincare lokal dengan bahan aktif terbukti — aman untuk semua jenis kulit.",
-    whatsapp: "081234561111", accent: "#7c3aed", fontStyle: "editorial-luxe",
+    whatsapp: "081234561111", accent: "#1a1a1a", bg: "#fbfbfa", fontStyle: "editorial-luxe",
+    heroSlides: [u("photo-1620916566398-39f1143ab7be", 1400), u("photo-1556228720-195a672e8a03", 1400)],
     hero: { eyebrow: "✦ Glow dari dalam", title: "Skincare Routine", subtitle: "Rangkaian skincare lokal dengan bahan aktif terbukti — bersih, lembut, dan cerah untuk semua jenis kulit.", ctaText: "Lihat Koleksi" },
     categories: [
       { name: "Skincare", slug: "skincare" },
@@ -134,7 +141,8 @@ const stores: DemoStore[] = [
     id: "demo-store-rumahmode", ownerId: "demo-user-rumahmode", name: "Rumah Mode", subdomain: "rumahmode",
     businessType: "fashion", aesthetic: "bold",
     desc: "Fashion lokal — pakaian, aksesoris, dan alas kaki dengan kualitas premium.",
-    whatsapp: "081234562222", accent: "#db2777", fontStyle: "elegant-serif",
+    whatsapp: "081234562222", accent: "#111111", bg: "#ffffff", fontStyle: "modern-sans",
+    heroSlides: [u("photo-1445205170230-053b83016050", 1400), u("photo-1469334031218-e382a71b716b", 1400)],
     hero: { eyebrow: "✦ New season", title: "Rumah Mode", subtitle: "Koleksi terbaru — pakaian, tas, dan alas kaki untuk gaya harianmu. Ukuran lengkap, stok terbatas.", ctaText: "Belanja Sekarang" },
     categories: [
       { name: "Atasan", slug: "atasan" },
@@ -173,21 +181,23 @@ DELETE FROM stores WHERE id LIKE 'demo-%';
 DELETE FROM user WHERE id LIKE 'demo-%';
 `);
 
-const designTokens = (accent: string, fontStyle: string) => ({
+// Editorial-monochrome tokens — matches the landing-page template previews
+// (navbar-editorial + hero slideshow editorial + bestseller carousel).
+const designTokens = (accent: string, fontStyle: string, bg: string) => ({
   accent,
-  bg: "#fdfcfa",
+  bg,
   cardBg: "#ffffff",
-  text: "#1c1917",
-  textSecondary: "#78716c",
+  text: "#111111",
+  textSecondary: "#737373",
   ctaText: "#ffffff",
-  borderRadius: "14px",
-  buttonRadius: "9999px",
+  borderRadius: "0px",
+  buttonRadius: "0px",
   fontStyle,
   spacing: "comfortable",
-  elevation: "subtle-shadow",
-  decorDensity: "moderate",
-  layoutStyle: "startup",
-  navbarStyle: "navbar-classic",
+  elevation: "flat",
+  decorDensity: "minimal",
+  layoutStyle: "editorial",
+  navbarStyle: "navbar-editorial",
 });
 
 for (const s of stores) {
@@ -197,7 +207,7 @@ VALUES ('${s.ownerId}', '${esc(s.name)}', '${s.ownerId}@7okko-demo.local', 1, 'u
 
   // Store (published)
   out.push(sql`INSERT INTO stores (id, owner_id, name, subdomain, description, business_type, aesthetic_preference, whatsapp_number, status, hero_image_url, design_tokens, origin_address, origin_postal_code, origin_contact_name, origin_contact_phone, origin_latitude, origin_longitude, created_at, updated_at)
-VALUES ('${s.id}', '${s.ownerId}', '${esc(s.name)}', '${s.subdomain}', '${esc(s.desc)}', '${s.businessType}', '${s.aesthetic}', '${s.whatsapp}', 'published', NULL, '${json(designTokens(s.accent, s.fontStyle))}', 'Jl. Merdeka No. 1', '40111', '${esc(s.name)}', '${s.whatsapp}', -6.9175, 107.6191, datetime('now'), datetime('now'));`);
+VALUES ('${s.id}', '${s.ownerId}', '${esc(s.name)}', '${s.subdomain}', '${esc(s.desc)}', '${s.businessType}', '${s.aesthetic}', '${s.whatsapp}', 'published', NULL, '${json(designTokens(s.accent, s.fontStyle, s.bg ?? "#ffffff"))}', 'Jl. Merdeka No. 1', '40111', '${esc(s.name)}', '${s.whatsapp}', -6.9175, 107.6191, datetime('now'), datetime('now'));`);
 
   // Categories
   s.categories.forEach((c, i) => {
@@ -221,10 +231,9 @@ VALUES ('${p.id}-var-${vi + 1}', '${p.id}', '${esc(v.name)}', ${v.price ?? "NULL
 VALUES ('${pageId}', '${s.id}', 'beranda', 'Beranda', NULL, datetime('now'), datetime('now'));`);
 
   const sections: { type: string; content: Record<string, unknown> }[] = [
-    { type: "hero", content: { blockId: "hero-shadcn-centered", ...s.hero, trustText: "Ribuan pelanggan puas · pengiriman cepat" } },
-    { type: "category-grid", content: { blockId: "category-grid-circles", eyebrow: "✦ Belanja per kategori", heading: "Kategori Pilihan", subheading: "Pilih kategori favoritmu" } },
-    { type: "product-grid", content: { blockId: "product-grid-shadcn-cards", eyebrow: "✦ Koleksi", heading: "Produk Andalan", density: "3" } },
-    { type: "testimonial", content: { blockId: "testimonial-shadcn-cards", eyebrow: "✦ Testimoni", heading: "Apa Kata Mereka", items: [{ quote: s.testimonial.quote, name: s.testimonial.name, role: s.testimonial.role }] } },
+    { type: "hero", content: { blockId: "hero-slideshow", style: "editorial", slides: s.heroSlides.map((image) => ({ image, title: "", link: "" })) } },
+    { type: "product-grid", content: { blockId: "product-grid-carousel-row", eyebrow: "Koleksi", heading: "Product Bestseller", browseAllText: "Browse All", variantLabel: "Warna" } },
+    { type: "testimonial", content: { blockId: "testimonial-shadcn-cards", eyebrow: "Testimoni", heading: "Apa Kata Mereka", items: [{ quote: s.testimonial.quote, name: s.testimonial.name, role: s.testimonial.role }] } },
     { type: "cta", content: { blockId: "cta-shadcn-band", heading: "Siap Pesan?", subtitle: "Pesan sekarang — konfirmasi cepat via WhatsApp.", ctaText: "Order Sekarang" } },
     { type: "footer", content: { blockId: "footer-storeku", heading: s.name, tagline: s.desc, copyright: `© 2026 ${s.name}`, madeWithText: "Dibuat dengan 7okko", columns: [{ title: "Menu", links: [{ label: "Semua Produk", href: "/koleksi" }, { label: "Kontak", href: "#kontak" }] }], links: [{ label: "Koleksi", href: "/koleksi" }] } },
   ];

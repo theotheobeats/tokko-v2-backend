@@ -65,6 +65,8 @@ export class RegeneratePage {
     const preserved: Record<string, string> = {};
     if (previousTokens?.navbarStyle) preserved.navbarStyle = previousTokens.navbarStyle;
     const designTokens = { ...(aiResult.designTokens ?? {}), ...preserved };
+    // The editorial navbar is the platform default — force it when unset.
+    if (!designTokens.navbarStyle) designTokens.navbarStyle = "navbar-editorial";
 
     page.replaceAll(sections);
     await this.pageRepo.save(page);
