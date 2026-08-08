@@ -70,7 +70,7 @@ describe("AddPage", () => {
 
   it("should reject invalid slugs and the reserved home slug", async () => {
     const repo = mockPageRepo();
-    for (const slug of ["beranda", "Bad Slug", "a", "with_underscore", "trailing-", ""]) {
+    for (const slug of ["beranda", "checkout", "Bad Slug", "a", "with_underscore", "trailing-", ""]) {
       const result = await new AddPage(repo).execute({ storeId, slug });
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error).toBeInstanceOf(PageSlugInvalidError);

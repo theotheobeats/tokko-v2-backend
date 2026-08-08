@@ -31,7 +31,7 @@ export class PageSlugTakenError extends Error {
 export class PageSlugInvalidError extends Error {
   code = "PAGE_SLUG_INVALID";
   constructor() {
-    super("Slug hanya boleh huruf kecil, angka, dan tanda hubung (2-40 karakter)");
+    super("Slug hanya boleh huruf kecil, angka, dan tanda hubung (2-40 karakter), dan tidak boleh slug yang dipakai platform (beranda, checkout)");
   }
 }
 
@@ -48,8 +48,11 @@ export class LastPageError extends Error {
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/** Slug routes the platform reserves — stores can't create pages under these. */
+const RESERVED_SLUGS = new Set<string>([HOME_SLUG, "checkout"]);
+
 export function isValidSlug(slug: string): boolean {
-  return slug.length >= 2 && slug.length <= 40 && SLUG_RE.test(slug) && slug !== HOME_SLUG;
+  return slug.length >= 2 && slug.length <= 40 && SLUG_RE.test(slug) && !RESERVED_SLUGS.has(slug);
 }
 
 // ---------------------------------------------------------------------------
