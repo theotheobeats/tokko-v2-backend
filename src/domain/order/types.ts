@@ -27,3 +27,11 @@ export interface FulfillmentData {
   paymentNote?: string | null;
   queueNumber?: string | null;
 }
+
+/** How the order gets to the customer (shipping). */
+export type ShippingOption = "courier" | "pickup" | "manual";
+export const SHIPPING_OPTIONS: ShippingOption[] = ["courier", "pickup", "manual"];
+
+export function isShippingOption(value: unknown): value is ShippingOption {
+  return typeof value === "string" && (SHIPPING_OPTIONS as string[]).includes(value);
+}

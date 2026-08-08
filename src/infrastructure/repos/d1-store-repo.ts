@@ -147,6 +147,12 @@ export class D1StoreRepository implements StoreRepository {
       suspendedReason: row.suspendedReason,
       createdAt: row.createdAt,
       designTokens: row.designTokens ? (JSON.parse(row.designTokens) as Record<string, string>) : null,
+      originAddress: row.originAddress,
+      originPostalCode: row.originPostalCode,
+      originContactName: row.originContactName,
+      originContactPhone: row.originContactPhone,
+      originLatitude: row.originLatitude,
+      originLongitude: row.originLongitude,
     });
   }
 
@@ -166,6 +172,12 @@ export class D1StoreRepository implements StoreRepository {
       suspendedReason: props.suspendedReason,
       createdAt: props.createdAt,
       designTokens: props.designTokens ? JSON.stringify(props.designTokens) : null,
+      originAddress: props.originAddress,
+      originPostalCode: props.originPostalCode,
+      originContactName: props.originContactName,
+      originContactPhone: props.originContactPhone,
+      originLatitude: props.originLatitude,
+      originLongitude: props.originLongitude,
     };
   }
 }

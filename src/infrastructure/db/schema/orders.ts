@@ -23,6 +23,12 @@ export const orders = sqliteTable("orders", {
   paymentConfirmed: integer("payment_confirmed").notNull().default(0), // SQLite boolean (0/1)
   paymentNote: text("payment_note"),
   queueNumber: text("queue_number"), // nomor antrian (booking orders)
+  // Shipping (Biteship) — courier/pickup/manual option + cost.
+  shippingOption: text("shipping_option"), // "courier" | "pickup" | "manual"
+  shippingFee: integer("shipping_fee").notNull().default(0), // Rupiah
+  shippingCourier: text("shipping_courier"), // Biteship courier company (e.g. "jne")
+  shippingService: text("shipping_service"), // service type (e.g. "reg")
+  shippingDuration: text("shipping_duration"), // ETA label (e.g. "1 - 2 days")
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

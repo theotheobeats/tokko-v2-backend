@@ -30,10 +30,17 @@ const submitSchema = z.object({
   customerPhone: z.string().min(1),
   items: z.array(z.object({
     productId: z.string().min(1),
+    variantId: z.string().nullable().optional(),
     quantity: z.number().int().min(1),
   })).min(1),
   notes: z.string().optional(),
   shippingAddress: z.string().optional(),
+  shipping: z.object({
+    type: z.enum(["courier", "pickup", "manual"]),
+    courierCompany: z.string().optional(),
+    courierType: z.string().optional(),
+    destinationPostalCode: z.string().optional(),
+  }).optional(),
 });
 
 const updateStatusSchema = z.object({
@@ -68,15 +75,26 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
   const input = c.req.valid("json");
   const orderRepo = new D1OrderRepository(db);
   const productRepo = new D1ProductRepository(db);
-  const useCase = new SubmitOrder(orderRepo, productRepo);
+  const { createShippingProvider } = await import("../../infrastructure/shipping/biteship-client");
+  const useCase = new SubmitOrder(
+    orderRepo,
+    productRepo,
+    storeRepo,
+    createShippingProvider(c.env as Env),
+  );
 
   const result = await useCase.execute({
     storeId,
     customerName: input.customerName,
     customerPhone: input.customerPhone,
-    items: input.items.map((i) => ({ productId: i.productId as EntityId, quantity: i.quantity })),
+    items: input.items.map((i) => ({
+      productId: i.productId as EntityId,
+      variantId: (i.variantId as EntityId | null) ?? undefined,
+      quantity: i.quantity,
+    })),
     notes: input.notes,
     shippingAddress: input.shippingAddress,
+    shipping: input.shipping,
   });
 
   if (!result.ok) {
@@ -89,6 +107,7 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
     `Halo! Pesanan baru ${result.value.orderCode} dari ${result.value.customerName}:\n\n` +
     result.value.items.map((i: any) => `- ${i.productName} x${i.quantity} = Rp ${i.quantity * i.unitPrice}`).join("\n") +
     `\n\nTotal: Rp ${result.value.totalAmount}` +
+    (result.value.shippingFee > 0 ? `\n\nOngkir (${result.value.shippingCourier ?? "kurir"}): Rp ${result.value.shippingFee}` : "") +
     (result.value.shippingAddress ? `\n\nAlamat kirim: ${result.value.shippingAddress}` : "") +
     (result.value.notes ? `\n\nCatatan: ${result.value.notes}` : "")
   );

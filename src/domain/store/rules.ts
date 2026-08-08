@@ -68,6 +68,11 @@ export function isValidStock(stock: number): boolean {
   return Number.isInteger(stock) && stock >= 0;
 }
 
+/** Validate a product weight in grams (must be a positive integer). */
+export function isValidWeight(weight: number): boolean {
+  return Number.isInteger(weight) && weight >= 1;
+}
+
 /**
  * Validate that a product type is one of the supported kinds.
  */

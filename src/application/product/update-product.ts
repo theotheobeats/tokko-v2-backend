@@ -24,6 +24,7 @@ export interface UpdateProductInput {
   slug?: string | null;
   categoryId?: EntityId | null;
   stock?: number | null;
+  weight?: number | null;
   isAvailable?: boolean;
   type?: ProductTypeT;
   variants?: CreateVariantInput[] | null;
@@ -69,6 +70,13 @@ export class UpdateProduct {
       }
     }
 
+    // Validate weight if provided
+    if (input.weight !== undefined) {
+      if (input.weight !== null && (input.weight < 1 || !Number.isInteger(input.weight))) {
+        return err({ code: "VALIDATION", message: "Berat minimal 1 gram.", field: "weight" });
+      }
+    }
+
     // Validate type if provided
     if (input.type !== undefined && !isValidProductType(input.type)) {
       return err({ code: "VALIDATION", message: "Tipe produk tidak valid.", field: "type" });
@@ -110,6 +118,7 @@ export class UpdateProduct {
       slug: resolvedSlug,
       categoryId: input.categoryId,
       stock: input.stock,
+      weight: input.weight,
       type: input.type,
     });
 

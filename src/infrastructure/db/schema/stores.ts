@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { user } from "./users";
 
@@ -22,6 +22,13 @@ export const stores = sqliteTable("stores", {
   suspendedReason: text("suspended_reason"),
   /** Site-wide visual theme (design tokens), shared by all pages. */
   designTokens: text("design_tokens"),
+  // Shipping origin (pickup location) — used by Biteship rates/orders.
+  originAddress: text("origin_address"),
+  originPostalCode: text("origin_postal_code"),
+  originContactName: text("origin_contact_name"),
+  originContactPhone: text("origin_contact_phone"),
+  originLatitude: real("origin_latitude"),
+  originLongitude: real("origin_longitude"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

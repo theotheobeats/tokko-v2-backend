@@ -26,6 +26,13 @@ export interface StoreProps {
   suspendedReason: string | null;
   createdAt: string;
   designTokens: Record<string, string> | null;
+  // Shipping origin (pickup location) — Biteship rates/orders.
+  originAddress: string | null;
+  originPostalCode: string | null;
+  originContactName: string | null;
+  originContactPhone: string | null;
+  originLatitude: number | null;
+  originLongitude: number | null;
 }
 
 export class Store {
@@ -59,6 +66,12 @@ export class Store {
       suspendedReason: null,
       createdAt: new Date().toISOString(),
       designTokens: null,
+      originAddress: null,
+      originPostalCode: null,
+      originContactName: null,
+      originContactPhone: null,
+      originLatitude: null,
+      originLongitude: null,
     });
   }
 
@@ -83,6 +96,22 @@ export class Store {
   get suspendedReason() { return this.props.suspendedReason; }
   get createdAt() { return this.props.createdAt; }
   get designTokens() { return this.props.designTokens; }
+  get originAddress() { return this.props.originAddress; }
+  get originPostalCode() { return this.props.originPostalCode; }
+  get originContactName() { return this.props.originContactName; }
+  get originContactPhone() { return this.props.originContactPhone; }
+  get originLatitude() { return this.props.originLatitude; }
+  get originLongitude() { return this.props.originLongitude; }
+
+  /** Shipping origin is fully configured when address + postal + contact exist. */
+  get hasShippingOrigin(): boolean {
+    return Boolean(
+      this.props.originAddress &&
+      this.props.originPostalCode &&
+      this.props.originContactName &&
+      this.props.originContactPhone,
+    );
+  }
 
   /** Publish the store — requires at least 1 product */
   publish(): Result<Store, StoreMustHaveProductsError> {
@@ -114,6 +143,24 @@ export class Store {
   /** Set hero image */
   setHeroImage(url: string | null): Store {
     this.props.heroImageUrl = url;
+    return this;
+  }
+
+  /** Configure the shipping origin (pickup location) — Biteship rates/orders. */
+  updateShippingOrigin(params: {
+    originAddress?: string | null;
+    originPostalCode?: string | null;
+    originContactName?: string | null;
+    originContactPhone?: string | null;
+    originLatitude?: number | null;
+    originLongitude?: number | null;
+  }): Store {
+    if (params.originAddress !== undefined) this.props.originAddress = params.originAddress?.trim() || null;
+    if (params.originPostalCode !== undefined) this.props.originPostalCode = params.originPostalCode?.trim() || null;
+    if (params.originContactName !== undefined) this.props.originContactName = params.originContactName?.trim() || null;
+    if (params.originContactPhone !== undefined) this.props.originContactPhone = params.originContactPhone?.trim() || null;
+    if (params.originLatitude !== undefined) this.props.originLatitude = params.originLatitude ?? null;
+    if (params.originLongitude !== undefined) this.props.originLongitude = params.originLongitude ?? null;
     return this;
   }
 

@@ -6,15 +6,26 @@ import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import { Order } from "../../domain/order/order";
+import { isShippingOption, type ShippingOption } from "../../domain/order/types";
 import type { Product } from "../../domain/store/product";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import type { ProductRepository } from "../../infrastructure/repos/d1-product-repo";
+import type { StoreRepository } from "../store/store-repo";
+import type { ShippingProviderClient } from "../../infrastructure/shipping/biteship-client";
+import { GetShippingRates } from "../shipping/get-shipping-rates";
 
 export interface SubmitOrderItemInput {
   productId: EntityId;
   /** Optional chosen variant (size/color). Price snapshots the variant. */
   variantId?: EntityId | null;
   quantity: number;
+}
+
+export interface SubmitOrderShippingInput {
+  type: ShippingOption;
+  courierCompany?: string;
+  courierType?: string;
+  destinationPostalCode?: string;
 }
 
 export interface SubmitOrderInput {
@@ -24,10 +35,11 @@ export interface SubmitOrderInput {
   items: SubmitOrderItemInput[];
   notes?: string;
   shippingAddress?: string;
+  shipping?: SubmitOrderShippingInput;
 }
 
 export interface SubmitOrderError {
-  code: "VALIDATION" | "PRODUCT_UNAVAILABLE" | "STOCK_INSUFFICIENT" | "VARIANT_NOT_FOUND";
+  code: "VALIDATION" | "PRODUCT_UNAVAILABLE" | "STOCK_INSUFFICIENT" | "VARIANT_NOT_FOUND" | "SHIPPING_UNAVAILABLE" | "SHIPPING_RATE_NOT_FOUND";
   message: string;
   field?: string;
 }
@@ -36,6 +48,8 @@ export class SubmitOrder {
   constructor(
     private readonly orderRepo: OrderRepository,
     private readonly productRepo: ProductRepository,
+    private readonly storeRepo?: StoreRepository,
+    private readonly provider?: ShippingProviderClient,
   ) {}
 
   async execute(input: SubmitOrderInput): Promise<Result<ReturnType<Order["toJSON"]>, SubmitOrderError>> {
@@ -109,10 +123,56 @@ export class SubmitOrder {
       });
     }
 
-    // Physical products must always carry a shipping address
+    // Physical products must always carry a shipping address (unless pickup/manual)
     const hasPhysicalItem = orderItems.some((i) => i.productType === "product");
-    if (hasPhysicalItem && !input.shippingAddress?.trim()) {
+    const shipsByCourier = !input.shipping || input.shipping.type === "courier";
+    if (hasPhysicalItem && shipsByCourier && !input.shippingAddress?.trim()) {
       return err({ code: "VALIDATION", message: "Alamat pengiriman wajib diisi.", field: "shippingAddress" });
+    }
+
+    // ---------------------------------------------------------------------
+    // Shipping — never trust client fees; re-quote via the provider.
+    // ---------------------------------------------------------------------
+    let shippingOption: ShippingOption | null = null;
+    let shippingFee = 0;
+    let shippingCourier: string | null = null;
+    let shippingService: string | null = null;
+    let shippingDuration: string | null = null;
+
+    const ship = input.shipping;
+    if (hasPhysicalItem && ship) {
+      if (!isShippingOption(ship.type)) {
+        return err({ code: "VALIDATION", message: "Metode pengiriman tidak valid.", field: "shipping" });
+      }
+      shippingOption = ship.type;
+
+      if (ship.type === "courier") {
+        if (!ship.courierCompany || !ship.courierType) {
+          return err({ code: "VALIDATION", message: "Pilih kurir pengiriman.", field: "shipping" });
+        }
+        if (!this.storeRepo || !this.provider) {
+          return err({ code: "SHIPPING_UNAVAILABLE", message: "Pengiriman online belum tersedia di toko ini." });
+        }
+        const rates = await new GetShippingRates(this.storeRepo, this.productRepo, this.provider).execute({
+          storeId: input.storeId,
+          destinationPostalCode: ship.destinationPostalCode ?? "",
+          items: input.items,
+        });
+        if (!rates.ok) {
+          return err({ code: "SHIPPING_UNAVAILABLE", message: rates.error.message });
+        }
+        const chosen = rates.value.find(
+          (r) => r.courier === ship.courierCompany && r.service === ship.courierType,
+        );
+        if (!chosen) {
+          return err({ code: "SHIPPING_RATE_NOT_FOUND", message: "Kurir tidak tersedia untuk alamat ini." });
+        }
+        shippingFee = chosen.price;
+        shippingCourier = chosen.courier;
+        shippingService = chosen.service;
+        shippingDuration = chosen.duration;
+      }
+      // pickup / manual → fee 0, no courier
     }
 
     // Create order
@@ -123,6 +183,11 @@ export class SubmitOrder {
       items: orderItems,
       notes: input.notes,
       shippingAddress: input.shippingAddress,
+      shippingOption,
+      shippingFee,
+      shippingCourier,
+      shippingService,
+      shippingDuration,
     });
 
     await this.orderRepo.save(order);

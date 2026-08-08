@@ -153,6 +153,7 @@ export class D1ProductRepository implements ProductRepository {
       slug: row.slug,
       categoryId: (row.categoryId as EntityId | null) ?? null,
       stock: row.stock,
+      weight: row.weight,
       isAvailable: row.isAvailable === 1,
       type: (row.type ?? "product") as Product["type"],
       createdAt: row.createdAt,
@@ -172,6 +173,7 @@ export class D1ProductRepository implements ProductRepository {
       slug: props.slug,
       categoryId: props.categoryId as string | null,
       stock: props.stock,
+      weight: props.weight,
       isAvailable: props.isAvailable ? 1 : 0,
       type: props.type,
     };

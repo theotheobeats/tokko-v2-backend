@@ -170,6 +170,11 @@ export class D1OrderRepository implements OrderRepository {
       paymentConfirmed: row.paymentConfirmed === 1,
       paymentNote: row.paymentNote,
       queueNumber: row.queueNumber,
+      shippingOption: row.shippingOption as Order["shippingOption"],
+      shippingFee: row.shippingFee,
+      shippingCourier: row.shippingCourier,
+      shippingService: row.shippingService,
+      shippingDuration: row.shippingDuration,
       createdAt: row.createdAt,
     });
   }
@@ -191,6 +196,11 @@ export class D1OrderRepository implements OrderRepository {
       paymentConfirmed: props.paymentConfirmed ? 1 : 0,
       paymentNote: props.paymentNote,
       queueNumber: props.queueNumber,
+      shippingOption: props.shippingOption,
+      shippingFee: props.shippingFee,
+      shippingCourier: props.shippingCourier,
+      shippingService: props.shippingService,
+      shippingDuration: props.shippingDuration,
     };
   }
 }

@@ -4,7 +4,7 @@
 
 import type { EntityId, ProductType as ProductTypeT } from "../shared/types";
 import { createEntityId, ProductType } from "../shared/types";
-import { OrderStatus, VALID_TRANSITIONS, type OrderStatus as OrderStatusType } from "./types";
+import { OrderStatus, VALID_TRANSITIONS, type OrderStatus as OrderStatusType, type ShippingOption } from "./types";
 import type { FulfillmentData, FulfillmentField } from "./types";
 import { OrderItem, type OrderItemProps } from "./order-item";
 import { generateOrderCode } from "./rules";
@@ -26,6 +26,12 @@ export interface OrderProps {
   paymentNote: string | null;
   queueNumber: string | null;
   createdAt?: string;
+  // Shipping (Biteship) — option + cost.
+  shippingOption: ShippingOption | null;
+  shippingFee: number;
+  shippingCourier: string | null;
+  shippingService: string | null;
+  shippingDuration: string | null;
 }
 
 export class Order {
@@ -39,20 +45,31 @@ export class Order {
     notes?: string;
     shippingAddress?: string;
     orderCode?: string;
+    shippingOption?: ShippingOption | null;
+    shippingFee?: number;
+    shippingCourier?: string | null;
+    shippingService?: string | null;
+    shippingDuration?: string | null;
   }): Order {
     if (!params.customerName.trim()) throw new Error("Customer name is required");
     if (!params.customerPhone.trim()) throw new Error("Customer phone is required");
     if (params.items.length === 0) throw new Error("Order must have at least 1 item");
+    if (params.shippingFee !== undefined && params.shippingFee < 0) throw new Error("Shipping fee must be >= 0");
 
-    // Physical products must always carry a shipping address
+    // Physical products need a shipping address when shipped by courier
+    // (pickup/manual/legacy-null behave like before: address required for
+    // legacy null, optional for pickup/manual).
     const hasPhysicalItem = params.items.some((i) => i.productType === ProductType.Product);
     const shippingAddress = params.shippingAddress?.trim() || null;
-    if (hasPhysicalItem && !shippingAddress) {
+    const shipsByCourier = params.shippingOption === undefined || params.shippingOption === null || params.shippingOption === "courier";
+    if (hasPhysicalItem && shipsByCourier && !shippingAddress) {
       throw new Error("Shipping address is required for product orders");
     }
 
     const orderItems = params.items.map((i) => OrderItem.create(i));
-    const totalAmount = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const itemsTotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const shippingFee = params.shippingFee ?? 0;
+    const totalAmount = itemsTotal + shippingFee;
 
     return new Order({
       id: createEntityId(),
@@ -71,6 +88,11 @@ export class Order {
       paymentNote: null,
       queueNumber: null,
       createdAt: new Date().toISOString(),
+      shippingOption: params.shippingOption ?? (hasPhysicalItem ? "courier" : null),
+      shippingFee,
+      shippingCourier: params.shippingCourier?.trim() || null,
+      shippingService: params.shippingService?.trim() || null,
+      shippingDuration: params.shippingDuration?.trim() || null,
     });
   }
 
@@ -84,6 +106,11 @@ export class Order {
       paymentConfirmed: props.paymentConfirmed ?? false,
       paymentNote: props.paymentNote ?? null,
       queueNumber: props.queueNumber ?? null,
+      shippingOption: props.shippingOption ?? null,
+      shippingFee: props.shippingFee ?? 0,
+      shippingCourier: props.shippingCourier ?? null,
+      shippingService: props.shippingService ?? null,
+      shippingDuration: props.shippingDuration ?? null,
       // Legacy persisted orders (pre-productType schema) may have items without
       // productType — default to "product" so reconstruction never throws and
       // the orders list / dashboard stays available. Matches the repo default
@@ -109,6 +136,11 @@ export class Order {
   get paymentConfirmed() { return this.props.paymentConfirmed; }
   get paymentNote() { return this.props.paymentNote; }
   get queueNumber() { return this.props.queueNumber; }
+  get shippingOption() { return this.props.shippingOption; }
+  get shippingFee() { return this.props.shippingFee; }
+  get shippingCourier() { return this.props.shippingCourier; }
+  get shippingService() { return this.props.shippingService; }
+  get shippingDuration() { return this.props.shippingDuration; }
 
   /**
    * Fulfillment fields required before this order can be completed,
@@ -205,6 +237,11 @@ export class Order {
       paymentConfirmed: this.props.paymentConfirmed,
       paymentNote: this.props.paymentNote,
       queueNumber: this.props.queueNumber,
+      shippingOption: this.props.shippingOption,
+      shippingFee: this.props.shippingFee,
+      shippingCourier: this.props.shippingCourier,
+      shippingService: this.props.shippingService,
+      shippingDuration: this.props.shippingDuration,
       createdAt: this.props.createdAt,
     };
   }

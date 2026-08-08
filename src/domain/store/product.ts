@@ -4,7 +4,7 @@
 
 import type { EntityId, ProductType as ProductTypeT } from "../shared/types";
 import { createEntityId, ProductType } from "../shared/types";
-import { isValidPrice, isValidProductType, isValidSlug, isValidStock } from "./rules";
+import { isValidPrice, isValidProductType, isValidSlug, isValidStock, isValidWeight } from "./rules";
 
 export interface ProductProps {
   id: EntityId;
@@ -18,6 +18,7 @@ export interface ProductProps {
   slug: string | null; // URL slug, unique per store; null = fall back to id
   categoryId: EntityId | null;
   stock: number | null; // available units; null = unlimited, 0 = sold out
+  weight: number | null; // grams — used for Biteship shipping rates
   isAvailable: boolean;
   type: ProductTypeT;
   createdAt: string; // ISO — used for "newest" sorting
@@ -37,6 +38,7 @@ export class Product {
     slug?: string | null;
     categoryId?: EntityId | null;
     stock?: number | null;
+    weight?: number | null;
     type?: ProductTypeT;
   }): Product {
     if (!params.name.trim()) throw new Error("Product name is required");
@@ -49,6 +51,9 @@ export class Product {
     }
     if (params.stock !== undefined && params.stock !== null && !isValidStock(params.stock)) {
       throw new Error("Stock must be >= 0");
+    }
+    if (params.weight !== undefined && params.weight !== null && !isValidWeight(params.weight)) {
+      throw new Error("Weight must be >= 1 gram");
     }
 
     const type = params.type ?? ProductType.Product;
@@ -66,6 +71,7 @@ export class Product {
       slug: params.slug ?? null,
       categoryId: params.categoryId ?? null,
       stock: params.stock ?? null,
+      weight: params.weight ?? null,
       isAvailable: true,
       type,
       createdAt: new Date().toISOString(),
@@ -87,6 +93,7 @@ export class Product {
   get slug() { return this.props.slug; }
   get categoryId() { return this.props.categoryId; }
   get stock() { return this.props.stock; }
+  get weight() { return this.props.weight; }
   /** true when stock is tracked and exhausted (0 or negative). */
   get isOutOfStock(): boolean {
     return this.props.stock !== null && this.props.stock <= 0;
@@ -125,6 +132,7 @@ export class Product {
     slug?: string | null;
     categoryId?: EntityId | null;
     stock?: number | null;
+    weight?: number | null;
     type?: ProductTypeT;
   }): Product {
     if (params.name !== undefined) this.props.name = params.name;
@@ -143,6 +151,10 @@ export class Product {
     if (params.stock !== undefined) {
       if (params.stock !== null && !isValidStock(params.stock)) throw new Error("Stock must be >= 0");
       this.props.stock = params.stock;
+    }
+    if (params.weight !== undefined) {
+      if (params.weight !== null && !isValidWeight(params.weight)) throw new Error("Weight must be >= 1 gram");
+      this.props.weight = params.weight;
     }
     if (params.type !== undefined) {
       if (!isValidProductType(params.type)) throw new Error("Invalid product type");
