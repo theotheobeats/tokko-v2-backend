@@ -143,7 +143,7 @@ pagesRouter.patch("/:storeId/page/sections/:id", zValidator("json", z.object({
 
 // POST /api/stores/:storeId/page/sections
 pagesRouter.post("/:storeId/page/sections", zValidator("json", z.object({
-  type: z.enum(["hero", "about", "product-grid", "testimonial", "cta", "contact", "faq", "footer"]),
+  type: z.enum(["hero", "about", "product-grid", "category-grid", "testimonial", "cta", "contact", "faq", "footer"]),
   variant: z.string(),
   content: z.record(z.string(), z.unknown()),
   sortOrder: z.number().int().min(0).optional(),

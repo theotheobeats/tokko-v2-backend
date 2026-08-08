@@ -18,6 +18,7 @@ export const SectionType = {
   Hero: "hero",
   About: "about",
   ProductGrid: "product-grid",
+  CategoryGrid: "category-grid",
   Testimonial: "testimonial",
   Cta: "cta",
   Contact: "contact",
