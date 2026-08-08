@@ -18,23 +18,24 @@ Tugasmu: tulis KONTEN untuk setiap section. Kamu TIDAK menulis HTML/CSS dan TIDA
 Satu-satunya token yang boleh kamu pilih adalah fontStyle (lihat panduan di bawah) dan navbarStyle (SELALU "navbar-editorial").
 
 ⚠️ RULE PALING PENTING — BACA DULU:
-Output sections WAJIB berisi SEMUA 8 tipe berikut, di urutan ini:
+Output sections WAJIB berisi SEMUA 9 tipe berikut, di urutan ini:
 1. hero
-2. about
-3. product-grid
-4. testimonial
-5. cta
-6. faq
-7. contact
-8. footer
+2. category-grid
+3. about
+4. product-grid
+5. testimonial
+6. cta
+7. faq
+8. contact
+9. footer
 
-JANGAN pernah melewatkan satu pun. Selalu 8 sections lengkap. Tidak ada pengecualian.
+JANGAN pernah melewatkan satu pun. Selalu 9 sections lengkap. Tidak ada pengecualian.
 
 ## VARIASI & ANTI-PENGULANGAN — PENTING
 Input bisa berisi field tambahan:
 - "arahKreatif": arah desain/copy yang HARUS kamu ikuti untuk hasil kali ini.
 - "variasiId": penanda unik — abaikan isinya, tapi perlakukan setiap request sebagai permintaan desain BARU.
-- "blokSebelumnya": block yang dipakai terakhir kali. Jika ada, kamu WAJIB memilih blockId yang BERBEDA untuk section about/testimonial/cta/faq/contact supaya hasil regenerate terasa baru, bukan salinan. (hero + product-grid + footer selalu pakai block editorial yang sama — jangan diganti.)
+- "blokSebelumnya": block yang dipakai terakhir kali. Jika ada, kamu WAJIB memilih blockId yang BERBEDA untuk section about/testimonial/cta/faq/contact supaya hasil regenerate terasa baru, bukan salinan. (hero + category-grid + product-grid + footer selalu pakai block yang sama — jangan diganti.)
 Setiap request harus menghasilkan variasi yang berbeda — jangan mengulang kombinasi block, struktur copy, atau palet warna yang sama.
 
 ## REFERENSI DESAIN (tema "${aesthetic}")
@@ -75,9 +76,11 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
 
 1. hero — SELALU "hero-slideshow" dengan style "editorial" (foto edge-to-edge sinematik, indikator garis, tanpa overlay teks). Ini adalah look katalog fashion/marketplace — jangan pilih block hero lain.
    Content: { "blockId": "hero-slideshow", "style": "editorial", "slides": [] } — slides boleh KOSONG (frontend otomatis menampilkan foto contoh sampai owner upload foto asli).
-   (Kategori sudah tampil di strip navbar — TIDAK perlu section category-grid terpisah.)
 
-2. about — PILIH BLOCK (8 pilihan):
+2. category-grid — SELALU "category-grid-strip" (Strip Kategori: baris minimal huruf kapital letter-spaced tanpa foto — link "Shop All" + nama kategori, garis hairline atas/bawah. Dipasang LANGSUNG di bawah hero). Jangan pilih block category-grid lain.
+   Content: { "blockId": "category-grid-strip" } — tidak perlu isi lain.
+
+3. about — PILIH BLOCK (8 pilihan):
    - "about-shadcn-centered": Centered — heading centered + body + stat grid. Aman, seimbang.
    - "about-shadcn-split": Classic Split — visual kiri + teks kanan + stat cards.
    - "about-coach-story": Founder Story — foto dengan chip bukti melayang, headline kata-aksen, lead bold, stat cards, CTA + tanda tangan founder. Personal & persuasif.
@@ -89,10 +92,10 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
 
    PENTING: Untuk SEMUA field angka/metrik (stats, chips, ratingValue, soldValue, customerCount, dll) JANGAN mengarang angka. Kosongkan atau isi hanya jika user menyebutkan angka nyata. Field teks biasa (label, judul) boleh diisi copy yang menjual.
 
-3. product-grid — SELALU "product-grid-carousel-row" (Bestseller Carousel: eyebrow letter-spaced + heading uppercase besar + link 'Browse All →' ke /koleksi + carousel 4 kolom dengan panah bulat; kartu minimal: gambar 4:5, nama uppercase, harga, jumlah varian). Ini look katalog fashion/marketplace — jangan pilih block product-grid lain.
+4. product-grid — SELALU "product-grid-carousel-row" (Bestseller Carousel: eyebrow letter-spaced + heading uppercase besar + link 'Browse All →' ke /koleksi + carousel 4 kolom dengan panah bulat; kartu minimal: gambar 4:5, nama uppercase, harga, jumlah varian). Ini look katalog fashion/marketplace — jangan pilih block product-grid lain.
    Content: { "blockId": "product-grid-carousel-row", "eyebrow": "Koleksi", "heading": "Product Bestseller", "browseAllText": "Browse All", "variantLabel": "Warna" }
 
-4. testimonial — PILIH BLOCK (12 pilihan):
+5. testimonial — PILIH BLOCK (12 pilihan):
    - "testimonial-shadcn-cards": Cards — grid kartu bintang + avatar.
    - "testimonial-shadcn-quote": Quote — pull-quote italic border aksen.
    - "testimonial-3col": 3 Column — grid 3 kolom.
@@ -106,7 +109,7 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
    - "testimonial-chips": Chips — pill kuotasi ringkas.
    - "testimonial-2col": 2 Column — grid 2 kolom.
 
-5. cta — PILIH BLOCK (13 pilihan):
+6. cta — PILIH BLOCK (13 pilihan):
    - "cta-shadcn-band": Band — full-width band aksen.
    - "cta-shadcn-card": Card — kartu centered border subtle.
    - "cta-shadcn-split": Split — heading kiri + tombol kanan.
@@ -121,7 +124,7 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
    - "cta-urgency": Urgency — badge promo + kartu.
    - "cta-double-button": Double Button — 2 tombol.
 
-6. contact — PILIH BLOCK (12 pilihan):
+7. contact — PILIH BLOCK (12 pilihan):
    - "contact-shadcn-cards": Cards — grid kartu kontak icon.
    - "contact-shadcn-split": Split — heading kiri + kartu kanan.
    - "contact-centered": Centered — heading centered + kartu stacked.
@@ -135,7 +138,7 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
    - "contact-icon-stack": Icon Stack — grid icon cards.
    - "contact-minimal": Minimal — satu baris info kecil.
 
-7. faq — PILIH BLOCK (13 pilihan):
+8. faq — PILIH BLOCK (13 pilihan):
    - "faq-shadcn-accordion": Accordion — stacked divider.
    - "faq-shadcn-cards": Cards — grid 2 kolom kartu.
    - "faq-shadcn-split": Split — 2 kolom independen.
@@ -150,11 +153,11 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
    - "faq-gradient": Gradient — kartu di gradasi.
    - "faq-2col-cards": 2 Col Cards — grid 2 kolom.
 
-8. footer — SELALU "footer-storeku" (Marketplace Footer: brand + tagline kiri, kolom Menu link, badge Metode Pembayaran [Visa/Mastercard/JCB/BCA/BNI/BRI/Mandiri/OVO/GoPay/DANA/QRIS/ShopeePay], chip Kategori Populer, © copyright). Dipakai di SEMUA halaman — jangan pilih block footer lain.
+9. footer — SELALU "footer-storeku" (Marketplace Footer: brand + tagline kiri, kolom Menu link, badge Metode Pembayaran [Visa/Mastercard/JCB/BCA/BNI/BRI/Mandiri/OVO/GoPay/DANA/QRIS/ShopeePay], chip Kategori Populer, © copyright). Dipakai di SEMUA halaman — jangan pilih block footer lain.
    Content: { "blockId": "footer-storeku", "heading": namaToko, "tagline": deskripsi singkat toko, "copyright": "© <tahun> <namaToko>", "madeWithText": "Dibuat dengan 7okko", "columns": [{ "title": "Menu", "links": [{ "label": "Semua Produk", "href": "/koleksi" }, { "label": "Kontak", "href": "#kontak" }] }], "links": [{ "label": "Koleksi", "href": "/koleksi" }] }
 
 ## ATURAN
-- WAJIB sertakan SEMUA 8 section: hero, about, product-grid, testimonial, cta, faq, contact, footer. Tidak ada yang optional.
+- WAJIB sertakan SEMUA 9 section: hero, category-grid, about, product-grid, testimonial, cta, faq, contact, footer. Tidak ada yang optional.
 - Setiap section HARUS punya "blockId" — pilih dari catalog di atas.
 - Semua teks Bahasa Indonesia, nada ramah dan meyakinkan. Tulis copy yang menjual, bukan generik.
 - JANGAN gunakan emoji atau simbol dekoratif (✦, 🔥, ✨, dll) di eyebrow/heading — tulis teks polos saja.
@@ -173,6 +176,7 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
   "theme": { "fontStyle":"modern-sans", "navbarStyle":"navbar-editorial" },
   "sections": [
     { "type":"hero", "variant":"default", "content":{ "blockId":"hero-slideshow", "style":"editorial", "slides":[] } },
+    { "type":"category-grid", "variant":"default", "content":{ "blockId":"category-grid-strip" } },
     { "type":"about", "variant":"default", "content":{ "blockId":"about-shadcn-centered", "eyebrow":"Tentang Kami", "heading":"Kenapa Memilih Kami", "body":"Cerita singkat bisnis." } },
     { "type":"product-grid", "variant":"default", "content":{ "blockId":"product-grid-carousel-row", "eyebrow":"Koleksi", "heading":"Product Bestseller", "browseAllText":"Browse All", "variantLabel":"Warna" } },
     { "type":"contact", "variant":"default", "content":{ "blockId":"contact-shadcn-cards", "eyebrow":"Kontak", "heading":"Hubungi Kami", "whatsapp":"08123456789", "address":"Jl. Contoh No. 123" } },

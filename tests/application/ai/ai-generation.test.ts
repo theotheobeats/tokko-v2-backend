@@ -107,11 +107,59 @@ describe("RegeneratePage use case", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.sections).toHaveLength(2);
+      // Default layout is enforced: hero first, Kategori strip second, rest after.
+      expect(result.value.sections).toHaveLength(3);
       expect(result.value.sections[0].type).toBe(SectionType.Hero);
-      expect(result.value.sections[1].type).toBe(SectionType.About);
+      expect(result.value.sections[1].type).toBe(SectionType.CategoryGrid);
+      expect(result.value.sections[1].content.blockId).toBe("category-grid-strip");
+      expect(result.value.sections[2].type).toBe(SectionType.About);
     }
     expect(repo.save).toHaveBeenCalledOnce();
+  });
+
+  it("moves hero to the top and inserts the Kategori strip when the AI emits hero last", async () => {
+    mockAI.mockResolvedValue({
+      sections: [
+        { type: "about", variant: "default", content: { heading: "About" } },
+        { type: "footer", variant: "default", content: { heading: "Footer" } },
+        { type: "hero", variant: "default", content: { blockId: "hero-slideshow", slides: [] } },
+      ],
+    });
+    const useCase = new RegeneratePage(repo, mockAI);
+
+    const result = await useCase.execute({ storeId });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sections.map((s) => s.type)).toEqual([
+        SectionType.Hero,
+        SectionType.CategoryGrid,
+        SectionType.About,
+        SectionType.Footer,
+      ]);
+    }
+  });
+
+  it("forces an AI-provided category section to the strip block and de-duplicates it", async () => {
+    mockAI.mockResolvedValue({
+      sections: [
+        { type: "hero", variant: "default", content: { blockId: "hero-slideshow", slides: [] } },
+        { type: "category-grid", variant: "default", content: { blockId: "category-grid-cards" } },
+        { type: "category-grid", variant: "default", content: { blockId: "category-grid-strip" } },
+        { type: "about", variant: "default", content: { heading: "About" } },
+      ],
+    });
+    const useCase = new RegeneratePage(repo, mockAI);
+
+    const result = await useCase.execute({ storeId });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const types = result.value.sections.map((s) => s.type);
+      expect(types).toEqual([SectionType.Hero, SectionType.CategoryGrid, SectionType.About]);
+      // The kept category section is forced to the strip block.
+      expect(result.value.sections[1].content.blockId).toBe("category-grid-strip");
+    }
   });
 
   it("should return error when page not found", async () => {

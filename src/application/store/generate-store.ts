@@ -15,6 +15,7 @@ import type { ProductRepository } from "../../infrastructure/repos/d1-product-re
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import type { Aesthetic, BusinessType } from "../../domain/store/types";
 import { serializePage, type SerializedPage } from "../page/render-section";
+import { normalizeGeneratedSections } from "../page/normalize-sections";
 
 // ---------------------------------------------------------------------------
 // Input / Output
@@ -126,8 +127,10 @@ export class GenerateStore {
     // Set product count (for publish invariant)
     store.setProductCount(products.length);
 
-    // 5. Create Page with sections
-    const sections = aiResult.sections.map((s, i) =>
+    // 5. Create Page with sections — normalize first so the hero always
+    // leads and a Kategori strip sits directly below it (see normalize-sections).
+    const ordered = normalizeGeneratedSections(aiResult.sections);
+    const sections = ordered.map((s, i) =>
       Section.create({ type: s.type as SectionType, variant: s.variant, content: s.content, sortOrder: i })
     );
     const page = Page.create(store.id, sections);

@@ -11,6 +11,7 @@ import { Section, type SectionType } from "../../domain/store/section";
 import { HOME_SLUG } from "../../domain/store/page";
 import type { PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import { serializePage, type SerializedPage } from "./render-section";
+import { normalizeGeneratedSections } from "./normalize-sections";
 
 export interface AIGeneratedSections {
   sections: Array<{ type: string; variant: string; content: Record<string, unknown> }>;
@@ -52,7 +53,11 @@ export class RegeneratePage {
       });
     }
 
-    const sections = aiResult.sections.map((s, i) =>
+    // Enforce the default layout: hero first, Kategori strip second, then
+    // the rest in AI order (the model sometimes emits hero last / skips the
+    // category strip — normalize before persisting).
+    const ordered = normalizeGeneratedSections(aiResult.sections);
+    const sections = ordered.map((s, i) =>
       Section.create({
         type: s.type as SectionType,
         variant: s.variant,

@@ -42,6 +42,11 @@ export async function mockAIGenerate(input: {
         content: { blockId: "hero-slideshow", style: "editorial", slides: [] },
       },
       {
+        type: "category-grid",
+        variant: "default",
+        content: { blockId: "category-grid-strip" },
+      },
+      {
         type: "about",
         variant: "default",
         content: {
