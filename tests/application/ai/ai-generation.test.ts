@@ -107,17 +107,17 @@ describe("RegeneratePage use case", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // Default layout is enforced: hero first, Kategori strip second, rest after.
+      // Default layout is enforced: Kategori strip first, hero below it, rest after.
       expect(result.value.sections).toHaveLength(3);
-      expect(result.value.sections[0].type).toBe(SectionType.Hero);
-      expect(result.value.sections[1].type).toBe(SectionType.CategoryGrid);
-      expect(result.value.sections[1].content.blockId).toBe("category-grid-strip");
+      expect(result.value.sections[0].type).toBe(SectionType.CategoryGrid);
+      expect(result.value.sections[0].content.blockId).toBe("category-grid-strip");
+      expect(result.value.sections[1].type).toBe(SectionType.Hero);
       expect(result.value.sections[2].type).toBe(SectionType.About);
     }
     expect(repo.save).toHaveBeenCalledOnce();
   });
 
-  it("moves hero to the top and inserts the Kategori strip when the AI emits hero last", async () => {
+  it("moves hero below the Kategori strip when the AI emits hero last", async () => {
     mockAI.mockResolvedValue({
       sections: [
         { type: "about", variant: "default", content: { heading: "About" } },
@@ -132,8 +132,8 @@ describe("RegeneratePage use case", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.sections.map((s) => s.type)).toEqual([
-        SectionType.Hero,
         SectionType.CategoryGrid,
+        SectionType.Hero,
         SectionType.About,
         SectionType.Footer,
       ]);
@@ -156,9 +156,9 @@ describe("RegeneratePage use case", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       const types = result.value.sections.map((s) => s.type);
-      expect(types).toEqual([SectionType.Hero, SectionType.CategoryGrid, SectionType.About]);
+      expect(types).toEqual([SectionType.CategoryGrid, SectionType.Hero, SectionType.About]);
       // The kept category section is forced to the strip block.
-      expect(result.value.sections[1].content.blockId).toBe("category-grid-strip");
+      expect(result.value.sections[0].content.blockId).toBe("category-grid-strip");
     }
   });
 

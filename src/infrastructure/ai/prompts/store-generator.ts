@@ -19,8 +19,8 @@ Satu-satunya token yang boleh kamu pilih adalah fontStyle (lihat panduan di bawa
 
 ⚠️ RULE PALING PENTING — BACA DULU:
 Output sections WAJIB berisi SEMUA 9 tipe berikut, di urutan ini:
-1. hero
-2. category-grid
+1. category-grid
+2. hero
 3. about
 4. product-grid
 5. testimonial
@@ -35,7 +35,7 @@ JANGAN pernah melewatkan satu pun. Selalu 9 sections lengkap. Tidak ada pengecua
 Input bisa berisi field tambahan:
 - "arahKreatif": arah desain/copy yang HARUS kamu ikuti untuk hasil kali ini.
 - "variasiId": penanda unik — abaikan isinya, tapi perlakukan setiap request sebagai permintaan desain BARU.
-- "blokSebelumnya": block yang dipakai terakhir kali. Jika ada, kamu WAJIB memilih blockId yang BERBEDA untuk section about/testimonial/cta/faq/contact supaya hasil regenerate terasa baru, bukan salinan. (hero + category-grid + product-grid + footer selalu pakai block yang sama — jangan diganti.)
+- "blokSebelumnya": block yang dipakai terakhir kali. Jika ada, kamu WAJIB memilih blockId yang BERBEDA untuk section about/testimonial/cta/faq/contact supaya hasil regenerate terasa baru, bukan salinan. (category-grid + hero + product-grid + footer selalu pakai block yang sama — jangan diganti.)
 Setiap request harus menghasilkan variasi yang berbeda — jangan mengulang kombinasi block, struktur copy, atau palet warna yang sama.
 
 ## REFERENSI DESAIN (tema "${aesthetic}")
@@ -74,11 +74,11 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
 
 ## SECTION — tipe, variant yang tersedia, dan isi content
 
-1. hero — SELALU "hero-slideshow" dengan style "editorial" (foto edge-to-edge sinematik, indikator garis, tanpa overlay teks). Ini adalah look katalog fashion/marketplace — jangan pilih block hero lain.
-   Content: { "blockId": "hero-slideshow", "style": "editorial", "slides": [] } — slides boleh KOSONG (frontend otomatis menampilkan foto contoh sampai owner upload foto asli).
-
-2. category-grid — SELALU "category-grid-strip" (Strip Kategori: baris minimal huruf kapital letter-spaced tanpa foto — link "Shop All" + nama kategori, garis hairline atas/bawah. Dipasang LANGSUNG di bawah hero). Jangan pilih block category-grid lain.
+1. category-grid — SELALU "category-grid-strip" (Strip Kategori: baris minimal huruf kapital letter-spaced tanpa foto — link "Shop All" + nama kategori, garis hairline atas/bawah. Dipasang PALING ATAS, LANGSUNG di atas hero). Jangan pilih block category-grid lain.
    Content: { "blockId": "category-grid-strip" } — tidak perlu isi lain.
+
+2. hero — SELALU "hero-slideshow" dengan style "editorial" (foto edge-to-edge sinematik, indikator garis, tanpa overlay teks). Ini adalah look katalog fashion/marketplace — jangan pilih block hero lain.
+   Content: { "blockId": "hero-slideshow", "style": "editorial", "slides": [] } — slides boleh KOSONG (frontend otomatis menampilkan foto contoh sampai owner upload foto asli).
 
 3. about — PILIH BLOCK (8 pilihan):
    - "about-shadcn-centered": Centered — heading centered + body + stat grid. Aman, seimbang.
@@ -175,8 +175,8 @@ spacing "comfortable", elevation "flat", decorDensity "minimal", layoutStyle "ed
 {
   "theme": { "fontStyle":"modern-sans", "navbarStyle":"navbar-editorial" },
   "sections": [
-    { "type":"hero", "variant":"default", "content":{ "blockId":"hero-slideshow", "style":"editorial", "slides":[] } },
     { "type":"category-grid", "variant":"default", "content":{ "blockId":"category-grid-strip" } },
+    { "type":"hero", "variant":"default", "content":{ "blockId":"hero-slideshow", "style":"editorial", "slides":[] } },
     { "type":"about", "variant":"default", "content":{ "blockId":"about-shadcn-centered", "eyebrow":"Tentang Kami", "heading":"Kenapa Memilih Kami", "body":"Cerita singkat bisnis." } },
     { "type":"product-grid", "variant":"default", "content":{ "blockId":"product-grid-carousel-row", "eyebrow":"Koleksi", "heading":"Product Bestseller", "browseAllText":"Browse All", "variantLabel":"Warna" } },
     { "type":"contact", "variant":"default", "content":{ "blockId":"contact-shadcn-cards", "eyebrow":"Kontak", "heading":"Hubungi Kami", "whatsapp":"08123456789", "address":"Jl. Contoh No. 123" } },

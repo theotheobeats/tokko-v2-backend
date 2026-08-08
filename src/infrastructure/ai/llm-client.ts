@@ -37,14 +37,14 @@ export async function mockAIGenerate(input: {
   return {
     sections: [
       {
-        type: "hero",
-        variant: "default",
-        content: { blockId: "hero-slideshow", style: "editorial", slides: [] },
-      },
-      {
         type: "category-grid",
         variant: "default",
         content: { blockId: "category-grid-strip" },
+      },
+      {
+        type: "hero",
+        variant: "default",
+        content: { blockId: "hero-slideshow", style: "editorial", slides: [] },
       },
       {
         type: "about",
