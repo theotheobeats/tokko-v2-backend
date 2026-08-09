@@ -9,7 +9,7 @@
 
 ## 1. Definisi
 
-1. **"7okko" / "Platform" / "kami" / "milik kami"** adalah platform pembuat toko online berbasis kecerdasan buatan ("AI") yang diselenggarakan oleh **PT TITU DIGITAL INDONESIA**, beralamat di **[PERLU DIISI — alamat lengkap, mis. Jl. Contoh No. 123, Jakarta Selatan, DKI Jakarta 12345, Indonesia]**, dengan alamat kontak resmi **[PERLU DIISI — email kontak, mis. halo@7okko.com]**.
+1. **"7okko" / "Platform" / "kami" / "milik kami"** adalah platform pembuat toko online berbasis kecerdasan buatan ("AI") yang diselenggarakan oleh **PT TITU LABS INDONESIA**, beralamat di **[PERLU DIISI — alamat lengkap, mis. Jl. Contoh No. 123, Jakarta Selatan, DKI Jakarta 12345, Indonesia]**, dengan alamat kontak resmi **[PERLU DIISI — email kontak, mis. halo@7okko.com]**.
 2. **"Pengguna" / "Anda"** adalah setiap orang perseorangan atau badan usaha yang mendaftar dan menggunakan layanan 7okko, termasuk **"Merchant"** (pemilik toko) dan **"Pembeli"** (pengunjung toko yang melakukan pemesanan).
 3. **"Merchant"** adalah Pengguna yang membuat dan mengelola toko melalui Platform.
 4. **"Layanan"** adalah seluruh fitur yang disediakan Platform, antara lain: generator toko berbasis AI, editor halaman, katalog produk, halaman toko publik di subdomain `*.7okko.com`, formulir pemesanan, dan fitur lain yang ditambahkan kemudian.

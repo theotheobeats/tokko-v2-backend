@@ -9,7 +9,7 @@
 
 ## 1. Pengendali Data Pribadi
 
-1. Pengendali Data Pribadi dalam layanan 7okko adalah **PT TITU DIGITAL INDONESIA** ("7okko", "kami"), beralamat di **[PERLU DIISI — alamat lengkap]**, yang dapat dihubungi melalui **[PERLU DIISI — email resmi, mis. privacy@7okko.com]**.
+1. Pengendali Data Pribadi dalam layanan 7okko adalah **PT TITU LABS INDONESIA** ("7okko", "kami"), beralamat di **[PERLU DIISI — alamat lengkap]**, yang dapat dihubungi melalui **[PERLU DIISI — email resmi, mis. privacy@7okko.com]**.
 2. Sebagai Penyelenggara Sistem Elektronik (PSE), kami menyediakan informasi identitas (nama badan usaha, alamat, dan kontak) yang akurat, jelas, dan dapat dipertanggungjawabkan sesuai Pasal 9 Undang-Undang Nomor 11 Tahun 2008 tentang Informasi dan Transaksi Elektronik jo. Pasal 5 Peraturan Pemerintah Nomor 71 Tahun 2019.
 
 ## 2. Data Pribadi yang Kami Kumpulkan
