@@ -25,6 +25,12 @@ export const stores = sqliteTable("stores", {
   designTokens: text("design_tokens"),
   // Shipping origin (pickup location) — used by Biteship rates/orders.
   originAddress: text("origin_address"),
+  originRt: text("origin_rt"),
+  originRw: text("origin_rw"),
+  originKelurahan: text("origin_kelurahan"),
+  originKecamatan: text("origin_kecamatan"),
+  originCity: text("origin_city"),
+  originProvince: text("origin_province"),
   originPostalCode: text("origin_postal_code"),
   originContactName: text("origin_contact_name"),
   originContactPhone: text("origin_contact_phone"),

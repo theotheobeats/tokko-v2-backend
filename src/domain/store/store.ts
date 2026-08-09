@@ -29,6 +29,12 @@ export interface StoreProps {
   designTokens: Record<string, string> | null;
   // Shipping origin (pickup location) — Biteship rates/orders.
   originAddress: string | null;
+  originRt: string | null;
+  originRw: string | null;
+  originKelurahan: string | null;
+  originKecamatan: string | null;
+  originCity: string | null;
+  originProvince: string | null;
   originPostalCode: string | null;
   originContactName: string | null;
   originContactPhone: string | null;
@@ -77,6 +83,12 @@ export class Store {
       createdAt: new Date().toISOString(),
       designTokens: null,
       originAddress: null,
+      originRt: null,
+      originRw: null,
+      originKelurahan: null,
+      originKecamatan: null,
+      originCity: null,
+      originProvince: null,
       originPostalCode: null,
       originContactName: null,
       originContactPhone: null,
@@ -114,6 +126,12 @@ export class Store {
   get createdAt() { return this.props.createdAt; }
   get designTokens() { return this.props.designTokens; }
   get originAddress() { return this.props.originAddress; }
+  get originRt() { return this.props.originRt; }
+  get originRw() { return this.props.originRw; }
+  get originKelurahan() { return this.props.originKelurahan; }
+  get originKecamatan() { return this.props.originKecamatan; }
+  get originCity() { return this.props.originCity; }
+  get originProvince() { return this.props.originProvince; }
   get originPostalCode() { return this.props.originPostalCode; }
   get originContactName() { return this.props.originContactName; }
   get originContactPhone() { return this.props.originContactPhone; }
@@ -131,14 +149,31 @@ export class Store {
     return Boolean(this.props.bankName && this.props.bankAccountNumber && this.props.bankAccountName);
   }
 
-  /** Shipping origin is fully configured when address + postal + contact exist. */
+  /** Shipping origin is fully configured when address + city + province + postal + contact exist. */
   get hasShippingOrigin(): boolean {
     return Boolean(
       this.props.originAddress &&
+      this.props.originCity &&
+      this.props.originProvince &&
       this.props.originPostalCode &&
       this.props.originContactName &&
       this.props.originContactPhone,
     );
+  }
+
+  /** Full human-readable origin address (for pickup display / courier orders). */
+  get fullOriginAddress(): string | null {
+    if (!this.props.originAddress) return null;
+    const parts = [
+      this.props.originAddress,
+      [this.props.originRt, this.props.originRw].filter(Boolean).join("/") ? `RT ${this.props.originRt} / RW ${this.props.originRw}` : null,
+      this.props.originKelurahan,
+      this.props.originKecamatan,
+      this.props.originCity,
+      this.props.originProvince,
+      this.props.originPostalCode,
+    ].filter(Boolean);
+    return parts.join(", ");
   }
 
   /** Publish the store — requires at least 1 product */
@@ -189,6 +224,12 @@ export class Store {
   /** Configure the shipping origin (pickup location) — Biteship rates/orders. */
   updateShippingOrigin(params: {
     originAddress?: string | null;
+    originRt?: string | null;
+    originRw?: string | null;
+    originKelurahan?: string | null;
+    originKecamatan?: string | null;
+    originCity?: string | null;
+    originProvince?: string | null;
     originPostalCode?: string | null;
     originContactName?: string | null;
     originContactPhone?: string | null;
@@ -196,6 +237,12 @@ export class Store {
     originLongitude?: number | null;
   }): Store {
     if (params.originAddress !== undefined) this.props.originAddress = params.originAddress?.trim() || null;
+    if (params.originRt !== undefined) this.props.originRt = params.originRt?.trim() || null;
+    if (params.originRw !== undefined) this.props.originRw = params.originRw?.trim() || null;
+    if (params.originKelurahan !== undefined) this.props.originKelurahan = params.originKelurahan?.trim() || null;
+    if (params.originKecamatan !== undefined) this.props.originKecamatan = params.originKecamatan?.trim() || null;
+    if (params.originCity !== undefined) this.props.originCity = params.originCity?.trim() || null;
+    if (params.originProvince !== undefined) this.props.originProvince = params.originProvince?.trim() || null;
     if (params.originPostalCode !== undefined) this.props.originPostalCode = params.originPostalCode?.trim() || null;
     if (params.originContactName !== undefined) this.props.originContactName = params.originContactName?.trim() || null;
     if (params.originContactPhone !== undefined) this.props.originContactPhone = params.originContactPhone?.trim() || null;

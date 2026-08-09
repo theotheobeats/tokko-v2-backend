@@ -33,6 +33,8 @@ function storeJSON(store: {
   businessType: string; aestheticPreference: string; whatsappNumber: string;
   status: string; heroImageUrl: string | null; logoUrl: string | null;
   originAddress: string | null; originPostalCode: string | null;
+  originRt: string | null; originRw: string | null; originKelurahan: string | null;
+  originKecamatan: string | null; originCity: string | null; originProvince: string | null;
   originContactName: string | null; originContactPhone: string | null;
   originLatitude: number | null; originLongitude: number | null;
   paymentOnline: boolean; bankName: string | null;
@@ -51,6 +53,12 @@ function storeJSON(store: {
     heroImageUrl: store.heroImageUrl,
     logoUrl: store.logoUrl,
     originAddress: store.originAddress,
+    originRt: store.originRt,
+    originRw: store.originRw,
+    originKelurahan: store.originKelurahan,
+    originKecamatan: store.originKecamatan,
+    originCity: store.originCity,
+    originProvince: store.originProvince,
     originPostalCode: store.originPostalCode,
     originContactName: store.originContactName,
     originContactPhone: store.originContactPhone,
@@ -397,6 +405,12 @@ storesRouter.get("/:id/couriers", async (c) => {
 // ---------------------------------------------------------------------------
 storesRouter.patch("/:id/shipping", zValidator("json", z.object({
   originAddress: z.string().nullable().optional(),
+  originRt: z.string().nullable().optional(),
+  originRw: z.string().nullable().optional(),
+  originKelurahan: z.string().nullable().optional(),
+  originKecamatan: z.string().nullable().optional(),
+  originCity: z.string().nullable().optional(),
+  originProvince: z.string().nullable().optional(),
   originPostalCode: z.string().nullable().optional(),
   originContactName: z.string().nullable().optional(),
   originContactPhone: z.string().nullable().optional(),
@@ -419,6 +433,12 @@ storesRouter.patch("/:id/shipping", zValidator("json", z.object({
   const body = c.req.valid("json");
   store.updateShippingOrigin({
     originAddress: body.originAddress,
+    originRt: body.originRt,
+    originRw: body.originRw,
+    originKelurahan: body.originKelurahan,
+    originKecamatan: body.originKecamatan,
+    originCity: body.originCity,
+    originProvince: body.originProvince,
     originPostalCode: body.originPostalCode,
     originContactName: body.originContactName,
     originContactPhone: body.originContactPhone,
