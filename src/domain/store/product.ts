@@ -4,7 +4,7 @@
 
 import type { EntityId, ProductType as ProductTypeT } from "../shared/types";
 import { createEntityId, ProductType } from "../shared/types";
-import { isValidPrice, isValidProductType, isValidSlug, isValidStock, isValidWeight } from "./rules";
+import { isValidPrice, isValidProductType, isValidSlug, isValidStock, isValidWeight, isValidDimension } from "./rules";
 
 export interface ProductProps {
   id: EntityId;
@@ -19,6 +19,9 @@ export interface ProductProps {
   categoryId: EntityId | null;
   stock: number | null; // available units; null = unlimited, 0 = sold out
   weight: number | null; // grams — used for Biteship shipping rates
+  width: number | null; // cm — used for volumetric shipping rates
+  length: number | null; // cm
+  height: number | null; // cm
   isAvailable: boolean;
   type: ProductTypeT;
   createdAt: string; // ISO — used for "newest" sorting
@@ -39,6 +42,9 @@ export class Product {
     categoryId?: EntityId | null;
     stock?: number | null;
     weight?: number | null;
+    width?: number | null;
+    length?: number | null;
+    height?: number | null;
     type?: ProductTypeT;
   }): Product {
     if (!params.name.trim()) throw new Error("Product name is required");
@@ -54,6 +60,15 @@ export class Product {
     }
     if (params.weight !== undefined && params.weight !== null && !isValidWeight(params.weight)) {
       throw new Error("Weight must be >= 1 gram");
+    }
+    if (params.width !== undefined && params.width !== null && !isValidDimension(params.width)) {
+      throw new Error("Width must be >= 1 cm");
+    }
+    if (params.length !== undefined && params.length !== null && !isValidDimension(params.length)) {
+      throw new Error("Length must be >= 1 cm");
+    }
+    if (params.height !== undefined && params.height !== null && !isValidDimension(params.height)) {
+      throw new Error("Height must be >= 1 cm");
     }
 
     const type = params.type ?? ProductType.Product;
@@ -72,6 +87,9 @@ export class Product {
       categoryId: params.categoryId ?? null,
       stock: params.stock ?? null,
       weight: params.weight ?? null,
+      width: params.width ?? null,
+      length: params.length ?? null,
+      height: params.height ?? null,
       isAvailable: true,
       type,
       createdAt: new Date().toISOString(),
@@ -94,6 +112,9 @@ export class Product {
   get categoryId() { return this.props.categoryId; }
   get stock() { return this.props.stock; }
   get weight() { return this.props.weight; }
+  get width() { return this.props.width; }
+  get length() { return this.props.length; }
+  get height() { return this.props.height; }
   /** true when stock is tracked and exhausted (0 or negative). */
   get isOutOfStock(): boolean {
     return this.props.stock !== null && this.props.stock <= 0;
@@ -133,6 +154,9 @@ export class Product {
     categoryId?: EntityId | null;
     stock?: number | null;
     weight?: number | null;
+    width?: number | null;
+    length?: number | null;
+    height?: number | null;
     type?: ProductTypeT;
   }): Product {
     if (params.name !== undefined) this.props.name = params.name;
@@ -155,6 +179,18 @@ export class Product {
     if (params.weight !== undefined) {
       if (params.weight !== null && !isValidWeight(params.weight)) throw new Error("Weight must be >= 1 gram");
       this.props.weight = params.weight;
+    }
+    if (params.width !== undefined) {
+      if (params.width !== null && !isValidDimension(params.width)) throw new Error("Width must be >= 1 cm");
+      this.props.width = params.width;
+    }
+    if (params.length !== undefined) {
+      if (params.length !== null && !isValidDimension(params.length)) throw new Error("Length must be >= 1 cm");
+      this.props.length = params.length;
+    }
+    if (params.height !== undefined) {
+      if (params.height !== null && !isValidDimension(params.height)) throw new Error("Height must be >= 1 cm");
+      this.props.height = params.height;
     }
     if (params.type !== undefined) {
       if (!isValidProductType(params.type)) throw new Error("Invalid product type");

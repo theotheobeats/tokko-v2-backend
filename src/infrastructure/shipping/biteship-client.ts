@@ -19,6 +19,10 @@ export interface RatesItem {
   quantity: number;
   /** Weight in grams — required by Biteship. */
   weight: number;
+  /** Dimensions in cm — optional; Biteship uses them for volumetric weight. */
+  length?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface CourierRate {
@@ -103,6 +107,9 @@ export class BiteshipClient implements ShippingProviderClient {
         value: i.value,
         quantity: i.quantity,
         weight: i.weight,
+        ...(i.length != null && i.width != null && i.height != null
+          ? { length: i.length, width: i.width, height: i.height }
+          : {}),
       })),
     };
 

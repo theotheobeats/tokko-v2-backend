@@ -25,6 +25,9 @@ export interface UpdateProductInput {
   categoryId?: EntityId | null;
   stock?: number | null;
   weight?: number | null;
+  width?: number | null;
+  length?: number | null;
+  height?: number | null;
   isAvailable?: boolean;
   type?: ProductTypeT;
   variants?: CreateVariantInput[] | null;
@@ -77,6 +80,16 @@ export class UpdateProduct {
       }
     }
 
+    // Validate dimensions if provided
+    for (const [key, label] of [
+      ["width", "Lebar"], ["length", "Panjang"], ["height", "Tinggi"],
+    ] as const) {
+      const v = input[key];
+      if (v !== undefined && v !== null && (v < 1 || !Number.isInteger(v))) {
+        return err({ code: "VALIDATION", message: `${label} minimal 1 cm.`, field: key });
+      }
+    }
+
     // Validate type if provided
     if (input.type !== undefined && !isValidProductType(input.type)) {
       return err({ code: "VALIDATION", message: "Tipe produk tidak valid.", field: "type" });
@@ -119,6 +132,9 @@ export class UpdateProduct {
       categoryId: input.categoryId,
       stock: input.stock,
       weight: input.weight,
+      width: input.width,
+      length: input.length,
+      height: input.height,
       type: input.type,
     });
 

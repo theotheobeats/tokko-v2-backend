@@ -20,6 +20,9 @@ export const products = sqliteTable("products", {
   categoryId: text("category_id"), // FK to product_categories
   stock: integer("stock"), // available units; null = unlimited, 0 = sold out
   weight: integer("weight"), // grams — required for Biteship shipping rates
+  width: integer("width"), // cm — volumetric weight for shipping rates
+  length: integer("length"), // cm
+  height: integer("height"), // cm
   isAvailable: integer("is_available").notNull().default(1), // SQLite boolean (0/1)
   type: text("type").notNull().default("product"), // "product" | "service" | "booking"
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),

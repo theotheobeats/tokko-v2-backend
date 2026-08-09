@@ -54,15 +54,24 @@ export class GetShippingRates {
       return err({ code: "DESTINATION_MISSING", message: "Kode pos tujuan belum lengkap." });
     }
 
-    // Weights/values from DB — only physical (product) items ship.
-    const items: { name: string; value: number; quantity: number; weight: number }[] = [];
+    // Weights/dimensions from DB — only physical (product) items ship.
+    // Weight + dimensions are required so courier volumetric pricing works.
+    const items: { name: string; value: number; quantity: number; weight: number; length: number; width: number; height: number }[] = [];
     for (const line of input.items) {
       const product = await this.productRepo.findById(line.productId);
       if (!product || product.type !== "product") continue; // cart re-hydrates removed items
-      if (product.weight == null) {
-        return err({ code: "WEIGHT_MISSING", message: `Lengkapi berat produk "${product.name}".` });
+      if (product.weight == null || product.length == null || product.width == null || product.height == null) {
+        return err({ code: "WEIGHT_MISSING", message: `Lengkapi berat & dimensi (P×L×T) produk "${product.name}" di dashboard agar ongkir bisa dihitung.` });
       }
-      items.push({ name: product.name, value: product.effectivePrice, quantity: line.quantity, weight: product.weight });
+      items.push({
+        name: product.name,
+        value: product.effectivePrice,
+        quantity: line.quantity,
+        weight: product.weight,
+        length: product.length,
+        width: product.width,
+        height: product.height,
+      });
     }
     if (items.length === 0) {
       return err({ code: "WEIGHT_MISSING", message: "Tidak ada produk fisik untuk dikirim." });

@@ -12,6 +12,9 @@ import { createEntityId } from "../../../src/domain/shared/types";
 
 const storeId = createEntityId();
 
+/** Physical products now require weight + dimensions (shipping). */
+const SHIPPABLE = { weight: 500, width: 10, length: 10, height: 5 };
+
 function makeProduct(name: string, overrides: Partial<{ price: number; categoryId: string | null }> = {}) {
   return Product.create({ storeId, name, price: overrides.price ?? 50000, categoryId: overrides.categoryId as any });
 }
@@ -52,7 +55,7 @@ describe("CreateProduct marketplace fields", () => {
 
   it("auto-generates a unique slug from the name", async () => {
     const useCase = new CreateProduct(repo);
-    const result = await useCase.execute({ storeId, name: "Blanket Pouch", price: 40000 });
+    const result = await useCase.execute({ storeId, name: "Blanket Pouch", price: 40000, ...SHIPPABLE });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -66,7 +69,7 @@ describe("CreateProduct marketplace fields", () => {
       slug === "blanket-pouch" ? makeProduct("Existing") : null,
     );
     const useCase = new CreateProduct(repo);
-    const result = await useCase.execute({ storeId, name: "Blanket Pouch", price: 40000 });
+    const result = await useCase.execute({ storeId, name: "Blanket Pouch", price: 40000, ...SHIPPABLE });
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.slug).toBe("blanket-pouch-2");
@@ -75,7 +78,7 @@ describe("CreateProduct marketplace fields", () => {
   it("returns SLUG_TAKEN for an explicit conflicting slug", async () => {
     (repo.findByStoreSlug as any).mockResolvedValue(makeProduct("Other"));
     const useCase = new CreateProduct(repo);
-    const result = await useCase.execute({ storeId, name: "Baru", price: 1000, slug: "other" });
+    const result = await useCase.execute({ storeId, name: "Baru", price: 1000, slug: "other", ...SHIPPABLE });
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("SLUG_TAKEN");
@@ -84,7 +87,7 @@ describe("CreateProduct marketplace fields", () => {
   it("rejects a category that does not belong to the store", async () => {
     const otherCategory = ProductCategory.create({ storeId: createEntityId(), name: "Lain" });
     const useCase = new CreateProduct(repo, mockCategoryRepo({ findById: vi.fn().mockResolvedValue(otherCategory) }));
-    const result = await useCase.execute({ storeId, name: "Baru", price: 1000, categoryId: otherCategory.id });
+    const result = await useCase.execute({ storeId, name: "Baru", price: 1000, categoryId: otherCategory.id, ...SHIPPABLE });
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("CATEGORY_NOT_FOUND");
@@ -98,6 +101,7 @@ describe("CreateProduct marketplace fields", () => {
       name: "Selimut",
       price: 100000,
       variants: [{ name: "Ukuran S", price: 90000 }, { name: "Ukuran M" }],
+      ...SHIPPABLE,
     });
 
     expect(result.ok).toBe(true);

@@ -73,6 +73,11 @@ export function isValidWeight(weight: number): boolean {
   return Number.isInteger(weight) && weight >= 1;
 }
 
+/** Validate a product dimension in cm (must be a positive integer). */
+export function isValidDimension(dim: number): boolean {
+  return Number.isInteger(dim) && dim >= 1;
+}
+
 /**
  * Validate that a product type is one of the supported kinds.
  */

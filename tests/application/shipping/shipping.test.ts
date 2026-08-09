@@ -43,6 +43,9 @@ function makeProduct(overrides: Partial<{ name: string; price: number; weight: n
     name: overrides.name ?? "Selimut",
     price: overrides.price ?? 100000,
     weight: overrides.weight !== undefined ? overrides.weight : 500,
+    width: 10,
+    length: 10,
+    height: 5,
     type: (overrides.type ?? "product") as any,
   });
 }
@@ -142,6 +145,14 @@ describe("GetShippingRates", () => {
 
   it("fails with WEIGHT_MISSING when a physical product lacks weight", async () => {
     const p = makeProduct({ weight: null });
+    const useCase = new GetShippingRates(mockStoreRepo(makeStore()), mockProductRepo([p]), mockProvider());
+    const result = await useCase.execute({ storeId, destinationPostalCode: "40231", items: [{ productId: p.id, quantity: 1 }] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("WEIGHT_MISSING");
+  });
+
+  it("fails with WEIGHT_MISSING when a physical product lacks dimensions", async () => {
+    const p = Product.create({ storeId, name: "Kotak", price: 50000, weight: 500 }); // no width/length/height
     const useCase = new GetShippingRates(mockStoreRepo(makeStore()), mockProductRepo([p]), mockProvider());
     const result = await useCase.execute({ storeId, destinationPostalCode: "40231", items: [{ productId: p.id, quantity: 1 }] });
     expect(result.ok).toBe(false);

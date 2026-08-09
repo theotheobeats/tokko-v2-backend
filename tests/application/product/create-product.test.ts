@@ -30,6 +30,9 @@ const storeId = createEntityId();
 
 describe("CreateProduct use case", () => {
   let repo: ProductRepository;
+
+/** Physical products now require weight + dimensions (shipping). */
+const SHIPPABLE = { weight: 500, width: 10, length: 10, height: 5 };
   let useCase: CreateProduct;
 
   beforeEach(() => {
@@ -43,6 +46,7 @@ describe("CreateProduct use case", () => {
       storeId,
       name: "Rainbow Cake",
       price: 85000,
+      ...SHIPPABLE,
     });
 
     expect(result.ok).toBe(true);
@@ -98,6 +102,7 @@ describe("CreateProduct use case", () => {
       storeId,
       name: "Free Sample",
       price: 0,
+      ...SHIPPABLE,
     });
 
     expect(result.ok).toBe(true);
@@ -110,6 +115,7 @@ describe("CreateProduct use case", () => {
       price: 50000,
       description: "Delicious cake",
       imageUrl: "images/cake.jpg",
+      ...SHIPPABLE,
     });
 
     expect(result.ok).toBe(true);
@@ -128,6 +134,7 @@ describe("CreateProduct use case", () => {
       storeId,
       name: "Cake",
       price: 50000,
+      ...SHIPPABLE,
     });
 
     expect(result.ok).toBe(false);
@@ -144,6 +151,7 @@ describe("CreateProduct use case", () => {
       storeId,
       name: "Cake",
       price: 50000,
+      ...SHIPPABLE,
     });
 
     expect(result.ok).toBe(true);
@@ -155,6 +163,7 @@ describe("CreateProduct use case", () => {
       storeId,
       name: "Cake",
       price: 50000,
+      ...SHIPPABLE,
     });
 
     expect(result.ok).toBe(true);

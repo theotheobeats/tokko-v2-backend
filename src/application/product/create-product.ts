@@ -29,6 +29,9 @@ export interface CreateProductInput {
   categoryId?: EntityId | null;
   stock?: number | null;
   weight?: number | null;
+  width?: number | null;
+  length?: number | null;
+  height?: number | null;
   type?: ProductTypeT;
   variants?: CreateVariantInput[];
 }
@@ -67,11 +70,25 @@ export class CreateProduct {
     if (input.weight !== undefined && input.weight !== null && (input.weight < 1 || !Number.isInteger(input.weight))) {
       return err({ code: "VALIDATION", message: "Berat minimal 1 gram.", field: "weight" });
     }
+    for (const [key, label] of [
+      ["width", "Lebar"], ["length", "Panjang"], ["height", "Tinggi"],
+    ] as const) {
+      const v = input[key];
+      if (v !== undefined && v !== null && (v < 1 || !Number.isInteger(v))) {
+        return err({ code: "VALIDATION", message: `${label} minimal 1 cm.`, field: key });
+      }
+    }
     if (input.type !== undefined && !isValidProductType(input.type)) {
       return err({ code: "VALIDATION", message: "Tipe produk tidak valid.", field: "type" });
     }
     if (input.variants?.some((v) => !v.name.trim())) {
       return err({ code: "VALIDATION", message: "Nama varian wajib diisi.", field: "variants" });
+    }
+
+    // Physical products must be shippable — weight + dimensions are required.
+    const productType = input.type ?? "product";
+    if (productType === "product" && (input.weight == null || input.width == null || input.length == null || input.height == null)) {
+      return err({ code: "VALIDATION", message: "Produk fisik wajib diisi berat, panjang, lebar, dan tinggi (untuk hitung ongkir).", field: "weight" });
     }
 
     // Category must belong to this store
@@ -111,6 +128,9 @@ export class CreateProduct {
       categoryId: input.categoryId,
       stock: input.stock,
       weight: input.weight,
+      width: input.width,
+      length: input.length,
+      height: input.height,
       type: input.type,
     });
 
