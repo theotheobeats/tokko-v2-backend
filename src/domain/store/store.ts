@@ -33,6 +33,11 @@ export interface StoreProps {
   originContactPhone: string | null;
   originLatitude: number | null;
   originLongitude: number | null;
+  // Payment config — online (Xendit) toggle + manual bank transfer details.
+  paymentOnline: boolean;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
 }
 
 export class Store {
@@ -72,6 +77,10 @@ export class Store {
       originContactPhone: null,
       originLatitude: null,
       originLongitude: null,
+      paymentOnline: true,
+      bankName: null,
+      bankAccountNumber: null,
+      bankAccountName: null,
     });
   }
 
@@ -102,6 +111,15 @@ export class Store {
   get originContactPhone() { return this.props.originContactPhone; }
   get originLatitude() { return this.props.originLatitude; }
   get originLongitude() { return this.props.originLongitude; }
+  get paymentOnline() { return this.props.paymentOnline; }
+  get bankName() { return this.props.bankName; }
+  get bankAccountNumber() { return this.props.bankAccountNumber; }
+  get bankAccountName() { return this.props.bankAccountName; }
+
+  /** Manual transfer is configured when all three bank fields are filled. */
+  get hasBankDetails(): boolean {
+    return Boolean(this.props.bankName && this.props.bankAccountNumber && this.props.bankAccountName);
+  }
 
   /** Shipping origin is fully configured when address + postal + contact exist. */
   get hasShippingOrigin(): boolean {
@@ -161,6 +179,20 @@ export class Store {
     if (params.originContactPhone !== undefined) this.props.originContactPhone = params.originContactPhone?.trim() || null;
     if (params.originLatitude !== undefined) this.props.originLatitude = params.originLatitude ?? null;
     if (params.originLongitude !== undefined) this.props.originLongitude = params.originLongitude ?? null;
+    return this;
+  }
+
+  /** Configure the payment settings (online toggle + manual bank details). */
+  updatePaymentConfig(params: {
+    paymentOnline?: boolean;
+    bankName?: string | null;
+    bankAccountNumber?: string | null;
+    bankAccountName?: string | null;
+  }): Store {
+    if (params.paymentOnline !== undefined) this.props.paymentOnline = params.paymentOnline;
+    if (params.bankName !== undefined) this.props.bankName = params.bankName?.trim() || null;
+    if (params.bankAccountNumber !== undefined) this.props.bankAccountNumber = params.bankAccountNumber?.trim() || null;
+    if (params.bankAccountName !== undefined) this.props.bankAccountName = params.bankAccountName?.trim() || null;
     return this;
   }
 

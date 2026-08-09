@@ -25,6 +25,40 @@ const storesRouter = new Hono<{ Bindings: Env }>();
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Full store JSON (all settings incl. shipping origin + payment config). */
+function storeJSON(store: {
+  id: string; name: string; subdomain: string; description: string | null;
+  businessType: string; aestheticPreference: string; whatsappNumber: string;
+  status: string; heroImageUrl: string | null;
+  originAddress: string | null; originPostalCode: string | null;
+  originContactName: string | null; originContactPhone: string | null;
+  originLatitude: number | null; originLongitude: number | null;
+  paymentOnline: boolean; bankName: string | null;
+  bankAccountNumber: string | null; bankAccountName: string | null;
+}) {
+  return {
+    id: store.id,
+    name: store.name,
+    subdomain: store.subdomain,
+    description: store.description,
+    businessType: store.businessType,
+    aestheticPreference: store.aestheticPreference,
+    whatsappNumber: store.whatsappNumber,
+    status: store.status,
+    heroImageUrl: store.heroImageUrl,
+    originAddress: store.originAddress,
+    originPostalCode: store.originPostalCode,
+    originContactName: store.originContactName,
+    originContactPhone: store.originContactPhone,
+    originLatitude: store.originLatitude,
+    originLongitude: store.originLongitude,
+    paymentOnline: store.paymentOnline,
+    bankName: store.bankName,
+    bankAccountNumber: store.bankAccountNumber,
+    bankAccountName: store.bankAccountName,
+  };
+}
+
 /** Require authenticated user — returns 401 if not logged in */
 async function requireAuth(c: any) {
   const auth = createAuth(c.env);
@@ -144,17 +178,7 @@ storesRouter.get("/me", async (c) => {
   }
 
   return c.json({
-    store: {
-      id: store.id,
-      name: store.name,
-      subdomain: store.subdomain,
-      description: store.description,
-      businessType: store.businessType,
-      aestheticPreference: store.aestheticPreference,
-      whatsappNumber: store.whatsappNumber,
-      status: store.status,
-      heroImageUrl: store.heroImageUrl,
-    },
+    store: storeJSON(store),
   });
 });
 
@@ -240,6 +264,11 @@ storesRouter.patch("/:id", zValidator("json", z.object({
   description: z.string().nullable().optional(),
   whatsappNumber: z.string().optional(),
   heroImageUrl: z.string().nullable().optional(),
+  // Payment config
+  paymentOnline: z.boolean().optional(),
+  bankName: z.string().nullable().optional(),
+  bankAccountNumber: z.string().nullable().optional(),
+  bankAccountName: z.string().nullable().optional(),
 })), async (c) => {
   const session = await requireAuth(c);
   if (session instanceof Response) return session;
@@ -268,21 +297,55 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     store.setHeroImage(body.heroImageUrl);
   }
 
+  store.updatePaymentConfig({
+    paymentOnline: body.paymentOnline,
+    bankName: body.bankName,
+    bankAccountNumber: body.bankAccountNumber,
+    bankAccountName: body.bankAccountName,
+  });
+
   await storeRepo.save(store);
 
-  return c.json({
-    store: {
-      id: store.id,
-      name: store.name,
-      subdomain: store.subdomain,
-      description: store.description,
-      businessType: store.businessType,
-      aestheticPreference: store.aestheticPreference,
-      whatsappNumber: store.whatsappNumber,
-      status: store.status,
-      heroImageUrl: store.heroImageUrl,
-    },
+  return c.json({ store: storeJSON(store) });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/stores/:id/shipping — shipping origin (Biteship pickup location)
+// ---------------------------------------------------------------------------
+storesRouter.patch("/:id/shipping", zValidator("json", z.object({
+  originAddress: z.string().nullable().optional(),
+  originPostalCode: z.string().nullable().optional(),
+  originContactName: z.string().nullable().optional(),
+  originContactPhone: z.string().nullable().optional(),
+  originLatitude: z.number().nullable().optional(),
+  originLongitude: z.number().nullable().optional(),
+})), async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko yang dapat mengubah." } }, 403);
+  }
+
+  const body = c.req.valid("json");
+  store.updateShippingOrigin({
+    originAddress: body.originAddress,
+    originPostalCode: body.originPostalCode,
+    originContactName: body.originContactName,
+    originContactPhone: body.originContactPhone,
+    originLatitude: body.originLatitude,
+    originLongitude: body.originLongitude,
   });
+
+  await storeRepo.save(store);
+
+  return c.json({ store: storeJSON(store) });
 });
 
 // ---------------------------------------------------------------------------
@@ -312,12 +375,7 @@ storesRouter.post("/:id/publish", async (c) => {
   }
 
   return c.json({
-    store: {
-      id: result.value.id,
-      name: result.value.name,
-      subdomain: result.value.subdomain,
-      status: result.value.status,
-    },
+    store: storeJSON(result.value),
   });
 });
 
@@ -347,12 +405,7 @@ storesRouter.post("/:id/unpublish", async (c) => {
   }
 
   return c.json({
-    store: {
-      id: result.value.id,
-      name: result.value.name,
-      subdomain: result.value.subdomain,
-      status: result.value.status,
-    },
+    store: storeJSON(result.value),
   });
 });
 

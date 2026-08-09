@@ -153,6 +153,10 @@ export class D1StoreRepository implements StoreRepository {
       originContactPhone: row.originContactPhone,
       originLatitude: row.originLatitude,
       originLongitude: row.originLongitude,
+      paymentOnline: row.paymentOnline === 1,
+      bankName: row.bankName,
+      bankAccountNumber: row.bankAccountNumber,
+      bankAccountName: row.bankAccountName,
     });
   }
 
@@ -178,6 +182,10 @@ export class D1StoreRepository implements StoreRepository {
       originContactPhone: props.originContactPhone,
       originLatitude: props.originLatitude,
       originLongitude: props.originLongitude,
+      paymentOnline: props.paymentOnline ? 1 : 0,
+      bankName: props.bankName,
+      bankAccountNumber: props.bankAccountNumber,
+      bankAccountName: props.bankAccountName,
     };
   }
 }
