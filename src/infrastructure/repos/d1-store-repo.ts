@@ -157,6 +157,8 @@ export class D1StoreRepository implements StoreRepository {
       bankName: row.bankName,
       bankAccountNumber: row.bankAccountNumber,
       bankAccountName: row.bankAccountName,
+      enabledPaymentMethods: row.enabledPaymentMethods ? (JSON.parse(row.enabledPaymentMethods) as string[]) : null,
+      enabledCouriers: row.enabledCouriers ? (JSON.parse(row.enabledCouriers) as string[]) : null,
     });
   }
 
@@ -186,6 +188,8 @@ export class D1StoreRepository implements StoreRepository {
       bankName: props.bankName,
       bankAccountNumber: props.bankAccountNumber,
       bankAccountName: props.bankAccountName,
+      enabledPaymentMethods: props.enabledPaymentMethods ? JSON.stringify(props.enabledPaymentMethods) : null,
+      enabledCouriers: props.enabledCouriers ? JSON.stringify(props.enabledCouriers) : null,
     };
   }
 }

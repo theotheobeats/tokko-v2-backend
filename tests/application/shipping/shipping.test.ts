@@ -34,6 +34,8 @@ function makeStore(origin = true): Store {
     originContactPhone: origin ? "0812" : null,
     originLatitude: origin ? -6.9 : null,
     originLongitude: origin ? 107.6 : null,
+    enabledPaymentMethods: null,
+    enabledCouriers: null,
   });
 }
 
@@ -113,6 +115,24 @@ describe("GetShippingRates", () => {
       originPostalCode: "40111",
       destinationPostalCode: "40231",
       couriers: ["jne", "sicepat", "jnt", "anteraja"],
+    }));
+  });
+
+  it("quotes only the store's enabled couriers", async () => {
+    const p = makeProduct();
+    const provider = mockProvider();
+    const store = Store.from({ ...makeStore().toJSON(), enabledCouriers: ["jnt"] });
+    const useCase = new GetShippingRates(mockStoreRepo(store), mockProductRepo([p]), provider);
+
+    const result = await useCase.execute({
+      storeId,
+      destinationPostalCode: "40231",
+      items: [{ productId: p.id, quantity: 1 }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(provider.getRates).toHaveBeenCalledWith(expect.objectContaining({
+      couriers: ["jnt"],
     }));
   });
 

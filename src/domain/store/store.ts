@@ -38,6 +38,9 @@ export interface StoreProps {
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
+  // Enabled payment methods / couriers (null = platform defaults, all).
+  enabledPaymentMethods: string[] | null;
+  enabledCouriers: string[] | null;
 }
 
 export class Store {
@@ -81,6 +84,8 @@ export class Store {
       bankName: null,
       bankAccountNumber: null,
       bankAccountName: null,
+      enabledPaymentMethods: null,
+      enabledCouriers: null,
     });
   }
 
@@ -115,6 +120,8 @@ export class Store {
   get bankName() { return this.props.bankName; }
   get bankAccountNumber() { return this.props.bankAccountNumber; }
   get bankAccountName() { return this.props.bankAccountName; }
+  get enabledPaymentMethods() { return this.props.enabledPaymentMethods; }
+  get enabledCouriers() { return this.props.enabledCouriers; }
 
   /** Manual transfer is configured when all three bank fields are filled. */
   get hasBankDetails(): boolean {
@@ -188,11 +195,19 @@ export class Store {
     bankName?: string | null;
     bankAccountNumber?: string | null;
     bankAccountName?: string | null;
+    enabledPaymentMethods?: string[] | null;
+    enabledCouriers?: string[] | null;
   }): Store {
     if (params.paymentOnline !== undefined) this.props.paymentOnline = params.paymentOnline;
     if (params.bankName !== undefined) this.props.bankName = params.bankName?.trim() || null;
     if (params.bankAccountNumber !== undefined) this.props.bankAccountNumber = params.bankAccountNumber?.trim() || null;
     if (params.bankAccountName !== undefined) this.props.bankAccountName = params.bankAccountName?.trim() || null;
+    if (params.enabledPaymentMethods !== undefined) {
+      this.props.enabledPaymentMethods = params.enabledPaymentMethods?.length ? [...params.enabledPaymentMethods] : null;
+    }
+    if (params.enabledCouriers !== undefined) {
+      this.props.enabledCouriers = params.enabledCouriers?.length ? [...params.enabledCouriers] : null;
+    }
     return this;
   }
 

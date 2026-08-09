@@ -18,6 +18,8 @@ import { BusinessType, Aesthetic } from "../../domain/store/types";
 import type { EntityId } from "../../domain/shared/types";
 import { mockAIGenerate, generateStore } from "../../infrastructure/ai/deepseek-client";
 import { useRealAi } from "../../infrastructure/ai/ai-mode";
+import { PAYMENT_METHOD_CATALOG, DEFAULT_ENABLED_PAYMENT_METHODS } from "../../application/payment/payment-method-catalog";
+import { COURIER_CATALOG, DEFAULT_COURIERS } from "../../application/shipping/courier-catalog";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
 
@@ -35,6 +37,7 @@ function storeJSON(store: {
   originLatitude: number | null; originLongitude: number | null;
   paymentOnline: boolean; bankName: string | null;
   bankAccountNumber: string | null; bankAccountName: string | null;
+  enabledPaymentMethods: string[] | null; enabledCouriers: string[] | null;
 }) {
   return {
     id: store.id,
@@ -56,6 +59,8 @@ function storeJSON(store: {
     bankName: store.bankName,
     bankAccountNumber: store.bankAccountNumber,
     bankAccountName: store.bankAccountName,
+    enabledPaymentMethods: store.enabledPaymentMethods,
+    enabledCouriers: store.enabledCouriers,
   };
 }
 
@@ -269,6 +274,8 @@ storesRouter.patch("/:id", zValidator("json", z.object({
   bankName: z.string().nullable().optional(),
   bankAccountNumber: z.string().nullable().optional(),
   bankAccountName: z.string().nullable().optional(),
+  enabledPaymentMethods: z.array(z.string()).optional(),
+  enabledCouriers: z.array(z.string()).optional(),
 })), async (c) => {
   const session = await requireAuth(c);
   if (session instanceof Response) return session;
@@ -302,11 +309,65 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     bankName: body.bankName,
     bankAccountNumber: body.bankAccountNumber,
     bankAccountName: body.bankAccountName,
+    enabledPaymentMethods: body.enabledPaymentMethods,
+    enabledCouriers: body.enabledCouriers,
   });
 
   await storeRepo.save(store);
 
   return c.json({ store: storeJSON(store) });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/stores/:id/payment-methods — catalog + per-store enabled flags
+// ---------------------------------------------------------------------------
+storesRouter.get("/:id/payment-methods", async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND" } }, 404);
+  if (store.ownerId !== session.user.id) return c.json({ error: { code: "FORBIDDEN" } }, 403);
+
+  const enabled = new Set(store.enabledPaymentMethods ?? DEFAULT_ENABLED_PAYMENT_METHODS);
+  return c.json({
+    methods: PAYMENT_METHOD_CATALOG.map((m) => ({
+      id: m.id,
+      label: m.label,
+      group: m.group,
+      feePercent: m.feePercent,
+      feeFixed: m.feeFixed,
+      enabled: enabled.has(m.id),
+    })),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/stores/:id/couriers — courier catalog + per-store enabled flags
+// ---------------------------------------------------------------------------
+storesRouter.get("/:id/couriers", async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND" } }, 404);
+  if (store.ownerId !== session.user.id) return c.json({ error: { code: "FORBIDDEN" } }, 403);
+
+  const enabled = new Set(store.enabledCouriers ?? DEFAULT_COURIERS);
+  return c.json({
+    couriers: COURIER_CATALOG.map((c) => ({
+      code: c.code,
+      name: c.name,
+      type: c.type,
+      enabled: enabled.has(c.code),
+    })),
+  });
 });
 
 // ---------------------------------------------------------------------------

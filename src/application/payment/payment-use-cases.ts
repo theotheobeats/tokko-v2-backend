@@ -10,6 +10,7 @@ import type { PaymentStatus } from "../../domain/payment/types";
 import type { PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import type { PaymentProviderClient } from "../../infrastructure/payments/xendit-client";
+import { xenditMethodsFor } from "./payment-method-catalog";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -75,6 +76,8 @@ const CHANNEL_METHODS: Record<string, string[]> = {
 export interface CreatePaymentInput {
   orderId: EntityId;
   channel?: string | null;
+  /** Catalog method ids enabled for this store (e.g. ["qris", "bca"]). */
+  paymentMethodIds?: string[];
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
@@ -105,7 +108,11 @@ export class CreatePayment {
           mobileNumber: input.customerPhone?.trim() || undefined,
           email: input.customerEmail?.trim() || undefined,
         },
-        paymentMethods: input.channel ? CHANNEL_METHODS[input.channel] : undefined,
+        paymentMethods: input.paymentMethodIds?.length
+          ? xenditMethodsFor(input.paymentMethodIds)
+          : input.channel
+            ? CHANNEL_METHODS[input.channel]
+            : undefined,
         successRedirectUrl: input.successRedirectUrl,
         failureRedirectUrl: input.failureRedirectUrl,
       });

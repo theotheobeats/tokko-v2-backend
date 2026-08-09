@@ -33,6 +33,8 @@ export const stores = sqliteTable("stores", {
   bankName: text("bank_name"), // manual transfer — bank name
   bankAccountNumber: text("bank_account_number"), // manual transfer — account number
   bankAccountName: text("bank_account_name"), // manual transfer — account holder
+  enabledPaymentMethods: text("enabled_payment_methods"), // JSON array of catalog ids — null = all
+  enabledCouriers: text("enabled_couriers"), // JSON array of courier codes — null = all
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

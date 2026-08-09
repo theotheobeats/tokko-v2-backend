@@ -37,6 +37,7 @@ const createPaymentSchema = z.object({
   channel: z
     .enum(Object.values(PaymentChannel) as [string, ...string[]])
     .optional(),
+  paymentMethodIds: z.array(z.string()).max(20).optional(),
   customerName: z.string().max(200).optional(),
   customerPhone: z.string().max(40).optional(),
   customerEmail: z.string().email().optional().or(z.literal("")),
@@ -61,6 +62,7 @@ paymentsRouter.post("/orders/:orderId/payment", zValidator("json", createPayment
   const result = await useCase.execute({
     orderId,
     channel: input.channel,
+    paymentMethodIds: input.paymentMethodIds,
     customerName: input.customerName,
     customerPhone: input.customerPhone,
     customerEmail: input.customerEmail || undefined,

@@ -92,6 +92,13 @@ export class GetShippingRates {
       }
     }
 
+    // Couriers = the store's enabled list (falls back to platform defaults).
+    // Instant couriers only join the quote when coordinates resolved.
+    const storeCouriers = store.enabledCouriers?.length ? store.enabledCouriers : [...STANDARD_COURIERS, ...INSTANT_COURIERS];
+    const couriers = destLat != null
+      ? storeCouriers.filter((c) => [...STANDARD_COURIERS, ...INSTANT_COURIERS].includes(c))
+      : storeCouriers.filter((c) => STANDARD_COURIERS.includes(c));
+
     try {
       const rates = await this.provider.getRates({
         originPostalCode: store.originPostalCode ?? undefined,
@@ -100,7 +107,7 @@ export class GetShippingRates {
         originLongitude: originLng,
         destinationLatitude: destLat,
         destinationLongitude: destLng,
-        couriers: destLat != null ? [...STANDARD_COURIERS, ...INSTANT_COURIERS] : STANDARD_COURIERS,
+        couriers,
         items,
       });
       return ok(rates);
