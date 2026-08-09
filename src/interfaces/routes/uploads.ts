@@ -43,8 +43,8 @@ uploadsRouter.post("/stores/:storeId/upload", async (c) => {
     return c.json({ error: { code: "VALIDATION", message: "File wajib diunggah." } }, 400);
   }
 
-  if (purpose !== "product" && purpose !== "hero") {
-    return c.json({ error: { code: "VALIDATION", message: "Purpose harus 'product' atau 'hero'." } }, 400);
+  if (purpose !== "product" && purpose !== "hero" && purpose !== "logo") {
+    return c.json({ error: { code: "VALIDATION", message: "Purpose harus 'product', 'hero', atau 'logo'." } }, 400);
   }
 
   // Use R2 storage adapter

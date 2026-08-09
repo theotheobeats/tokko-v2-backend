@@ -21,6 +21,7 @@ export interface StoreProps {
   whatsappNumber: string;
   status: StoreStatus;
   heroImageUrl: string | null;
+  logoUrl: string | null;
   productCount: number;
   suspendedAt: string | null;
   suspendedReason: string | null;
@@ -69,6 +70,7 @@ export class Store {
       whatsappNumber: params.whatsappNumber,
       status: StoreStatus.Draft,
       heroImageUrl: null,
+      logoUrl: null,
       productCount: 0,
       suspendedAt: null,
       suspendedReason: null,
@@ -105,6 +107,7 @@ export class Store {
   get whatsappNumber() { return this.props.whatsappNumber; }
   get status() { return this.props.status; }
   get heroImageUrl() { return this.props.heroImageUrl; }
+  get logoUrl() { return this.props.logoUrl; }
   get productCount() { return this.props.productCount; }
   get suspendedAt() { return this.props.suspendedAt; }
   get suspendedReason() { return this.props.suspendedReason; }
@@ -168,6 +171,18 @@ export class Store {
   /** Set hero image */
   setHeroImage(url: string | null): Store {
     this.props.heroImageUrl = url;
+    return this;
+  }
+
+  /** Set the store logo (navbar/brand). */
+  setLogo(url: string | null): Store {
+    this.props.logoUrl = url;
+    return this;
+  }
+
+  /** Change the subdomain (validated by the caller against rules/uniqueness). */
+  changeSubdomain(subdomain: string): Store {
+    this.props.subdomain = subdomain;
     return this;
   }
 

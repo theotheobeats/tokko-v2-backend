@@ -18,6 +18,7 @@ export const stores = sqliteTable("stores", {
   whatsappNumber: text("whatsapp_number").notNull(),
   status: text("status").notNull().default("draft"),
   heroImageUrl: text("hero_image_url"),
+  logoUrl: text("logo_url"), // store logo — navbar/brand mark
   suspendedAt: text("suspended_at"),
   suspendedReason: text("suspended_reason"),
   /** Site-wide visual theme (design tokens), shared by all pages. */

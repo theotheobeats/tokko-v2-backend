@@ -14,7 +14,7 @@ import type { FileStorage } from "../../infrastructure/storage/file-storage";
 export interface UploadImageInput {
   storeId: EntityId;
   file: File;
-  purpose: "product" | "hero";
+  purpose: "product" | "hero" | "logo";
 }
 
 export interface UploadImageOutput {

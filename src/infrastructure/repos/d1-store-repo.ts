@@ -142,6 +142,7 @@ export class D1StoreRepository implements StoreRepository {
       whatsappNumber: row.whatsappNumber,
       status: row.status as StoreProps["status"],
       heroImageUrl: row.heroImageUrl,
+      logoUrl: row.logoUrl,
       productCount: 0, // populated separately via countProducts()
       suspendedAt: row.suspendedAt,
       suspendedReason: row.suspendedReason,
@@ -174,6 +175,7 @@ export class D1StoreRepository implements StoreRepository {
       whatsappNumber: props.whatsappNumber,
       status: props.status,
       heroImageUrl: props.heroImageUrl,
+      logoUrl: props.logoUrl,
       suspendedAt: props.suspendedAt,
       suspendedReason: props.suspendedReason,
       createdAt: props.createdAt,

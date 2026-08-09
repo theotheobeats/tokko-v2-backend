@@ -31,7 +31,7 @@ const storesRouter = new Hono<{ Bindings: Env }>();
 function storeJSON(store: {
   id: string; name: string; subdomain: string; description: string | null;
   businessType: string; aestheticPreference: string; whatsappNumber: string;
-  status: string; heroImageUrl: string | null;
+  status: string; heroImageUrl: string | null; logoUrl: string | null;
   originAddress: string | null; originPostalCode: string | null;
   originContactName: string | null; originContactPhone: string | null;
   originLatitude: number | null; originLongitude: number | null;
@@ -49,6 +49,7 @@ function storeJSON(store: {
     whatsappNumber: store.whatsappNumber,
     status: store.status,
     heroImageUrl: store.heroImageUrl,
+    logoUrl: store.logoUrl,
     originAddress: store.originAddress,
     originPostalCode: store.originPostalCode,
     originContactName: store.originContactName,
@@ -269,6 +270,8 @@ storesRouter.patch("/:id", zValidator("json", z.object({
   description: z.string().nullable().optional(),
   whatsappNumber: z.string().optional(),
   heroImageUrl: z.string().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
+  subdomain: z.string().optional(),
   // Payment config
   paymentOnline: z.boolean().optional(),
   bankName: z.string().nullable().optional(),
@@ -302,6 +305,27 @@ storesRouter.patch("/:id", zValidator("json", z.object({
 
   if (body.heroImageUrl !== undefined) {
     store.setHeroImage(body.heroImageUrl);
+  }
+
+  if (body.logoUrl !== undefined) {
+    store.setLogo(body.logoUrl);
+  }
+
+  // Subdomain change — validated + uniqueness checked (excluding self).
+  const RESERVED_SUBDOMAINS = new Set(["app", "api", "www", "admin", "checkout"]);
+  if (body.subdomain !== undefined) {
+    const sub = body.subdomain.trim().toLowerCase();
+    if (sub.length < 2 || sub.length > 40 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(sub)) {
+      return c.json({ error: { code: "VALIDATION", message: "Subdomain hanya huruf kecil, angka, dan tanda hubung (2-40 karakter).", field: "subdomain" } }, 400);
+    }
+    if (RESERVED_SUBDOMAINS.has(sub)) {
+      return c.json({ error: { code: "VALIDATION", message: "Subdomain tersebut dipakai platform.", field: "subdomain" } }, 400);
+    }
+    const clash = await storeRepo.findBySubdomain(sub);
+    if (clash && clash.id !== store.id) {
+      return c.json({ error: { code: "VALIDATION", message: "Subdomain sudah dipakai toko lain.", field: "subdomain" } }, 400);
+    }
+    store.changeSubdomain(sub);
   }
 
   store.updatePaymentConfig({
