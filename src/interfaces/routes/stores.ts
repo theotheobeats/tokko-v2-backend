@@ -88,19 +88,27 @@ const generateSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/stores/check-subdomain?name=...
+// GET /api/stores/check-subdomain?name=... | ?subdomain=...
 // ---------------------------------------------------------------------------
 storesRouter.get("/check-subdomain", async (c) => {
   const name = c.req.query("name");
-  if (!name) {
-    return c.json({ error: { code: "VALIDATION", message: "Parameter 'name' diperlukan." } }, 400);
+  const direct = c.req.query("subdomain");
+  if (!name && !direct) {
+    return c.json({ error: { code: "VALIDATION", message: "Parameter 'name' atau 'subdomain' diperlukan." } }, 400);
   }
 
-  const subdomain = generateSubdomain(name);
+  const subdomain = direct?.trim().toLowerCase() ?? generateSubdomain(name ?? "");
   const db = createDb(c.env.DB);
   const storeRepo = new D1StoreRepository(db);
-  const existing = await storeRepo.findBySubdomain(subdomain);
 
+  // Format + reserved checks for direct subdomain lookups.
+  const RESERVED_SUBDOMAINS = new Set(["app", "api", "www", "admin", "checkout"]);
+  const invalid = subdomain.length < 2 || subdomain.length > 40 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(subdomain);
+  if (invalid || RESERVED_SUBDOMAINS.has(subdomain)) {
+    return c.json({ subdomain, available: false, reserved: RESERVED_SUBDOMAINS.has(subdomain), invalid });
+  }
+
+  const existing = await storeRepo.findBySubdomain(subdomain);
   return c.json({ subdomain, available: !existing });
 });
 
