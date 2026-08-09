@@ -25,6 +25,19 @@ function serializeStoreRow(row: typeof stores.$inferSelect) {
     whatsappNumber: row.whatsappNumber,
     status: row.status,
     heroImageUrl: row.heroImageUrl,
+    logoUrl: row.logoUrl,
+    originAddress: row.originAddress,
+    originPostalCode: row.originPostalCode,
+    originContactName: row.originContactName,
+    originContactPhone: row.originContactPhone,
+    originLatitude: row.originLatitude,
+    originLongitude: row.originLongitude,
+    paymentOnline: row.paymentOnline === 1,
+    bankName: row.bankName,
+    bankAccountNumber: row.bankAccountNumber,
+    bankAccountName: row.bankAccountName,
+    enabledPaymentMethods: row.enabledPaymentMethods ? (JSON.parse(row.enabledPaymentMethods) as string[]) : null,
+    enabledCouriers: row.enabledCouriers ? (JSON.parse(row.enabledCouriers) as string[]) : null,
   };
 }
 

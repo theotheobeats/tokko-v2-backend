@@ -240,17 +240,7 @@ storesRouter.get("/by-subdomain", async (c) => {
   }
 
   return c.json({
-    store: {
-      id: store.id,
-      name: store.name,
-      subdomain: store.subdomain,
-      description: store.description,
-      businessType: store.businessType,
-      aestheticPreference: store.aestheticPreference,
-      whatsappNumber: store.whatsappNumber,
-      status: store.status,
-      heroImageUrl: store.heroImageUrl,
-    },
+    store: storeJSON(store),
     sections: serializePage(page, store.designTokens).sections,
     products: products.map((p) => ({
       ...p,
