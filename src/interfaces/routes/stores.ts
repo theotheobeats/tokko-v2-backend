@@ -263,7 +263,7 @@ storesRouter.get("/by-subdomain", async (c) => {
 
   const plan = await planService(db).viewOf(store);
   const base = storeJSON(store, plan);
-  // Online checkout is Commerce-only — hide it from non-commerce storefronts
+  // Online checkout is available on Pro & Commerce — hide it only from trial/none storefronts
   // (the merchant toggle stays on their settings, but it doesn't surface).
   const storePayload = { ...base, paymentOnline: base.paymentOnline && plan.onlineCheckout, paused };
 
@@ -329,10 +329,10 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     whatsappNumber: body.whatsappNumber,
   });
 
-  // Gate: online checkout (Xendit) is Commerce-only.
+  // Gate: online checkout (Xendit) is available on Pro & Commerce.
   if (body.paymentOnline === true && !(await planService(db).canUseOnlineCheckout(store))) {
     return c.json({
-      error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Commerce.", field: "paymentOnline" },
+      error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Pro dan Commerce.", field: "paymentOnline" },
     }, 403);
   }
 

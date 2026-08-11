@@ -47,7 +47,7 @@ describe("PlanService", () => {
     expect(await service.tierOf(makeStore(5))).toBe(Tier.Commerce);
   });
 
-  it("online checkout is commerce-only", async () => {
+  it("online checkout is available on pro and commerce, but not trial", async () => {
     const pro = Subscription.create({
       id: createEntityId(),
       storeId: createEntityId(),
@@ -55,7 +55,11 @@ describe("PlanService", () => {
       currentPeriodEnd: new Date(Date.now() + 30 * DAY).toISOString(),
     });
     const service = new PlanService(stubRepo(pro));
-    expect(await service.canUseOnlineCheckout(makeStore(null))).toBe(false);
+    expect(await service.canUseOnlineCheckout(makeStore(null))).toBe(true);
+
+    // Trial has no online checkout.
+    const trialService = new PlanService(stubRepo(null));
+    expect(await trialService.canUseOnlineCheckout(makeStore(5))).toBe(false);
   });
 
   it("viewOf exposes watermark + limits for a trial store", async () => {
