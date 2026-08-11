@@ -13,6 +13,8 @@ export interface SubscriptionProps {
   status: SubscriptionStatus;
   currentPeriodEnd: string | null;
   externalRef: string | null;
+  /** Pending auto-renewal invoice external_id (set by the renewal job, cleared on payment). */
+  renewalInvoiceExternalId: string | null;
   startedAt: string;
   updatedAt: string;
 }
@@ -29,6 +31,7 @@ export class Subscription {
     status?: SubscriptionStatus;
     currentPeriodEnd?: string | null;
     externalRef?: string | null;
+    renewalInvoiceExternalId?: string | null;
     startedAt?: string;
     updatedAt?: string;
   }): Subscription {
@@ -41,6 +44,7 @@ export class Subscription {
       status: params.status ?? "active",
       currentPeriodEnd: params.currentPeriodEnd ?? null,
       externalRef: params.externalRef ?? null,
+      renewalInvoiceExternalId: params.renewalInvoiceExternalId ?? null,
       startedAt: params.startedAt ?? new Date().toISOString(),
       updatedAt: params.updatedAt ?? new Date().toISOString(),
     });
@@ -58,6 +62,7 @@ export class Subscription {
   get status() { return this.props.status; }
   get currentPeriodEnd() { return this.props.currentPeriodEnd; }
   get externalRef() { return this.props.externalRef; }
+  get renewalInvoiceExternalId() { return this.props.renewalInvoiceExternalId; }
   get startedAt() { return this.props.startedAt; }
   get updatedAt() { return this.props.updatedAt; }
 

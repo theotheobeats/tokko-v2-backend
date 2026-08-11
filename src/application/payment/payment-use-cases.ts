@@ -151,6 +151,11 @@ export class HandleXenditWebhook {
   constructor(
     private readonly paymentRepo: PaymentRepository,
     private readonly orderRepo: OrderRepository,
+    /** Commission-path merchants: record an accrual entry when an order is paid. */
+    private readonly commission?: {
+      storeRepo: import("../store/store-repo").StoreRepository;
+      ledger: import("../../infrastructure/repos/d1-commission-ledger").CommissionLedger;
+    },
   ) {}
 
   /**
@@ -195,6 +200,26 @@ export class HandleXenditWebhook {
             : {}),
         });
         await this.orderRepo.save(order);
+      }
+
+      // Commission path (selective): accrual entry per paid order.
+      if (this.commission) {
+        try {
+          const store = await this.commission.storeRepo.findById(payment.storeId);
+          if (store?.commissionRate) {
+            const rate = store.commissionRate;
+            await this.commission.ledger.record({
+              storeId: store.id,
+              orderId: order?.id ?? payment.orderId,
+              orderAmount: payment.amount,
+              rate,
+              fee: Math.round((payment.amount * rate) / 100),
+            });
+          }
+        } catch (e) {
+          // Ledger failure must not break payment processing.
+          console.error("[commission] failed to record entry:", e);
+        }
       }
     }
 

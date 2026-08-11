@@ -5,11 +5,13 @@ import type { Env } from "../../types";
 import { requireUser } from "../middleware/auth";
 import { createDb } from "../../infrastructure/db/drizzle";
 import { D1PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
+import { D1CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
 import { D1OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { PlanService } from "../../application/plan/plan-service";
 import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
+import { SUBSCRIPTION_EXTERNAL_ID_PREFIX } from "../../domain/plan/pricing";
 import {
   CreatePayment,
   HandleXenditWebhook,
@@ -129,7 +131,36 @@ paymentsRouter.post("/webhooks/xendit", async (c) => {
   }
 
   const db = createDb(env.DB);
-  const useCase = new HandleXenditWebhook(new D1PaymentRepository(db), new D1OrderRepository(db));
+
+  // Subscription invoices (tokko-sub::…) route to plan activation;
+  // everything else is an order payment.
+  if (payload?.external_id?.startsWith(SUBSCRIPTION_EXTERNAL_ID_PREFIX)) {
+    const { HandleSubscriptionInvoice, SubscriptionStoreNotFoundError, SubscriptionAmountMismatchError } =
+      await import("../../application/plan/subscription-webhook");
+    const subResult = await new HandleSubscriptionInvoice(
+      new D1StoreRepository(db),
+      new D1SubscriptionRepository(db),
+    ).execute(payload);
+    if (!subResult.ok) {
+      if (subResult.error instanceof SubscriptionStoreNotFoundError) {
+        return c.json({ error: { code: "SUBSCRIPTION_STORE_NOT_FOUND" } }, 404);
+      }
+      if (subResult.error instanceof SubscriptionAmountMismatchError) {
+        return c.json({ error: { code: "SUBSCRIPTION_AMOUNT_MISMATCH" } }, 400);
+      }
+      return c.json({ error: { code: "UNKNOWN" } }, 400);
+    }
+    return c.json({ handled: subResult.value.handled });
+  }
+
+  const useCase = new HandleXenditWebhook(
+    new D1PaymentRepository(db),
+    new D1OrderRepository(db),
+    {
+      storeRepo: new D1StoreRepository(db),
+      ledger: new D1CommissionLedger(db),
+    },
+  );
   const result = await useCase.execute(payload);
 
   if (!result.ok) {

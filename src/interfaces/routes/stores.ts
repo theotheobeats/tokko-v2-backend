@@ -22,6 +22,8 @@ import { PAYMENT_METHOD_CATALOG, DEFAULT_ENABLED_PAYMENT_METHODS } from "../../a
 import { COURIER_CATALOG, DEFAULT_COURIERS } from "../../application/shipping/courier-catalog";
 import { PlanService, type PlanView } from "../../application/plan/plan-service";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
+import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
 
@@ -371,6 +373,60 @@ storesRouter.patch("/:id", zValidator("json", z.object({
   await storeRepo.save(store);
 
   return c.json({ store: storeJSON(store, await planService(db).viewOf(store)) });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/stores/:id/subscription-checkout — buy/upgrade a plan (owner)
+// ---------------------------------------------------------------------------
+const subscriptionCheckoutSchema = z.object({
+  plan: z.enum(["pro", "commerce"]),
+  cycle: z.enum(["monthly", "annual"]).default("annual"),
+});
+
+storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionCheckoutSchema), async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const { plan, cycle } = c.req.valid("json");
+  const amount = priceFor(plan, cycle);
+
+  // Real payments required — no mock invoices for subscriptions.
+  const provider = createPaymentProvider(c.env);
+  const { useRealPayments } = await import("../../infrastructure/payments/xendit-client");
+  if (!useRealPayments(c.env)) {
+    return c.json({
+      error: { code: "PAYMENT_UNAVAILABLE", message: "Pembayaran langganan belum tersedia saat ini." },
+    }, 502);
+  }
+
+  const externalId = subscriptionExternalId(store.id, plan, cycle, `${Date.now()}`);
+  const label = plan === "pro" ? "Pro" : "Commerce";
+  const cycleLabel = cycle === "annual" ? "tahunan" : "bulanan";
+  const invoice = await provider.createInvoice({
+    externalId,
+    amount,
+    description: `Langganan Tokko ${label} (${cycleLabel})`,
+    customer: { givenNames: store.name, email: session.user.email },
+    successRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
+    failureRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
+  });
+
+  return c.json({
+    invoiceUrl: invoice.invoiceUrl,
+    externalId,
+    plan,
+    cycle,
+    amount,
+  }, 201);
 });
 
 // ---------------------------------------------------------------------------

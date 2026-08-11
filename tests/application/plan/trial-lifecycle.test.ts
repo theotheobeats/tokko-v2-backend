@@ -5,6 +5,7 @@ import type { SubscriptionRepository } from "../../../src/infrastructure/repos/d
 import { Store } from "../../../src/domain/store/store";
 import { BusinessType, Aesthetic, StoreStatus } from "../../../src/domain/store/types";
 import { createEntityId } from "../../../src/domain/shared/types";
+import { Subscription } from "../../../src/domain/plan/subscription";
 
 const DAY = 86_400_000;
 
@@ -22,12 +23,15 @@ function makeStore(trialDaysFromNow: number | null, overrides: Partial<Parameter
 
 function stubRepos(stores: Store[], subActive: boolean): { storeRepo: StoreRepository; subRepo: SubscriptionRepository } {
   const storeRepo = {
+    findById: vi.fn().mockResolvedValue(null),
     listByTrialSet: vi.fn().mockResolvedValue(stores),
     listPausedBefore: vi.fn().mockResolvedValue([]),
     save: vi.fn().mockResolvedValue(undefined),
   } as unknown as StoreRepository;
   const subRepo = {
     findActiveByStoreId: vi.fn().mockResolvedValue(subActive ? { isActive: true, plan: "pro" } : null),
+    listActive: vi.fn().mockResolvedValue([]),
+    save: vi.fn().mockResolvedValue(undefined),
   } as unknown as SubscriptionRepository;
   return { storeRepo, subRepo };
 }
@@ -44,7 +48,7 @@ describe("RunTrialLifecycle", () => {
 
     const result = await job.execute();
 
-    expect(result).toEqual({ reminded: 0, paused: 1, archived: 0 });
+    expect(result).toEqual({ reminded: 0, paused: 1, archived: 0, renewals: 0 });
     expect(store.isPaused).toBe(true);
     expect(store.status).toBe(StoreStatus.Paused);
     expect(storeRepo.save).toHaveBeenCalled();
@@ -117,5 +121,55 @@ describe("RunTrialLifecycle", () => {
     expect(result.reminded).toBe(0);
     expect(result.paused).toBe(0);
     expect(REMINDER_WINDOW_MS).toBe(4 * DAY);
+  });
+
+  it("creates a renewal invoice when the paid period ends within 3 days", async () => {
+    const store = makeStore(null); // no trial — paid subscription
+    const sub = Subscription.create({
+      id: createEntityId(),
+      storeId: store.id,
+      plan: "pro",
+      cycle: "monthly",
+      currentPeriodEnd: new Date(Date.now() + 2 * DAY).toISOString(),
+    });
+    const { storeRepo, subRepo } = stubRepos([], false);
+    (subRepo.listActive as ReturnType<typeof vi.fn>).mockResolvedValue([sub]);
+    (storeRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(store);
+    const createInvoice = vi.fn().mockResolvedValue({ externalId: "tokko-sub::x::pro::monthly::renew-1" });
+    const job = new RunTrialLifecycle(
+      storeRepo, subRepo,
+      { send: vi.fn() },
+      vi.fn(),
+      undefined,
+      createInvoice,
+    );
+
+    const result = await job.execute();
+    expect(result.renewals).toBe(1);
+    expect(createInvoice).toHaveBeenCalledWith(expect.objectContaining({ plan: "pro", cycle: "monthly" }));
+    expect(subRepo.save).toHaveBeenCalled();
+  });
+
+  it("pauses the store when the paid period has lapsed without payment", async () => {
+    const store = makeStore(null);
+    const sub = Subscription.create({
+      id: createEntityId(),
+      storeId: store.id,
+      plan: "pro",
+      cycle: "monthly",
+      currentPeriodEnd: new Date(Date.now() - DAY).toISOString(),
+    });
+    const { storeRepo, subRepo } = stubRepos([], false);
+    (subRepo.listActive as ReturnType<typeof vi.fn>).mockResolvedValue([sub]);
+    (storeRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(store);
+    const job = new RunTrialLifecycle(
+      storeRepo, subRepo,
+      { send: vi.fn() },
+      vi.fn(),
+    );
+
+    const result = await job.execute();
+    expect(result.paused).toBe(1);
+    expect(store.isPaused).toBe(true);
   });
 });

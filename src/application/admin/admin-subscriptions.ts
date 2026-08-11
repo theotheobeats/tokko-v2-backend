@@ -14,6 +14,7 @@ import { Subscription } from "../../domain/plan/subscription";
 import type { StoreRepository } from "../store/store-repo";
 import type { SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { StoreNotFoundError } from "./admin-stores";
+import type { CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
 
 // ---------------------------------------------------------------------------
 // ListAdminSubscriptions — every store + its effective plan (plans page)
@@ -32,6 +33,8 @@ export interface AdminSubscriptionView {
   commissionRate: number | null;
   aiStoreGenerations: number;
   aiDescriptions: number;
+  /** Accrued commission for commission-path merchants (IDR). */
+  commissionTotal: number;
   subscription: ReturnType<Subscription["toJSON"]> | null;
 }
 
@@ -39,6 +42,7 @@ export class ListAdminSubscriptions {
   constructor(
     private readonly storeRepo: StoreRepository,
     private readonly subRepo: SubscriptionRepository,
+    private readonly commissionLedger?: CommissionLedger,
   ) {}
 
   async execute(input: { q?: string; limit?: number; offset?: number }): Promise<{ subscriptions: AdminSubscriptionView[]; total: number }> {
@@ -49,10 +53,13 @@ export class ListAdminSubscriptions {
     });
     const subs = await this.subRepo.listAll();
     const byStore = new Map(subs.map((s) => [s.storeId, s]));
+    const commissionTotals = this.commissionLedger
+      ? await Promise.all(stores.map((s) => this.commissionLedger!.sumByStoreId(s.id)))
+      : stores.map(() => 0);
 
     return {
       total,
-      subscriptions: stores.map((store) => {
+      subscriptions: stores.map((store, i) => {
         const sub = byStore.get(store.id) ?? null;
         return {
           store: {
@@ -67,6 +74,7 @@ export class ListAdminSubscriptions {
           commissionRate: store.commissionRate,
           aiStoreGenerations: store.aiStoreGenerations,
           aiDescriptions: store.aiDescriptions,
+          commissionTotal: commissionTotals[i],
           subscription: sub ? sub.toJSON() : null,
         };
       }),

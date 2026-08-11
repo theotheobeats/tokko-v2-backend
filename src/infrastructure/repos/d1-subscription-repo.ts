@@ -11,6 +11,8 @@ import { subscriptions } from "../db/schema";
 export interface SubscriptionRepository {
   findActiveByStoreId(storeId: EntityId): Promise<Subscription | null>;
   listByStoreId(storeId: EntityId): Promise<Subscription[]>;
+  /** All status=active subscriptions (renewal + expiry job). */
+  listActive(): Promise<Subscription[]>;
   listAll(): Promise<Subscription[]>;
   save(subscription: Subscription): Promise<void>;
 }
@@ -47,6 +49,16 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
     return rows.map((r) => this._toDomain(r));
   }
 
+  async listActive(): Promise<Subscription[]> {
+    const rows = await this.db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.status, "active"))
+      .orderBy(desc(subscriptions.startedAt))
+      .all();
+    return rows.map((r) => this._toDomain(r));
+  }
+
   async save(subscription: Subscription): Promise<void> {
     const props = subscription.toJSON();
     const existing = await this.db
@@ -65,6 +77,7 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
           status: props.status,
           currentPeriodEnd: props.currentPeriodEnd,
           externalRef: props.externalRef,
+          renewalInvoiceExternalId: props.renewalInvoiceExternalId,
           updatedAt: sql`(datetime('now'))`,
         })
         .where(eq(subscriptions.id, subscription.id));
@@ -78,6 +91,7 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
         status: props.status,
         currentPeriodEnd: props.currentPeriodEnd,
         externalRef: props.externalRef,
+        renewalInvoiceExternalId: props.renewalInvoiceExternalId,
         startedAt: props.startedAt,
         updatedAt: props.updatedAt,
       });
@@ -94,6 +108,7 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
       status: row.status as SubscriptionProps["status"],
       currentPeriodEnd: row.currentPeriodEnd,
       externalRef: row.externalRef,
+      renewalInvoiceExternalId: row.renewalInvoiceExternalId,
       startedAt: row.startedAt,
       updatedAt: row.updatedAt,
     });
