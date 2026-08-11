@@ -449,6 +449,42 @@ storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionC
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/stores/:id/subscription/cancel — cancel / resume (owner)
+// ---------------------------------------------------------------------------
+storesRouter.post("/:id/subscription/cancel", zValidator("json", z.object({ cancel: z.boolean() })), async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const { CancelSubscription, SubscriptionNotFoundError, SubscriptionAlreadyCanceledError, SubscriptionChangePendingError } =
+    await import("../../application/plan/cancel-subscription");
+  const body = c.req.valid("json");
+  const result = await new CancelSubscription(new D1SubscriptionRepository(db)).execute({
+    storeId: store.id as string,
+    cancel: body.cancel,
+  });
+
+  if (!result.ok) {
+    if (result.error instanceof SubscriptionNotFoundError) return c.json({ error: { code: "SUBSCRIPTION_NOT_FOUND" } }, 404);
+    if (result.error instanceof SubscriptionAlreadyCanceledError) return c.json({ error: { code: "SUBSCRIPTION_ALREADY_CANCELED" } }, 400);
+    if (result.error instanceof SubscriptionChangePendingError) return c.json({ error: { code: "SUBSCRIPTION_CHANGE_PENDING" } }, 400);
+    return c.json({ error: { code: "UNKNOWN" } }, 400);
+  }
+
+  const saved = await storeRepo.findById(storeId);
+  if (!saved) return c.json({ error: { code: "NOT_FOUND" } }, 404);
+  return c.json({ plan: await planService(db).viewOf(saved) });
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/stores/:id/payment-methods — catalog + per-store enabled flags
 // ---------------------------------------------------------------------------
 storesRouter.get("/:id/payment-methods", async (c) => {

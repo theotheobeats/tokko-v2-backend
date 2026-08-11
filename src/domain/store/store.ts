@@ -175,10 +175,14 @@ export class Store {
     return Boolean(this.props.bankName && this.props.bankAccountNumber && this.props.bankAccountName);
   }
 
-  /** Shipping origin is fully configured when address + city + province + postal + contact exist. */
+  /** Shipping origin is fully configured when every field is filled (courier rates need all). */
   get hasShippingOrigin(): boolean {
     return Boolean(
       this.props.originAddress &&
+      this.props.originRt &&
+      this.props.originRw &&
+      this.props.originKelurahan &&
+      this.props.originKecamatan &&
       this.props.originCity &&
       this.props.originProvince &&
       this.props.originPostalCode &&

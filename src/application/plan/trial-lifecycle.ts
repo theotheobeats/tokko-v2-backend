@@ -113,15 +113,25 @@ export class RunTrialLifecycle {
           await this.storeRepo.save(store);
           result.switches += 1;
         } else {
-          // Period ended without payment → pause (data kept).
+          // Period ended without payment → pause (data kept). A canceled
+          // subscription flips to canceled at the boundary.
           store.pause();
           await this.storeRepo.save(store);
+          if (sub.cancelAtPeriodEnd) {
+            await this.subRepo.save(Subscription.from({
+              ...sub.toJSON(),
+              status: "canceled",
+              cancelAtPeriodEnd: false,
+              updatedAt: new Date().toISOString(),
+            }));
+          }
           result.paused += 1;
         }
       } else if (
         msLeft <= RENEWAL_WINDOW_MS &&
         !sub.renewalInvoiceExternalId &&
         !sub.pendingPlan && // next term already prepaid via a plan change
+        !sub.cancelAtPeriodEnd && // canceled — no auto-renewal
         this.createRenewalInvoice
       ) {
         // Auto-renewal invoice (disclosed at checkout; cancel anytime).

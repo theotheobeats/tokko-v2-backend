@@ -80,6 +80,7 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
           renewalInvoiceExternalId: props.renewalInvoiceExternalId,
           pendingPlan: props.pendingPlan,
           pendingCycle: props.pendingCycle,
+          cancelAtPeriodEnd: props.cancelAtPeriodEnd,
           updatedAt: sql`(datetime('now'))`,
         })
         .where(eq(subscriptions.id, subscription.id));
@@ -96,6 +97,7 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
         renewalInvoiceExternalId: props.renewalInvoiceExternalId,
         pendingPlan: props.pendingPlan,
         pendingCycle: props.pendingCycle,
+        cancelAtPeriodEnd: props.cancelAtPeriodEnd,
         startedAt: props.startedAt,
         updatedAt: props.updatedAt,
       });
@@ -115,6 +117,7 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
       renewalInvoiceExternalId: row.renewalInvoiceExternalId,
       pendingPlan: row.pendingPlan as SubscriptionProps["pendingPlan"],
       pendingCycle: row.pendingCycle as SubscriptionProps["pendingCycle"],
+      cancelAtPeriodEnd: row.cancelAtPeriodEnd === true,
       startedAt: row.startedAt,
       updatedAt: row.updatedAt,
     });
