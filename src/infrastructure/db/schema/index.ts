@@ -7,6 +7,7 @@ export { payments } from "./payments";
 export { session, account, verification } from "./auth";
 export { stores } from "./stores";
 export { subscriptions } from "./subscriptions";
+export { pendingPlans } from "./pending-plans";
 export { commissionEntries } from "./commission-entries";
 export { products, productCategories, productVariants } from "./products";
 export { pages } from "./pages";

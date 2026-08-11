@@ -22,6 +22,10 @@ import { PAYMENT_METHOD_CATALOG, DEFAULT_ENABLED_PAYMENT_METHODS } from "../../a
 import { COURIER_CATALOG, DEFAULT_COURIERS } from "../../application/shipping/courier-catalog";
 import { PlanService, type PlanView } from "../../application/plan/plan-service";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
+import { Subscription } from "../../domain/plan/subscription";
+import { PERIOD_DAYS } from "../../domain/plan/pricing";
+import { createEntityId } from "../../domain/shared/types";
 import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
@@ -167,6 +171,11 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
     aiGenerate,
   );
 
+  const pendingRepo = new D1PendingPlanRepository(db);
+  // Paid a plan before onboarding? → the new store gets the subscription,
+  // no trial window (consumed below). Otherwise a 14-day trial starts.
+  const pending = await pendingRepo.findByUserIdConsumable(session.user.id as EntityId);
+
   const result = await useCase.execute({
     ownerId: session.user.id as EntityId,
     businessName: input.businessName,
@@ -174,8 +183,9 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
     productCategory: input.productCategory,
     aesthetic: input.aesthetic as typeof Aesthetic[keyof typeof Aesthetic],
     whatsappNumber: input.whatsappNumber,
-    // Trial lifecycle starts at signup (14 days) — Phase 1 window; expiry cron is Phase 2.
-    trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    // Trial lifecycle starts at signup (14 days) — unless a paid plan was
+    // bought pre-store (then no trial; the plan is already active).
+    trialEndsAt: pending ? undefined : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
   });
 
   if (!result.ok) {
@@ -191,6 +201,20 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
       }, 422);
     }
     return c.json({ error: { code: "UNKNOWN", message: "Terjadi kesalahan." } }, 500);
+  }
+
+  // Pre-store paid plan → create the store's subscription right away.
+  if (pending) {
+    const subRepo = new D1SubscriptionRepository(db);
+    await subRepo.save(Subscription.create({
+      id: createEntityId(),
+      storeId: result.value.store.id,
+      plan: pending.plan,
+      cycle: pending.cycle,
+      currentPeriodEnd: pending.currentPeriodEnd ?? new Date(Date.now() + PERIOD_DAYS[pending.cycle] * 86_400_000).toISOString(),
+      externalRef: pending.externalRef ?? undefined,
+    }));
+    await pendingRepo.markConsumed(pending.id);
   }
 
   return c.json(result.value, 201);

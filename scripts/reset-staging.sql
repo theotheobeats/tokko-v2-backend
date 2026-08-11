@@ -1,0 +1,20 @@
+-- Staging reset (2026-08-11) — wipe all app data, keep regions reference + migration state.
+DELETE FROM commission_entries;
+DELETE FROM subscriptions;
+DELETE FROM payments;
+DELETE FROM orders;
+DELETE FROM sections;
+DELETE FROM pages;
+DELETE FROM products;
+DELETE FROM product_variants;
+DELETE FROM product_categories;
+DELETE FROM stores;
+DELETE FROM session;
+DELETE FROM account;
+DELETE FROM verification;
+DELETE FROM ticket_messages;
+DELETE FROM tickets;
+DELETE FROM reports;
+DELETE FROM consents;
+DELETE FROM admin_logs;
+DELETE FROM user;

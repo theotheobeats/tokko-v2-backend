@@ -11,7 +11,8 @@ import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { PlanService } from "../../application/plan/plan-service";
 import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
-import { SUBSCRIPTION_EXTERNAL_ID_PREFIX } from "../../domain/plan/pricing";
+import { SUBSCRIPTION_EXTERNAL_ID_PREFIX, PENDING_PLAN_EXTERNAL_ID_PREFIX } from "../../domain/plan/pricing";
+import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
 import {
   CreatePayment,
   HandleXenditWebhook,
@@ -131,6 +132,20 @@ paymentsRouter.post("/webhooks/xendit", async (c) => {
   }
 
   const db = createDb(env.DB);
+
+  // Pre-store plan purchase (plan-selection gate at signup) → pending plan row.
+  if (payload?.external_id?.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)) {
+    const { HandlePendingPlanPayment, PendingPlanAmountMismatchError } =
+      await import("../../application/plan/pending-plan");
+    const pendingResult = await new HandlePendingPlanPayment(new D1PendingPlanRepository(db)).execute(payload);
+    if (!pendingResult.ok) {
+      if (pendingResult.error instanceof PendingPlanAmountMismatchError) {
+        return c.json({ error: { code: "PENDING_PLAN_AMOUNT_MISMATCH" } }, 400);
+      }
+      return c.json({ error: { code: "UNKNOWN" } }, 400);
+    }
+    return c.json({ handled: pendingResult.value.handled });
+  }
 
   // Subscription invoices (tokko-sub::…) route to plan activation;
   // everything else is an order payment.
