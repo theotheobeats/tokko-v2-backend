@@ -76,54 +76,9 @@ shippingRouter.post("/:storeId/shipping/rates", zValidator("json", ratesSchema),
 });
 
 // ---------------------------------------------------------------------------
-// PATCH /api/stores/:storeId/shipping
-// ---------------------------------------------------------------------------
-const originSchema = z.object({
-  originAddress: z.string().optional(),
-  originPostalCode: z.string().optional(),
-  originContactName: z.string().optional(),
-  originContactPhone: z.string().optional(),
-  originLatitude: z.number().nullable().optional(),
-  originLongitude: z.number().nullable().optional(),
-});
-
-shippingRouter.patch("/:storeId/shipping", zValidator("json", originSchema), async (c) => {
-  const session = await requireAuth(c);
-  if (session instanceof Response) return session;
-
-  const storeId = c.req.param("storeId") as EntityId;
-  const db = createDb(c.env.DB);
-  const storeRepo = new D1StoreRepository(db);
-  const store = await storeRepo.findById(storeId);
-
-  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
-  if (store.ownerId !== session.user.id) {
-    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
-  }
-
-  const body = c.req.valid("json");
-  store.updateShippingOrigin({
-    originAddress: body.originAddress,
-    originPostalCode: body.originPostalCode,
-    originContactName: body.originContactName,
-    originContactPhone: body.originContactPhone,
-    originLatitude: body.originLatitude,
-    originLongitude: body.originLongitude,
-  });
-
-  await storeRepo.save(store);
-
-  return c.json({
-    store: {
-      id: store.id,
-      originAddress: store.originAddress,
-      originPostalCode: store.originPostalCode,
-      originContactName: store.originContactName,
-      originContactPhone: store.originContactPhone,
-      originLatitude: store.originLatitude,
-      originLongitude: store.originLongitude,
-    },
-  });
-});
+// NOTE: the store shipping-origin PATCH lives in stores.ts
+// (PATCH /api/stores/:id/shipping — full field set incl. RT/RW/kelurahan/
+// kecamatan/city/province). It was previously duplicated here with a partial
+// schema and silently shadowed — removed to avoid confusion.
 
 export { shippingRouter };
