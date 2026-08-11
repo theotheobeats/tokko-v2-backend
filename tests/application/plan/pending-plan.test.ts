@@ -10,8 +10,13 @@ import {
   PendingPlanAmountMismatchError,
 } from "../../../src/application/plan/pending-plan";
 import type { PendingPlanRepository } from "../../../src/infrastructure/repos/d1-pending-plan-repo";
+import { Store } from "../../../src/domain/store/store";
+import { BusinessType, Aesthetic } from "../../../src/domain/store/types";
+import type { StoreRepository } from "../../../src/application/store/store-repo";
+import type { SubscriptionRepository } from "../../../src/infrastructure/repos/d1-subscription-repo";
 
 const USER_ID = "user-123";
+const DAY = 86_400_000;
 
 function stubRepo(): { repo: PendingPlanRepository; saved: unknown[] } {
   const saved: unknown[] = [];
@@ -54,7 +59,7 @@ describe("HandlePendingPlanPayment", () => {
     });
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ handled: true, plan: "pro" });
+    if (result.ok) expect(result.value).toEqual({ handled: true, plan: "pro", activated: false });
     expect(saved.length).toBe(1);
     const row = saved[0] as { userId: string; plan: string; cycle: string; currentPeriodEnd: string };
     expect(row.userId).toBe(USER_ID);
@@ -91,5 +96,42 @@ describe("HandlePendingPlanPayment", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.handled).toBe(false);
     expect(saved.length).toBe(0);
+  });
+
+  it("activates directly on the user's existing store (webhook lands after onboarding)", async () => {
+    const store = Store.create({
+      ownerId: USER_ID as never,
+      name: "Race Store",
+      businessType: BusinessType.Food,
+      aestheticPreference: Aesthetic.Minimal,
+      whatsappNumber: "081234567890",
+    });
+    store.setTrialEndsAt(new Date(Date.now() + 5 * DAY).toISOString());
+    const storeRepo = {
+      findByOwnerId: vi.fn().mockResolvedValue(store),
+      save: vi.fn().mockResolvedValue(undefined),
+    } as unknown as StoreRepository;
+    const subRepo = { save: vi.fn().mockResolvedValue(undefined) } as unknown as SubscriptionRepository;
+
+    const saved: unknown[] = [];
+    const repo = {
+      findByUserIdConsumable: vi.fn().mockResolvedValue(null),
+      save: vi.fn(async (row: unknown) => { saved.push(row); }),
+      markConsumed: vi.fn().mockResolvedValue(undefined),
+    } as unknown as PendingPlanRepository;
+
+    const uc = new HandlePendingPlanPayment(repo, storeRepo, subRepo);
+    const result = await uc.execute({
+      external_id: pendingPlanExternalId(USER_ID, "pro", "monthly", "n1"),
+      status: "PAID",
+      amount: priceFor("pro", "monthly"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ handled: true, plan: "pro", activated: true });
+    // Subscription created on the store, trial cleared, pending row consumed.
+    expect(subRepo.save).toHaveBeenCalled();
+    expect(store.trialEndsAt).toBeNull();
+    expect(saved[0]).toMatchObject({ status: "consumed", userId: USER_ID });
   });
 });

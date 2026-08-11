@@ -107,7 +107,29 @@ paymentsRouter.post("/orders/:orderId/payment", zValidator("json", createPayment
 paymentsRouter.get("/orders/:orderId/payments", async (c) => {
   const orderId = c.req.param("orderId") as EntityId;
   const db = createDb(c.env.DB);
-  const payments = await new ListOrderPayments(new D1PaymentRepository(db)).execute({ orderId });
+  const paymentRepo = new D1PaymentRepository(db);
+  const payments = await new ListOrderPayments(paymentRepo).execute({ orderId });
+
+  // Self-heal: if the latest attempt is still pending but older than 10
+  // minutes, reconcile against Xendit directly — a webhook may have been
+  // lost/delayed (Xendit retries, but never rely on it). Mutates the domain
+  // object, so the response below reflects the corrected status.
+  const latest = payments[payments.length - 1];
+  if (latest && latest.status === "pending" && latest.createdAt) {
+    const ageMs = Date.now() - new Date(latest.createdAt).getTime();
+    if (ageMs > 10 * 60 * 1000) {
+      try {
+        const status = await createPaymentProvider(c.env).getInvoice(latest.externalId);
+        if (status.status === "PAID") latest.markPaid(status.paidAt ?? undefined);
+        else if (status.status === "EXPIRED") latest.markExpired();
+        else if (status.status === "FAILED") latest.markFailed();
+        if (latest.status !== "pending") await paymentRepo.save(latest);
+      } catch {
+        // provider unavailable — keep polling
+      }
+    }
+  }
+
   return c.json({
     payments: payments.map((p) => p.toJSON()),
     latest: payments.length > 0 ? payments[payments.length - 1].toJSON() : null,
@@ -137,7 +159,11 @@ paymentsRouter.post("/webhooks/xendit", async (c) => {
   if (payload?.external_id?.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)) {
     const { HandlePendingPlanPayment, PendingPlanAmountMismatchError } =
       await import("../../application/plan/pending-plan");
-    const pendingResult = await new HandlePendingPlanPayment(new D1PendingPlanRepository(db)).execute(payload);
+    const pendingResult = await new HandlePendingPlanPayment(
+      new D1PendingPlanRepository(db),
+      new D1StoreRepository(db),
+      new D1SubscriptionRepository(db),
+    ).execute(payload);
     if (!pendingResult.ok) {
       if (pendingResult.error instanceof PendingPlanAmountMismatchError) {
         return c.json({ error: { code: "PENDING_PLAN_AMOUNT_MISMATCH" } }, 400);

@@ -23,9 +23,7 @@ import { COURIER_CATALOG, DEFAULT_COURIERS } from "../../application/shipping/co
 import { PlanService, type PlanView } from "../../application/plan/plan-service";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
-import { Subscription } from "../../domain/plan/subscription";
-import { PERIOD_DAYS } from "../../domain/plan/pricing";
-import { createEntityId } from "../../domain/shared/types";
+import { activatePendingPlan } from "../../application/plan/pending-plan";
 import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
@@ -205,15 +203,12 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
 
   // Pre-store paid plan → create the store's subscription right away.
   if (pending) {
-    const subRepo = new D1SubscriptionRepository(db);
-    await subRepo.save(Subscription.create({
-      id: createEntityId(),
-      storeId: result.value.store.id,
-      plan: pending.plan,
-      cycle: pending.cycle,
-      currentPeriodEnd: pending.currentPeriodEnd ?? new Date(Date.now() + PERIOD_DAYS[pending.cycle] * 86_400_000).toISOString(),
-      externalRef: pending.externalRef ?? undefined,
-    }));
+    const saved = await checkRepo.findById(result.value.store.id as EntityId);
+    if (saved) {
+      const subRepo = new D1SubscriptionRepository(db);
+      await activatePendingPlan(saved, pending, subRepo);
+      await checkRepo.save(saved);
+    }
     await pendingRepo.markConsumed(pending.id);
   }
 

@@ -33,7 +33,10 @@ export const VALID_PAYMENT_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> =
   pending: ["paid", "failed", "expired"],
   paid: [], // terminal
   failed: [], // terminal — create a new payment attempt instead
-  expired: [], // terminal
+  // A payment that arrived AFTER the invoice expired still counts — the
+  // customer did pay. Xendit sends a PAID event for it ("payment received
+  // after expiry"), so expired → paid must not throw.
+  expired: ["paid"],
 };
 
 /** Human label for a channel (used by the UI). */
