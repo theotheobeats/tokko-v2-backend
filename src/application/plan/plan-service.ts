@@ -54,8 +54,8 @@ export class PlanService {
     };
   }
 
-  /** Online checkout (Xendit) is Commerce-only — the storefront gate. */
+  /** Online checkout (Xendit) is available on Pro & Commerce — the storefront gate. */
   async canUseOnlineCheckout(store: Store): Promise<boolean> {
-    return (await this.tierOf(store)) === "commerce";
+    return (await this.tierOf(store)) === "commerce" || (await this.tierOf(store)) === "pro";
   }
 }

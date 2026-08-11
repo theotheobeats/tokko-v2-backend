@@ -57,7 +57,7 @@ paymentsRouter.post("/orders/:orderId/payment", zValidator("json", createPayment
   const db = createDb(c.env.DB);
   const input = c.req.valid("json");
 
-  // Gate: online checkout is Commerce-only (defense in depth — the storefront
+  // Gate: online checkout is Pro & Commerce (defense in depth — the storefront
   // also hides it via the payload's effective paymentOnline).
   const order = await new D1OrderRepository(db).findById(orderId);
   if (!order) return c.json({ error: { code: "ORDER_NOT_FOUND", message: "Pesanan tidak ditemukan." } }, 404);
@@ -66,7 +66,7 @@ paymentsRouter.post("/orders/:orderId/payment", zValidator("json", createPayment
   const canOnline = await new PlanService(new D1SubscriptionRepository(db)).canUseOnlineCheckout(store);
   if (!canOnline) {
     return c.json({
-      error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Commerce." },
+      error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Pro dan Commerce." },
     }, 403);
   }
 

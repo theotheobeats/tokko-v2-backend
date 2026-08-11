@@ -47,7 +47,7 @@ export const TIER_CONFIG: Record<Exclude<Tier, "none">, TierConfig> = {
     productLimit: 1000,
     aiStoreLimit: null,
     aiDescriptionLimit: null,
-    onlineCheckout: false, // online checkout is Commerce-only
+    onlineCheckout: true, // online checkout is available on Pro & Commerce
     payouts: false,
     brandingRemoved: true,
     retentionDays: 365,
