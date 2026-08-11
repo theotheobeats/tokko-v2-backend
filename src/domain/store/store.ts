@@ -54,6 +54,10 @@ export interface StoreProps {
   aiStoreGenerations: number;
   aiDescriptions: number;
   customDomain: string | null;
+  // Trial lifecycle (Phase 2) — reminder + pause/archive bookkeeping.
+  trialReminderSentAt: string | null;
+  pausedAt: string | null;
+  archivedAt: string | null;
 }
 
 export class Store {
@@ -111,6 +115,9 @@ export class Store {
       aiStoreGenerations: 0,
       aiDescriptions: 0,
       customDomain: null,
+      trialReminderSentAt: null,
+      pausedAt: null,
+      archivedAt: null,
     });
   }
 
@@ -159,6 +166,9 @@ export class Store {
   get aiStoreGenerations() { return this.props.aiStoreGenerations; }
   get aiDescriptions() { return this.props.aiDescriptions; }
   get customDomain() { return this.props.customDomain; }
+  get trialReminderSentAt() { return this.props.trialReminderSentAt; }
+  get pausedAt() { return this.props.pausedAt; }
+  get archivedAt() { return this.props.archivedAt; }
 
   /** Manual transfer is configured when all three bank fields are filled. */
   get hasBankDetails(): boolean {
@@ -363,6 +373,49 @@ export class Store {
   /** BYOD — custom domain (future; drives the 2.5% commission discount). */
   setCustomDomain(domain: string | null): Store {
     this.props.customDomain = domain?.trim().toLowerCase() || null;
+    return this;
+  }
+
+  /** Paused = trial expired — storefront stays readable, orders off. */
+  get isPaused(): boolean {
+    return Boolean(this.props.pausedAt);
+  }
+
+  /** Archived = paused > 30 days (retention job). */
+  get isArchived(): boolean {
+    return Boolean(this.props.archivedAt);
+  }
+
+  /** Pause the store (trial expiry cron). Keeps all data. */
+  pause(): Store {
+    if (!this.props.pausedAt) {
+      this.props.pausedAt = new Date().toISOString();
+      this.props.status = StoreStatus.Paused;
+    }
+    return this;
+  }
+
+  /** Resume — payment received or trial extended. Clears pause + archive. */
+  resume(): Store {
+    this.props.pausedAt = null;
+    this.props.archivedAt = null;
+    if (this.props.status === StoreStatus.Paused) {
+      this.props.status = StoreStatus.Draft;
+    }
+    return this;
+  }
+
+  /** Archive — retention job (paused > 30 days). Non-destructive. */
+  archive(): Store {
+    if (!this.props.archivedAt) {
+      this.props.archivedAt = new Date().toISOString();
+    }
+    return this;
+  }
+
+  /** Mark the day-10 trial reminder as sent. */
+  markTrialReminderSent(): Store {
+    this.props.trialReminderSentAt = new Date().toISOString();
     return this;
   }
 

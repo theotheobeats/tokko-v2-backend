@@ -14,6 +14,8 @@ export interface ListOrdersInput {
   status?: OrderStatus;
   limit?: number;
   offset?: number;
+  /** Order-history retention window (days) — tier-driven (31/365/1095). */
+  retentionDays?: number;
 }
 
 export interface ListOrdersOutput {
@@ -25,13 +27,18 @@ export class ListOrders {
   constructor(private readonly orderRepo: OrderRepository) {}
 
   async execute(input: ListOrdersInput): Promise<Result<ListOrdersOutput, never>> {
+    // Retention wall (ScaleV mechanic): older orders are hidden, not deleted.
+    const since = input.retentionDays
+      ? new Date(Date.now() - input.retentionDays * 86_400_000).toISOString()
+      : undefined;
     const [orders, counts] = await Promise.all([
       this.orderRepo.findByStoreId(input.storeId, {
         status: input.status,
+        since,
         limit: input.limit ?? 50,
         offset: input.offset ?? 0,
       }),
-      this.orderRepo.countByStoreId(input.storeId),
+      this.orderRepo.countByStoreId(input.storeId, { since }),
     ]);
 
     return ok({

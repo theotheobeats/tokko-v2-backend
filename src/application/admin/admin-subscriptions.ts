@@ -119,8 +119,9 @@ export class SetStorePlan {
       await this.subRepo.save(created);
     }
 
-    // First payment → trial ends (spec: "cleared on first payment").
+    // First payment → trial ends (spec: "cleared on first payment") + resume if paused.
     store.setTrialEndsAt(null);
+    store.resume();
     await this.storeRepo.save(store);
 
     return ok({ storeId: store.id, plan: input.plan });
@@ -152,6 +153,8 @@ export class UpdateStoreTrial {
         ? store.trialEndsAt
         : new Date().toISOString();
       store.setTrialEndsAt(new Date(new Date(base).getTime() + input.extendTrialDays * 86_400_000).toISOString());
+      // Extending the trial also resumes a paused store (grace window).
+      store.resume();
     }
 
     await this.storeRepo.save(store);

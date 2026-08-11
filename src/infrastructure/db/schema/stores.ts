@@ -48,6 +48,10 @@ export const stores = sqliteTable("stores", {
   aiStoreGenerations: integer("ai_store_generations").notNull().default(0), // trial: 1x
   aiDescriptions: integer("ai_descriptions").notNull().default(0), // trial: 10x
   customDomain: text("custom_domain"), // BYOD — future; drives the 2.5% commission discount
+  // Trial lifecycle (Phase 2) — reminder + pause/archive bookkeeping.
+  trialReminderSentAt: text("trial_reminder_sent_at"), // day-10 reminder sent
+  pausedAt: text("paused_at"), // trial expired → store paused (read-only)
+  archivedAt: text("archived_at"), // paused > 30 days → archived (retention job)
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

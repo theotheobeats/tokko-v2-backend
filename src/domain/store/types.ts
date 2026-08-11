@@ -5,6 +5,7 @@
 export const StoreStatus = {
   Draft: "draft",
   Published: "published",
+  Paused: "paused", // trial expired — read-only storefront, orders off
 } as const;
 export type StoreStatus = (typeof StoreStatus)[keyof typeof StoreStatus];
 

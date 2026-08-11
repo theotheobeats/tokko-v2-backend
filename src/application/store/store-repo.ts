@@ -28,4 +28,8 @@ export interface StoreRepository {
   listAll(filters?: StoreListFilters): Promise<{ stores: Store[]; total: number }>;
   /** Admin: aggregate counts for the dashboard. */
   countAll(): Promise<{ total: number; published: number; draft: number; suspended: number }>;
+  /** Trial lifecycle: all stores with a trial deadline set (remind/pause logic runs in the use case). */
+  listByTrialSet(): Promise<Store[]>;
+  /** Trial lifecycle: stores paused before the given ISO cutoff (archive job). */
+  listPausedBefore(cutoffIso: string): Promise<Store[]>;
 }

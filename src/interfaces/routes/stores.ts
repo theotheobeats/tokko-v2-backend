@@ -231,7 +231,9 @@ storesRouter.get("/by-subdomain", async (c) => {
     return c.json({ error: { code: "STORE_NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
   }
 
-  if (!store.isPublished) {
+  // Trial-expired stores stay readable with a "toko sedang libur" notice.
+  const paused = store.isPaused;
+  if (!store.isPublished && !paused) {
     return c.json({ error: { code: "STORE_NOT_PUBLISHED", message: "Toko belum dipublikasikan." } }, 404);
   }
 
@@ -261,7 +263,7 @@ storesRouter.get("/by-subdomain", async (c) => {
   const base = storeJSON(store, plan);
   // Online checkout is Commerce-only — hide it from non-commerce storefronts
   // (the merchant toggle stays on their settings, but it doesn't surface).
-  const storePayload = { ...base, paymentOnline: base.paymentOnline && plan.onlineCheckout };
+  const storePayload = { ...base, paymentOnline: base.paymentOnline && plan.onlineCheckout, paused };
 
   return c.json({
     store: storePayload,
