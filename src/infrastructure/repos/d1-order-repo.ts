@@ -185,6 +185,14 @@ export class D1OrderRepository implements OrderRepository {
       shippingCourier: row.shippingCourier,
       shippingService: row.shippingService,
       shippingDuration: row.shippingDuration,
+      destinationDetail: row.destinationDetail,
+      destinationKelurahan: row.destinationKelurahan,
+      destinationKecamatan: row.destinationKecamatan,
+      destinationCity: row.destinationCity,
+      destinationProvince: row.destinationProvince,
+      destinationPostalCode: row.destinationPostalCode,
+      biteshipOrderId: row.biteshipOrderId,
+      biteshipTrackingId: row.biteshipTrackingId,
       createdAt: row.createdAt,
     });
   }
@@ -211,6 +219,14 @@ export class D1OrderRepository implements OrderRepository {
       shippingCourier: props.shippingCourier,
       shippingService: props.shippingService,
       shippingDuration: props.shippingDuration,
+      destinationDetail: props.destinationDetail,
+      destinationKelurahan: props.destinationKelurahan,
+      destinationKecamatan: props.destinationKecamatan,
+      destinationCity: props.destinationCity,
+      destinationProvince: props.destinationProvince,
+      destinationPostalCode: props.destinationPostalCode,
+      biteshipOrderId: props.biteshipOrderId,
+      biteshipTrackingId: props.biteshipTrackingId,
     };
   }
 }

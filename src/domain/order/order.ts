@@ -32,6 +32,16 @@ export interface OrderProps {
   shippingCourier: string | null;
   shippingService: string | null;
   shippingDuration: string | null;
+  // Structured destination (from checkout) — powers Biteship delivery orders.
+  destinationDetail: string | null;
+  destinationKelurahan: string | null;
+  destinationKecamatan: string | null;
+  destinationCity: string | null;
+  destinationProvince: string | null;
+  destinationPostalCode: string | null;
+  // Biteship delivery order refs (set when a resi is created).
+  biteshipOrderId: string | null;
+  biteshipTrackingId: string | null;
 }
 
 export class Order {
@@ -50,6 +60,14 @@ export class Order {
     shippingCourier?: string | null;
     shippingService?: string | null;
     shippingDuration?: string | null;
+    destination?: {
+      detail?: string | null;
+      kelurahan?: string | null;
+      kecamatan?: string | null;
+      city?: string | null;
+      province?: string | null;
+      postalCode?: string | null;
+    } | null;
   }): Order {
     if (!params.customerName.trim()) throw new Error("Customer name is required");
     if (!params.customerPhone.trim()) throw new Error("Customer phone is required");
@@ -93,6 +111,14 @@ export class Order {
       shippingCourier: params.shippingCourier?.trim() || null,
       shippingService: params.shippingService?.trim() || null,
       shippingDuration: params.shippingDuration?.trim() || null,
+      destinationDetail: params.destination?.detail?.trim() || null,
+      destinationKelurahan: params.destination?.kelurahan?.trim() || null,
+      destinationKecamatan: params.destination?.kecamatan?.trim() || null,
+      destinationCity: params.destination?.city?.trim() || null,
+      destinationProvince: params.destination?.province?.trim() || null,
+      destinationPostalCode: params.destination?.postalCode?.trim() || null,
+      biteshipOrderId: null,
+      biteshipTrackingId: null,
     });
   }
 
@@ -141,6 +167,14 @@ export class Order {
   get shippingCourier() { return this.props.shippingCourier; }
   get shippingService() { return this.props.shippingService; }
   get shippingDuration() { return this.props.shippingDuration; }
+  get destinationDetail() { return this.props.destinationDetail; }
+  get destinationKelurahan() { return this.props.destinationKelurahan; }
+  get destinationKecamatan() { return this.props.destinationKecamatan; }
+  get destinationCity() { return this.props.destinationCity; }
+  get destinationProvince() { return this.props.destinationProvince; }
+  get destinationPostalCode() { return this.props.destinationPostalCode; }
+  get biteshipOrderId() { return this.props.biteshipOrderId; }
+  get biteshipTrackingId() { return this.props.biteshipTrackingId; }
 
   /**
    * Fulfillment fields required before this order can be completed,
@@ -186,6 +220,13 @@ export class Order {
     if (data.queueNumber !== undefined) {
       this.props.queueNumber = data.queueNumber?.trim() || null;
     }
+    return this;
+  }
+
+  /** Attach Biteship delivery-order refs (created via the resi flow). */
+  attachBiteship(refs: { deliveryOrderId: string; trackingId: string | null }): Order {
+    this.props.biteshipOrderId = refs.deliveryOrderId?.trim() || null;
+    this.props.biteshipTrackingId = refs.trackingId?.trim() || null;
     return this;
   }
 
@@ -242,6 +283,14 @@ export class Order {
       shippingCourier: this.props.shippingCourier,
       shippingService: this.props.shippingService,
       shippingDuration: this.props.shippingDuration,
+      destinationDetail: this.props.destinationDetail,
+      destinationKelurahan: this.props.destinationKelurahan,
+      destinationKecamatan: this.props.destinationKecamatan,
+      destinationCity: this.props.destinationCity,
+      destinationProvince: this.props.destinationProvince,
+      destinationPostalCode: this.props.destinationPostalCode,
+      biteshipOrderId: this.props.biteshipOrderId,
+      biteshipTrackingId: this.props.biteshipTrackingId,
       createdAt: this.props.createdAt,
     };
   }

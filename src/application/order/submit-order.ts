@@ -28,6 +28,16 @@ export interface SubmitOrderShippingInput {
   destinationPostalCode?: string;
 }
 
+/** Structured destination persisted with the order (powers Biteship resi). */
+export interface SubmitOrderDestinationInput {
+  detail?: string | null;
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  city?: string | null;
+  province?: string | null;
+  postalCode?: string | null;
+}
+
 export interface SubmitOrderInput {
   storeId: EntityId;
   customerName: string;
@@ -36,6 +46,7 @@ export interface SubmitOrderInput {
   notes?: string;
   shippingAddress?: string;
   shipping?: SubmitOrderShippingInput;
+  destination?: SubmitOrderDestinationInput;
 }
 
 export interface SubmitOrderError {
@@ -188,6 +199,7 @@ export class SubmitOrder {
       shippingCourier,
       shippingService,
       shippingDuration,
+      destination: input.destination,
     });
 
     await this.orderRepo.save(order);

@@ -11,6 +11,7 @@ import { UpdateOrderFulfillment } from "../../application/order/update-order-ful
 import { D1OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import { D1ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
+import { createShippingProvider } from "../../infrastructure/shipping/biteship-client";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { PlanService } from "../../application/plan/plan-service";
 import type { EntityId } from "../../domain/shared/types";
@@ -37,6 +38,14 @@ const submitSchema = z.object({
   })).min(1),
   notes: z.string().optional(),
   shippingAddress: z.string().optional(),
+  destination: z.object({
+    detail: z.string().optional(),
+    kelurahan: z.string().optional(),
+    kecamatan: z.string().optional(),
+    city: z.string().optional(),
+    province: z.string().optional(),
+    postalCode: z.string().optional(),
+  }).optional(),
   shipping: z.object({
     type: z.enum(["courier", "pickup", "manual"]),
     courierCompany: z.string().optional(),
@@ -100,6 +109,7 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
     })),
     notes: input.notes,
     shippingAddress: input.shippingAddress,
+    destination: input.destination,
     shipping: input.shipping,
   });
 
@@ -133,6 +143,51 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
     order: result.value,
     waDeepLink,
   }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/stores/:storeId/orders/:id/delivery — buat resi via Biteship (owner)
+// ---------------------------------------------------------------------------
+ordersRouter.post("/:storeId/orders/:id/delivery", zValidator("json", z.object({
+  collectionMethod: z.enum(["pickup", "drop_off"]).optional(),
+})), async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("storeId") as EntityId;
+  const orderId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND" } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const { CreateDeliveryOrder } = await import("../../application/shipping/create-delivery-order");
+  const body = c.req.valid("json");
+  const useCase = new CreateDeliveryOrder(
+    new D1OrderRepository(db),
+    storeRepo,
+    new D1ProductRepository(db),
+    createShippingProvider(c.env as Env),
+  );
+  const result = await useCase.execute({
+    storeId,
+    orderId,
+    collectionMethod: body.collectionMethod,
+  });
+
+  if (!result.ok) {
+    const status =
+      result.error.code === "ORDER_NOT_FOUND" ? 404 :
+      result.error.code === "PROVIDER_UNAVAILABLE" ? 502 :
+      result.error.code === "ALREADY_SHIPPED" ? 409 : 400;
+    return c.json({ error: result.error }, status);
+  }
+
+  return c.json({ order: result.value.order, awb: result.value.awb, courier: result.value.courier, price: result.value.price }, 201);
 });
 
 // ---------------------------------------------------------------------------

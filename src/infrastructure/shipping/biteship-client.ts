@@ -39,6 +39,57 @@ export interface CourierRate {
   collectionMethod: string[];
 }
 
+/** A resolved area (area_id + coordinates) from the Biteship Maps API. */
+export interface BiteshipArea {
+  areaId: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface DeliveryOrderItem {
+  name: string;
+  value: number;
+  quantity: number;
+  weight: number; // grams
+  length?: number;
+  width?: number;
+  height?: number;
+}
+
+export interface DeliveryOrderInput {
+  referenceId: string; // order code (must be unique)
+  shipper: {
+    contactName: string;
+    contactPhone: string;
+    address: string;
+    postalCode: string;
+    areaId?: string | null;
+    coordinates?: { latitude: number; longitude: number } | null;
+  };
+  recipient: {
+    name: string;
+    phone: string;
+    address: string;
+    postalCode: string;
+    areaId?: string | null;
+    coordinates?: { latitude: number; longitude: number } | null;
+  };
+  courierCompany: string;
+  courierType: string;
+  collectionMethod: "pickup" | "drop_off";
+  items: DeliveryOrderItem[];
+}
+
+export interface DeliveryOrderResult {
+  /** Biteship order id. */
+  deliveryOrderId: string;
+  /** Resi number (AWB) — courier.waybill_id. */
+  waybillId: string;
+  trackingId: string | null;
+  status: string;
+  price: number;
+}
+
 export interface ShippingProviderClient {
   getRates(req: {
     originPostalCode?: string;
@@ -52,6 +103,10 @@ export interface ShippingProviderClient {
   }): Promise<CourierRate[]>;
   /** Postal code → coordinates (used to unlock instant couriers). */
   resolveCoordinates(postalCode: string): Promise<{ latitude: number; longitude: number } | null>;
+  /** Postal code → area_id + coordinates (used for delivery orders). */
+  resolveArea(postalCode: string): Promise<BiteshipArea | null>;
+  /** Create a delivery order (pickup / drop_off) → waybill (resi). */
+  createOrder(input: DeliveryOrderInput): Promise<DeliveryOrderResult>;
 }
 
 export interface BiteshipEnv {
@@ -144,16 +199,80 @@ export class BiteshipClient implements ShippingProviderClient {
   }
 
   async resolveCoordinates(postalCode: string): Promise<{ latitude: number; longitude: number } | null> {
+    const area = await this.resolveArea(postalCode);
+    return area ? { latitude: area.latitude, longitude: area.longitude } : null;
+  }
+
+  /** Postal code → area_id + coordinates (used for delivery orders). */
+  async resolveArea(postalCode: string): Promise<BiteshipArea | null> {
     try {
       const data = await this.request(`/v1/maps/areas?countries=ID&postal_code=${encodeURIComponent(postalCode)}`);
       const area = Array.isArray(data.areas) ? data.areas[0] : null;
-      if (area && typeof area.latitude === "number" && typeof area.longitude === "number") {
-        return { latitude: area.latitude, longitude: area.longitude };
+      if (
+        area &&
+        typeof area.latitude === "number" &&
+        typeof area.longitude === "number"
+      ) {
+        return {
+          areaId: area.area_id ?? "",
+          latitude: area.latitude,
+          longitude: area.longitude,
+        };
       }
       return null;
     } catch {
-      return null; // instant couriers just don't appear — never fail the quote
+      return null; // area resolution is best-effort — never fail the order
     }
+  }
+
+  /** Create a delivery order (pickup / drop_off) → waybill (resi). */
+  async createOrder(input: DeliveryOrderInput): Promise<DeliveryOrderResult> {
+    const body: Record<string, unknown> = {
+      shipper_contact_name: input.shipper.contactName,
+      shipper_contact_phone: input.shipper.contactPhone,
+      origin_contact_name: input.shipper.contactName,
+      origin_contact_phone: input.shipper.contactPhone,
+      origin_address: input.shipper.address,
+      origin_postal_code: Number(input.shipper.postalCode),
+      origin_collection_method: input.collectionMethod,
+      destination_contact_name: input.recipient.name,
+      destination_contact_phone: input.recipient.phone,
+      destination_address: input.recipient.address,
+      destination_postal_code: Number(input.recipient.postalCode),
+      courier_company: input.courierCompany,
+      courier_type: input.courierType,
+      courier_insurance: 0,
+      delivery_type: "now",
+      reference_id: input.referenceId,
+      items: input.items.map((i) => ({
+        name: i.name,
+        value: i.value,
+        quantity: i.quantity,
+        weight: i.weight,
+        ...(i.length != null && i.width != null && i.height != null
+          ? { length: i.length, width: i.width, height: i.height }
+          : {}),
+      })),
+    };
+
+    // Origin/destination resolution: area_id preferred, coordinates fallback.
+    if (input.shipper.areaId) body.origin_area_id = input.shipper.areaId;
+    if (input.shipper.coordinates) body.origin_coordinate = input.shipper.coordinates;
+    if (input.recipient.areaId) body.destination_area_id = input.recipient.areaId;
+    if (input.recipient.coordinates) body.destination_coordinate = input.recipient.coordinates;
+
+    const data = await this.request("/v1/orders", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    return {
+      deliveryOrderId: data.id ?? "",
+      waybillId: data.courier?.waybill_id ?? data.courier?.tracking_id ?? data.id ?? "",
+      trackingId: data.courier?.tracking_id ?? null,
+      status: data.status ?? "",
+      price: data.price ?? 0,
+    };
   }
 }
 
@@ -178,6 +297,20 @@ export class MockBiteshipClient implements ShippingProviderClient {
   async resolveCoordinates(_postalCode: string): Promise<{ latitude: number; longitude: number } | null> {
     return null; // mock keeps the postal path
   }
+
+  async resolveArea(_postalCode: string): Promise<BiteshipArea | null> {
+    return null;
+  }
+
+  async createOrder(input: DeliveryOrderInput): Promise<DeliveryOrderResult> {
+    return {
+      deliveryOrderId: `mock-delivery-${input.referenceId}`,
+      waybillId: `WYB-MOCK-${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`,
+      trackingId: `mock-tracking-${input.referenceId}`,
+      status: "confirmed",
+      price: 0,
+    };
+  }
 }
 
 /** Prod without a key — online shipping unavailable, checkout falls back to pickup/manual. */
@@ -187,6 +320,12 @@ export class UnavailableShippingProvider implements ShippingProviderClient {
   }
   async resolveCoordinates(): Promise<{ latitude: number; longitude: number } | null> {
     return null;
+  }
+  async resolveArea(): Promise<BiteshipArea | null> {
+    return null;
+  }
+  async createOrder(): Promise<DeliveryOrderResult> {
+    throw new Error("Pengiriman online belum tersedia di toko ini");
   }
 }
 
