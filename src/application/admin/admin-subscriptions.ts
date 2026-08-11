@@ -136,6 +136,8 @@ export interface UpdateStoreTrialInput {
   storeId: EntityId;
   /** Extend from now (or from the current deadline if still live). */
   extendTrialDays?: number;
+  /** Set an exact deadline (ISO) — enables testing pause/reminder windows. */
+  setTrialEndsAt?: string | null;
   clearTrial?: boolean;
 }
 
@@ -148,6 +150,12 @@ export class UpdateStoreTrial {
 
     if (input.clearTrial) {
       store.setTrialEndsAt(null);
+    } else if (input.setTrialEndsAt !== undefined) {
+      store.setTrialEndsAt(input.setTrialEndsAt);
+      // A future deadline resumes a paused store (grace window).
+      if (input.setTrialEndsAt && new Date(input.setTrialEndsAt).getTime() > Date.now()) {
+        store.resume();
+      }
     } else if (input.extendTrialDays) {
       const base = store.trialEndsAt && new Date(store.trialEndsAt).getTime() > Date.now()
         ? store.trialEndsAt

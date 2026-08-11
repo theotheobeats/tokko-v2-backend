@@ -591,6 +591,7 @@ const subscriptionPatchSchema = z.object({
   currentPeriodEnd: z.string().nullable().optional(),
   clearTrial: z.boolean().optional(),
   extendTrialDays: z.number().int().positive().max(365).optional(),
+  setTrialEndsAt: z.string().nullable().optional(),
   commissionRate: z.number().min(0).max(100).nullable().optional(),
 });
 
@@ -614,11 +615,12 @@ adminRouter.patch("/subscriptions/:storeId", zValidator("json", subscriptionPatc
     if (!result.ok) return c.json({ error: { code: "NOT_FOUND" } }, 404);
   }
 
-  if (body.clearTrial || body.extendTrialDays) {
+  if (body.clearTrial || body.extendTrialDays || body.setTrialEndsAt !== undefined) {
     const result = await new UpdateStoreTrial(storeRepo).execute({
       storeId,
       clearTrial: body.clearTrial,
       extendTrialDays: body.extendTrialDays,
+      setTrialEndsAt: body.setTrialEndsAt,
     });
     if (!result.ok) return c.json({ error: { code: "NOT_FOUND" } }, 404);
   }
