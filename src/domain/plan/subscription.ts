@@ -15,6 +15,9 @@ export interface SubscriptionProps {
   externalRef: string | null;
   /** Pending auto-renewal invoice external_id (set by the renewal job, cleared on payment). */
   renewalInvoiceExternalId: string | null;
+  /** Next-term plan change — paid now, applied at current_period_end. */
+  pendingPlan: Plan | null;
+  pendingCycle: BillingCycle | null;
   startedAt: string;
   updatedAt: string;
 }
@@ -32,6 +35,8 @@ export class Subscription {
     currentPeriodEnd?: string | null;
     externalRef?: string | null;
     renewalInvoiceExternalId?: string | null;
+    pendingPlan?: Plan | null;
+    pendingCycle?: BillingCycle | null;
     startedAt?: string;
     updatedAt?: string;
   }): Subscription {
@@ -45,6 +50,8 @@ export class Subscription {
       currentPeriodEnd: params.currentPeriodEnd ?? null,
       externalRef: params.externalRef ?? null,
       renewalInvoiceExternalId: params.renewalInvoiceExternalId ?? null,
+      pendingPlan: params.pendingPlan ?? null,
+      pendingCycle: params.pendingCycle ?? null,
       startedAt: params.startedAt ?? new Date().toISOString(),
       updatedAt: params.updatedAt ?? new Date().toISOString(),
     });
@@ -63,6 +70,8 @@ export class Subscription {
   get currentPeriodEnd() { return this.props.currentPeriodEnd; }
   get externalRef() { return this.props.externalRef; }
   get renewalInvoiceExternalId() { return this.props.renewalInvoiceExternalId; }
+  get pendingPlan() { return this.props.pendingPlan; }
+  get pendingCycle() { return this.props.pendingCycle; }
   get startedAt() { return this.props.startedAt; }
   get updatedAt() { return this.props.updatedAt; }
 

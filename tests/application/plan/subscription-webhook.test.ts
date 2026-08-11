@@ -79,7 +79,7 @@ describe("HandleSubscriptionInvoice", () => {
     });
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ handled: true, plan: "pro", cycle: "annual" });
+    if (result.ok) expect(result.value).toEqual({ handled: true, plan: "pro", cycle: "annual", renewal: false });
     expect(subRepo.save).toHaveBeenCalled();
     // Payment clears the trial and resumes the store.
     expect(store.trialEndsAt).toBeNull();
@@ -129,6 +129,7 @@ describe("HandleSubscriptionInvoice", () => {
     const { storeRepo, subRepo } = stubRepos(store, existing);
     const uc = new HandleSubscriptionInvoice(storeRepo, subRepo);
 
+    // Same plan+cycle → renewal: extends the period.
     const result = await uc.execute({
       external_id: subscriptionExternalId(store.id, "pro", "monthly", "n2"),
       status: "PAID",
@@ -138,6 +139,36 @@ describe("HandleSubscriptionInvoice", () => {
     expect(result.ok).toBe(true);
     const saved = (subRepo.save as ReturnType<typeof vi.fn>).mock.calls[0][0] as Subscription;
     expect(saved.currentPeriodEnd).toBe(new Date(new Date(existing.currentPeriodEnd!).getTime() + 31 * DAY).toISOString());
+    expect(saved.pendingPlan).toBeNull();
+    if (result.ok) expect(result.value.renewal).toBe(true);
+  });
+
+  it("schedules a plan CHANGE for the next term (no immediate switch, no extension)", async () => {
+    const store = makeStore();
+    const existing = Subscription.create({
+      id: createEntityId(),
+      storeId: store.id,
+      plan: "pro",
+      cycle: "annual",
+      currentPeriodEnd: new Date(Date.now() + 100 * DAY).toISOString(),
+    });
+    const { storeRepo, subRepo } = stubRepos(store, existing);
+    const uc = new HandleSubscriptionInvoice(storeRepo, subRepo);
+
+    // Different plan → prepaid CHANGE: pending_plan set, current period untouched.
+    const result = await uc.execute({
+      external_id: subscriptionExternalId(store.id, "commerce", "annual", "n3"),
+      status: "PAID",
+      amount: 990_000,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.renewal).toBe(false);
+    const saved = (subRepo.save as ReturnType<typeof vi.fn>).mock.calls[0][0] as Subscription;
+    expect(saved.plan).toBe("pro"); // still pro until the term ends
+    expect(saved.pendingPlan).toBe("commerce");
+    expect(saved.pendingCycle).toBe("annual");
+    expect(saved.currentPeriodEnd).toBe(existing.currentPeriodEnd); // no extension
   });
 
   it("returns store-not-found for an unknown store", async () => {

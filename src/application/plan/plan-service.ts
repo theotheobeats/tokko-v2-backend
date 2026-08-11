@@ -25,6 +25,12 @@ export interface PlanView {
   aiDescriptionLimit: number | null;
   retentionDays: number;
   commissionRate: number | null;
+  /** Scheduled next-term plan change (paid now, applies at period end). */
+  pendingPlan: "pro" | "commerce" | null;
+  pendingCycle: "monthly" | "annual" | null;
+  pendingStartsAt: string | null;
+  /** End of the current paid term (null when none). */
+  currentPeriodEnd: string | null;
 }
 
 export class PlanService {
@@ -38,7 +44,8 @@ export class PlanService {
 
   /** Full plan view for payloads/gates. */
   async viewOf(store: Store): Promise<PlanView> {
-    const tier = await this.tierOf(store);
+    const sub = await this.subscriptionRepo.findActiveByStoreId(store.id);
+    const tier = resolveTier(store, sub);
     const cfg = tierConfigFor(tier);
     return {
       tier,
@@ -54,6 +61,10 @@ export class PlanService {
       aiDescriptionLimit: cfg.aiDescriptionLimit,
       retentionDays: cfg.retentionDays,
       commissionRate: store.commissionRate,
+      pendingPlan: sub?.pendingPlan ?? null,
+      pendingCycle: sub?.pendingCycle ?? null,
+      pendingStartsAt: sub?.pendingPlan ? sub.currentPeriodEnd : null,
+      currentPeriodEnd: sub?.currentPeriodEnd ?? null,
     };
   }
 

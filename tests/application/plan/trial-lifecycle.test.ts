@@ -48,7 +48,7 @@ describe("RunTrialLifecycle", () => {
 
     const result = await job.execute();
 
-    expect(result).toEqual({ reminded: 0, paused: 1, archived: 0, renewals: 0 });
+    expect(result).toEqual({ reminded: 0, paused: 1, archived: 0, renewals: 0, switches: 0 });
     expect(store.isPaused).toBe(true);
     expect(store.status).toBe(StoreStatus.Paused);
     expect(storeRepo.save).toHaveBeenCalled();
