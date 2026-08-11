@@ -32,7 +32,7 @@ app.use("*", async (c, next) => {
   // Store subdomains: https://<store>.7okko.com
   const STORE_SUBDOMAIN_RE = /^https:\/\/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+7okko\.com$/;
   // Preview/workers.dev origins (staging frontend/admin workers.dev URLs).
-  const WORKERS_DEV_RE = /^https:\/\/[a-z0-9-]+\.workers\.dev$/;
+  const WORKERS_DEV_RE = /^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.workers\.dev$/;
 
   const origin = c.req.header("origin");
   const allowed =
