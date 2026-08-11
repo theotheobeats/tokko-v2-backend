@@ -38,7 +38,7 @@ export const TIER_CONFIG: Record<Exclude<Tier, "none">, TierConfig> = {
     productLimit: 50,
     aiStoreLimit: 1,
     aiDescriptionLimit: 10,
-    onlineCheckout: false,
+    onlineCheckout: true, // trial = full Pro features — checkout included
     payouts: false,
     brandingRemoved: false,
     retentionDays: 31,

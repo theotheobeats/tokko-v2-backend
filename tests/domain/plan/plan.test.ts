@@ -88,10 +88,12 @@ describe("tierConfigFor", () => {
     expect(tierConfigFor(Tier.Pro).aiDescriptionLimit).toBeNull();
   });
 
-  it("online checkout is available on Pro & Commerce, payouts are commerce-only", () => {
-    expect(tierConfigFor(Tier.Trial).onlineCheckout).toBe(false);
+  it("online checkout is available on every tier; payouts are commerce-only", () => {
+    expect(tierConfigFor(Tier.Trial).onlineCheckout).toBe(true);
     expect(tierConfigFor(Tier.Pro).onlineCheckout).toBe(true);
     expect(tierConfigFor(Tier.Commerce).onlineCheckout).toBe(true);
+    expect(tierConfigFor(Tier.Trial).payouts).toBe(false);
+    expect(tierConfigFor(Tier.Pro).payouts).toBe(false);
     expect(tierConfigFor(Tier.Commerce).payouts).toBe(true);
   });
 
