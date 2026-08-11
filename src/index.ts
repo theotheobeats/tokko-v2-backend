@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { createAuth } from "./lib/auth";
 import type { Env } from "./types";
@@ -16,7 +15,7 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 // Global middleware
 // ---------------------------------------------------------------------------
 app.use(logger());
-app.use("*", (c, next) => {
+app.use("*", async (c, next) => {
   const env = c.env as Env;
   const extraOrigins = [
     ...(env.FRONTEND_URL ? [env.FRONTEND_URL] : []),
@@ -32,19 +31,43 @@ app.use("*", (c, next) => {
   ];
   // Store subdomains: https://<store>.7okko.com
   const STORE_SUBDOMAIN_RE = /^https:\/\/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+7okko\.com$/;
-  return cors({
-    origin: (origin) => {
-      if (!origin) return undefined;
-      if (exactOrigins.includes(origin)) return origin;
-      if (STORE_SUBDOMAIN_RE.test(origin)) return origin;
-      return undefined;
-    },
-    allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    exposeHeaders: ["Content-Length"],
-    maxAge: 600,
-    credentials: true,
-  })(c, next);
+  // Preview/workers.dev origins (staging frontend/admin workers.dev URLs).
+  const WORKERS_DEV_RE = /^https:\/\/[a-z0-9-]+\.workers\.dev$/;
+
+  const origin = c.req.header("origin");
+  const allowed =
+    origin &&
+    (exactOrigins.includes(origin) || STORE_SUBDOMAIN_RE.test(origin) || WORKERS_DEV_RE.test(origin))
+      ? origin
+      : undefined;
+
+  if (allowed) {
+    c.header("Access-Control-Allow-Origin", allowed);
+    c.header("Access-Control-Allow-Credentials", "true");
+    // Chrome Private Network Access: required when the page is on a local/
+    // private network (VPN, office) — otherwise the preflight fails with
+    // "CORS request did not succeed" + a 204 missing-ACAO error.
+    c.header("Access-Control-Allow-Private-Network", "true");
+    c.header("Vary", "Origin");
+  }
+
+  // Preflight — explicit so the 204 ALWAYS carries the headers (Hono's cors
+  // returns 204 without ACAO when its origin callback bails, which browsers
+  // surface as "CORS header Access-Control-Allow-Origin missing").
+  if (c.req.method === "OPTIONS" && c.req.header("access-control-request-method")) {
+    c.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    c.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    c.header("Access-Control-Expose-Headers", "Content-Length");
+    // Short cache: stale preflights from deploys clear in 60s instead of 10min.
+    c.header("Access-Control-Max-Age", "60");
+    return c.body(null, 204);
+  }
+
+  if (allowed) {
+    c.header("Access-Control-Expose-Headers", "Content-Length");
+  }
+
+  return next();
 });
 
 // ---------------------------------------------------------------------------

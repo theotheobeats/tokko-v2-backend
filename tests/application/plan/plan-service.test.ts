@@ -67,7 +67,7 @@ describe("PlanService", () => {
     const view = await service.viewOf(makeStore(3));
     expect(view.tier).toBe(Tier.Trial);
     expect(view.watermark).toBe(true);
-    expect(view.onlineCheckout).toBe(false);
+    expect(view.onlineCheckout).toBe(true);
     expect(view.productLimit).toBe(50);
     expect(view.aiDescriptionLimit).toBe(10);
   });
