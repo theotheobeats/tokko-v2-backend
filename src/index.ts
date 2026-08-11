@@ -139,6 +139,7 @@ import { adminRouter } from "./interfaces/routes/admin";
 import { paymentsRouter } from "./interfaces/routes/payments";
 import { categoriesRouter } from "./interfaces/routes/categories";
 import { shippingRouter } from "./interfaces/routes/shipping";
+import { plansRouter } from "./interfaces/routes/plans";
 app.route("/api/stores", storesRouter);
 app.route("/api/stores", productsRouter);
 app.route("/api/stores", ordersRouter);
@@ -151,6 +152,7 @@ app.route("/api/admin", adminRouter); // admin panel (requireAdmin guard)
 app.route("/api", paymentsRouter); // payments + Xendit webhook
 app.route("/api/stores", categoriesRouter); // product categories
 app.route("/api/stores", shippingRouter); // Biteship shipping rates + origin settings
+app.route("/api/plans", plansRouter); // pre-store plan purchase (signup gate)
 
 // ---------------------------------------------------------------------------
 // Export — worker entry (fetch + cron scheduled)

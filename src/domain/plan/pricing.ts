@@ -20,6 +20,9 @@ export const PRICE: Record<Plan, Record<BillingCycle, number>> = {
 
 export const SUBSCRIPTION_EXTERNAL_ID_PREFIX = "tokko-sub::";
 
+/** Pre-store plan purchase (plan-selection gate at signup). */
+export const PENDING_PLAN_EXTERNAL_ID_PREFIX = "tokko-pre::";
+
 /** Days added to current_period_end on activation. */
 export const PERIOD_DAYS: Record<BillingCycle, number> = { monthly: 31, annual: 365 };
 
@@ -48,4 +51,28 @@ export function parseSubscriptionExternalId(externalId: string): ParsedSubscript
   if (plan !== "pro" && plan !== "commerce") return null;
   if (cycle !== "monthly" && cycle !== "annual") return null;
   return { storeId, plan, cycle, nonce };
+}
+
+/** Pre-store plan invoice external_id. */
+export function pendingPlanExternalId(userId: string, plan: Plan, cycle: BillingCycle, nonce: string): string {
+  return `${PENDING_PLAN_EXTERNAL_ID_PREFIX}${userId}::${plan}::${cycle}::${nonce}`;
+}
+
+export interface ParsedPendingPlanInvoice {
+  userId: string;
+  plan: Plan;
+  cycle: BillingCycle;
+  nonce: string;
+}
+
+/** Parse a pre-store plan invoice external_id; null when not one of ours. */
+export function parsePendingPlanExternalId(externalId: string): ParsedPendingPlanInvoice | null {
+  if (!externalId.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)) return null;
+  const parts = externalId.split("::");
+  if (parts.length !== 5) return null;
+  const [, userId, plan, cycle, nonce] = parts;
+  if (!userId || !nonce) return null;
+  if (plan !== "pro" && plan !== "commerce") return null;
+  if (cycle !== "monthly" && cycle !== "annual") return null;
+  return { userId, plan, cycle, nonce };
 }

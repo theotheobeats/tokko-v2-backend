@@ -97,7 +97,7 @@ try {
     emit(`seed-l4-villages-${prov}.sql`, rows);
   }
 
-  const dbName = "tokko-db";
+  const dbName = process.env.D1_DB ?? "tokko-db";
   const run = (file, label) => {
     process.stdout.write(`   ${label} … `);
     try {
