@@ -1,5 +1,5 @@
 /**
- * HandleSubscriptionInvoice — activates a paid plan when a Xendit
+ * HandleSubscriptionInvoice — activates a paid plan when a payment provider
  * subscription invoice webhook (PAID) arrives. Amount re-verified against
  * pricing (forgery guard, same pattern as order payments).
  */

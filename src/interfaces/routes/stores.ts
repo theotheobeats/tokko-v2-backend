@@ -24,7 +24,7 @@ import { PlanService, type PlanView } from "../../application/plan/plan-service"
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
 import { activatePendingPlan } from "../../application/plan/pending-plan";
-import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
+import { createPaymentProvider } from "../../infrastructure/payments/payment-provider-client";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
@@ -348,7 +348,7 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     whatsappNumber: body.whatsappNumber,
   });
 
-  // Gate: online checkout (Xendit) is available on Pro & Commerce.
+  // Gate: online checkout is available on Pro & Commerce.
   if (body.paymentOnline === true && !(await planService(db).canUseOnlineCheckout(store))) {
     return c.json({
       error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Pro dan Commerce.", field: "paymentOnline" },
@@ -420,7 +420,7 @@ storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionC
 
   // Real payments required — no mock invoices for subscriptions.
   const provider = createPaymentProvider(c.env);
-  const { useRealPayments } = await import("../../infrastructure/payments/xendit-client");
+  const { useRealPayments } = await import("../../infrastructure/payments/payment-provider-client");
   if (!useRealPayments(c.env)) {
     return c.json({
       error: { code: "PAYMENT_UNAVAILABLE", message: "Pembayaran langganan belum tersedia saat ini." },

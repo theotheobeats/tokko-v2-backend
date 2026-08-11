@@ -1,9 +1,9 @@
 /**
  * SyncPendingPayments — admin on-demand reconciliation. For every pending
- * payment (optionally scoped to a store/order), asks Xendit for the real
+ * payment (optionally scoped to a store/order), asks the provider for the real
  * invoice status and updates the DB + confirms the order when newly paid.
  *
- * This is the manual fallback for the (rare) case where Xendit webhooks are
+ * This is the manual fallback for the (rare) case where provider webhooks are
  * permanently lost — the same logic the polling endpoint uses lazily.
  */
 
@@ -12,7 +12,7 @@ import type { Result } from "../../domain/shared/types";
 import { ok } from "../../domain/shared/types";
 import type { PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
-import type { PaymentProviderClient } from "../../infrastructure/payments/xendit-client";
+import type { PaymentProviderClient } from "../../infrastructure/payments/payment-provider-client";
 
 export interface SyncPaymentsInput {
   storeId?: EntityId;

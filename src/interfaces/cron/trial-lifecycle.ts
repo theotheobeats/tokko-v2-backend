@@ -17,7 +17,7 @@ export async function runTrialLifecycle(env: Env): Promise<TrialLifecycleResult>
   const userRepo = new D1AdminUserRepository(db);
 
   // Auto-renewal invoices need real payments (no mock invoices for billing).
-  const { createPaymentProvider, useRealPayments } = await import("../../infrastructure/payments/xendit-client");
+  const { createPaymentProvider, useRealPayments } = await import("../../infrastructure/payments/payment-provider-client");
   const { subscriptionExternalId, priceFor } = await import("../../domain/plan/pricing");
   const provider = createPaymentProvider(env);
   const createRenewalInvoice = useRealPayments(env)

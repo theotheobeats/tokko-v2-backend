@@ -2,7 +2,7 @@
  * Biteship shipping provider client — Indonesian courier aggregator
  * (rates, delivery orders, tracking webhooks).
  *
- * Same provider pattern as the Xendit/AI layers: real calls when a
+ * Same provider pattern as the payments/AI layers: real calls when a
  * BITESHIP_API_KEY is configured, a deterministic mock in dev/tests, and
  * an explicit "unavailable" provider in prod-without-key so checkout falls
  * back gracefully (pickup/manual shipping only).

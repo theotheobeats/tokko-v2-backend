@@ -2,7 +2,7 @@
  * Plans router — pre-store plan purchase (the plan-selection gate at signup).
  *
  *   POST /api/plans/checkout  (auth)  { plan, cycle }
- *     → Xendit invoice (external_id tokko-pre::<userId>::<plan>::<cycle>::<nonce>)
+ *     → provider invoice (external_id tokko-pre::<userId>::<plan>::<cycle>::<nonce>)
  *     → on PAID, the webhook records a pending plan; onboarding consumes it
  *       to create the store's subscription (no trial). Free path skips this
  *       and the store starts a 14-day trial instead.
@@ -13,7 +13,7 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { createAuth } from "../../lib/auth";
 import type { Env } from "../../types";
-import { createPaymentProvider, useRealPayments } from "../../infrastructure/payments/xendit-client";
+import { createPaymentProvider, useRealPayments } from "../../infrastructure/payments/payment-provider-client";
 import { pendingPlanExternalId, priceFor } from "../../domain/plan/pricing";
 
 const plansRouter = new Hono<{ Bindings: Env }>();

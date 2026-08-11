@@ -9,8 +9,8 @@ import { Payment } from "../../domain/payment/payment";
 import type { PaymentStatus } from "../../domain/payment/types";
 import type { PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
-import type { PaymentProviderClient } from "../../infrastructure/payments/xendit-client";
-import { xenditMethodsFor } from "./payment-method-catalog";
+import type { PaymentProviderClient } from "../../infrastructure/payments/payment-provider-client";
+import { providerMethodsFor } from "./payment-method-catalog";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -59,7 +59,7 @@ export class WebhookAmountMismatchError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Channel → Xendit payment_methods mapping
+// Channel → provider payment_methods mapping
 // ---------------------------------------------------------------------------
 
 const CHANNEL_METHODS: Record<string, string[]> = {
@@ -115,7 +115,7 @@ export class CreatePayment {
           email: input.customerEmail?.trim() || undefined,
         },
         paymentMethods: input.paymentMethodIds?.length
-          ? xenditMethodsFor(input.paymentMethodIds)
+          ? providerMethodsFor(input.paymentMethodIds)
           : input.channel
             ? CHANNEL_METHODS[input.channel]
             : undefined,
@@ -141,10 +141,10 @@ export class CreatePayment {
 }
 
 // ---------------------------------------------------------------------------
-// HandleXenditWebhook
+// HandlePaymentWebhook
 // ---------------------------------------------------------------------------
 
-export interface XenditWebhookPayload {
+export interface PaymentWebhookPayload {
   id?: string;
   external_id: string;
   status: string; // PAID | EXPIRED | FAILED | PENDING
@@ -153,7 +153,7 @@ export interface XenditWebhookPayload {
   amount?: number;
 }
 
-export class HandleXenditWebhook {
+export class HandlePaymentWebhook {
   constructor(
     private readonly paymentRepo: PaymentRepository,
     private readonly orderRepo: OrderRepository,
@@ -165,10 +165,10 @@ export class HandleXenditWebhook {
   ) {}
 
   /**
-   * Process a verified Xendit webhook. Idempotent: a payment that is already
-   * paid is a no-op (Xendit can redeliver webhooks).
+   * Process a verified payment webhook. Idempotent: a payment that is already
+   * paid is a no-op (the provider can redeliver webhooks).
    */
-  async execute(payload: XenditWebhookPayload): Promise<Result<{ handled: boolean }, PaymentNotFoundError | WebhookAmountMismatchError>> {
+  async execute(payload: PaymentWebhookPayload): Promise<Result<{ handled: boolean }, PaymentNotFoundError | WebhookAmountMismatchError>> {
     const payment = await this.paymentRepo.findByExternalId(payload.external_id);
     if (!payment) return err(new PaymentNotFoundError());
 

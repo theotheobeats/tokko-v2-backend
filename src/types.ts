@@ -18,10 +18,10 @@ export interface Env {
   LLM_MODEL: string;
   LLM_BASE_URL?: string;  // optional — defaults to DeepSeek
 
-  // Payments — Xendit (Invoices API). Mocked when no key is set.
-  XENDIT_SECRET_KEY?: string;
-  XENDIT_WEBHOOK_TOKEN?: string;
-  XENDIT_FORCE_MOCK?: string;
+  // Payments — hosted checkout provider. Mocked when no key is set.
+  PAYMENT_PROVIDER_SECRET_KEY?: string;
+  PAYMENT_PROVIDER_WEBHOOK_TOKEN?: string;
+  PAYMENT_PROVIDER_FORCE_MOCK?: string;
   // Public API origin used for payment success/failure redirects.
   API_PUBLIC_URL?: string;
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { SyncPendingPayments } from "../../../src/application/payment/sync-payments";
 import type { PaymentRepository } from "../../../src/infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../../src/infrastructure/repos/d1-order-repo";
-import type { PaymentProviderClient } from "../../../src/infrastructure/payments/xendit-client";
+import type { PaymentProviderClient } from "../../../src/infrastructure/payments/payment-provider-client";
 import { Payment } from "../../../src/domain/payment/payment";
 import { PaymentChannel } from "../../../src/domain/payment/types";
 import { Order } from "../../../src/domain/order/order";
@@ -15,7 +15,7 @@ function makePayment(externalId = "tokko-abc"): Payment {
     amount: 50000,
     channel: PaymentChannel.Qris,
     externalId,
-    invoiceUrl: "https://checkout.xendit.co/web/x",
+    invoiceUrl: "https://checkout.payments.test/web/x",
   });
 }
 
@@ -41,7 +41,7 @@ function makeOrder(orderId: string, storeId: string): Order {
 }
 
 describe("SyncPendingPayments", () => {
-  it("marks a pending payment paid + confirms the order when Xendit says PAID", async () => {
+  it("marks a pending payment paid + confirms the order when the provider says PAID", async () => {
     const payment = makePayment();
     const order = makeOrder(payment.orderId as string, payment.storeId as string);
 
@@ -66,7 +66,7 @@ describe("SyncPendingPayments", () => {
     expect(order.paymentNote).toContain("QRIS");
   });
 
-  it("leaves pending payments alone when Xendit still says PENDING", async () => {
+  it("leaves pending payments alone when the provider still says PENDING", async () => {
     const payment = makePayment();
     const paymentRepo = {
       listPending: vi.fn().mockResolvedValue([payment]),
@@ -97,7 +97,7 @@ describe("SyncPendingPayments", () => {
       getInvoice: vi
         .fn()
         .mockResolvedValueOnce({ status: "EXPIRED" })
-        .mockRejectedValueOnce(new Error("xendit down")),
+        .mockRejectedValueOnce(new Error("provider down")),
     } as unknown as PaymentProviderClient;
 
     const result = await new SyncPendingPayments(paymentRepo, orderRepo, provider).execute();

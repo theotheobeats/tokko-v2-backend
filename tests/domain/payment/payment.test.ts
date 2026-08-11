@@ -13,13 +13,13 @@ describe("Payment aggregate", () => {
       storeId,
       amount: 85000,
       externalId: "tokko-abc",
-      invoiceUrl: "https://checkout.xendit.co/web/abc",
+      invoiceUrl: "https://checkout.payments.test/web/abc",
     });
 
     expect(p.status).toBe(PaymentStatus.Pending);
     expect(p.amount).toBe(85000);
     expect(p.currency).toBe("IDR");
-    expect(p.provider).toBe("xendit");
+    expect(p.provider).toBe("hosted");
     expect(p.isPaid).toBe(false);
     expect(p.paidAt).toBeNull();
   });

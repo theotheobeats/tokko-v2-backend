@@ -4,7 +4,7 @@ import { user } from "./users";
 
 /**
  * Pending plans — a paid plan bought BEFORE the store exists (plan-selection
- * gate at signup). Paid via a Xendit invoice (`tokko-pre::…` external_id);
+ * gate at signup). Paid via a provider invoice (`tokko-pre::…` external_id);
  * the webhook records the pending row here, and onboarding consumes it to
  * create the store's subscription (no trial) — or the trial starts if the
  * user picked the free path.

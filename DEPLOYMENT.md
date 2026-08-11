@@ -56,7 +56,7 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET --env staging
 npx wrangler secret put RESEND_API_KEY      --env staging
 npx wrangler secret put LLM_API_KEY         --env staging
 npx wrangler secret put BITESHIP_API_KEY    --env staging
-# optional: XENDIT_SECRET_KEY, XENDIT_WEBHOOK_TOKEN — see src/ for full list
+# optional: PAYMENT_PROVIDER_SECRET_KEY, PAYMENT_PROVIDER_WEBHOOK_TOKEN — see src/ for full list
 ```
 
 ### 3. Staging custom domains (Cloudflare dashboard)

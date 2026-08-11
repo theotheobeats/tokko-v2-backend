@@ -4,7 +4,7 @@
  * Tier matrix (v2 — approved):
  *   trial   14 days · full Pro features · Tokko watermark · AI 1x/10x caps
  *   pro     Rp 49rb/mo (490rb/yr) · watermark removed · unlimited AI
- *   commerce Rp 99–149rb/mo · online checkout (Xendit) + payouts · post-PG
+ *   commerce Rp 99–149rb/mo · online checkout + payouts · post-PG
  */
 
 import type { Store } from "../store/store";
@@ -27,7 +27,7 @@ export interface TierConfig {
   productLimit: number;
   aiStoreLimit: number | null;
   aiDescriptionLimit: number | null;
-  onlineCheckout: boolean; // Xendit hosted invoice
+  onlineCheckout: boolean; // hosted payment invoice
   payouts: boolean;
   brandingRemoved: boolean; // Tokko watermark hidden
   retentionDays: number; // order history visibility window

@@ -10,12 +10,12 @@ import { D1OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { PlanService } from "../../application/plan/plan-service";
-import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
+import { createPaymentProvider } from "../../infrastructure/payments/payment-provider-client";
 import { SUBSCRIPTION_EXTERNAL_ID_PREFIX, PENDING_PLAN_EXTERNAL_ID_PREFIX } from "../../domain/plan/pricing";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
 import {
   CreatePayment,
-  HandleXenditWebhook,
+  HandlePaymentWebhook,
   ListOrderPayments,
   ListStorePayments,
   OrderNotFoundError,
@@ -23,7 +23,7 @@ import {
   WebhookUnauthorizedError,
   WebhookAmountMismatchError,
   PaymentNotFoundError,
-  type XenditWebhookPayload,
+  type PaymentWebhookPayload,
 } from "../../application/payment/payment-use-cases";
 import type { EntityId } from "../../domain/shared/types";
 import { PaymentChannel } from "../../domain/payment/types";
@@ -32,7 +32,7 @@ import { PaymentChannel } from "../../domain/payment/types";
  * Payment routes (mounted under /api):
  *   POST /api/orders/:orderId/payment        — create a payment attempt (public)
  *   GET  /api/orders/:orderId/payments       — payment status (public, for polling)
- *   POST /api/webhooks/xendit                — Xendit webhook (token-verified)
+ *   POST /api/webhooks/payments              — provider webhook (token-verified)
  *   GET  /api/stores/:storeId/payments       — store payments (auth, owner)
  */
 
@@ -111,9 +111,9 @@ paymentsRouter.get("/orders/:orderId/payments", async (c) => {
   const payments = await new ListOrderPayments(paymentRepo).execute({ orderId });
 
   // Self-heal: if the latest attempt is still pending but older than 10
-  // minutes, reconcile against Xendit directly — a webhook may have been
-  // lost/delayed (Xendit retries, but never rely on it). Mutates the domain
-  // object, so the response below reflects the corrected status.
+  // minutes, reconcile against the provider directly — a webhook may have
+  // been lost/delayed (the provider retries, but never rely on it). Mutates
+  // the domain object, so the response below reflects the corrected status.
   const latest = payments[payments.length - 1];
   if (latest && latest.status === "pending" && latest.createdAt) {
     const ageMs = Date.now() - new Date(latest.createdAt).getTime();
@@ -137,18 +137,18 @@ paymentsRouter.get("/orders/:orderId/payments", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/webhooks/xendit (Xendit server → verified)
+// POST /api/webhooks/payments (provider server → verified)
 // ---------------------------------------------------------------------------
-paymentsRouter.post("/webhooks/xendit", async (c) => {
+paymentsRouter.post("/webhooks/payments", async (c) => {
   const env = c.env as Env;
 
   // Verify the callback token header.
   const token = c.req.header("x-callback-token");
-  if (!env.XENDIT_WEBHOOK_TOKEN || token !== env.XENDIT_WEBHOOK_TOKEN) {
+  if (!env.PAYMENT_PROVIDER_WEBHOOK_TOKEN || token !== env.PAYMENT_PROVIDER_WEBHOOK_TOKEN) {
     return c.json({ error: { code: "WEBHOOK_UNAUTHORIZED" } }, 401);
   }
 
-  const payload = (await c.req.json().catch(() => null)) as XenditWebhookPayload | null;
+  const payload = (await c.req.json().catch(() => null)) as PaymentWebhookPayload | null;
   if (!payload?.external_id) {
     return c.json({ error: { code: "VALIDATION", message: "external_id diperlukan." } }, 400);
   }
@@ -194,7 +194,7 @@ paymentsRouter.post("/webhooks/xendit", async (c) => {
     return c.json({ handled: subResult.value.handled });
   }
 
-  const useCase = new HandleXenditWebhook(
+  const useCase = new HandlePaymentWebhook(
     new D1PaymentRepository(db),
     new D1OrderRepository(db),
     {

@@ -40,7 +40,7 @@ export interface StoreProps {
   originContactPhone: string | null;
   originLatitude: number | null;
   originLongitude: number | null;
-  // Payment config — online (Xendit) toggle + manual bank transfer details.
+  // Payment config — online checkout toggle + manual bank transfer details.
   paymentOnline: boolean;
   bankName: string | null;
   bankAccountNumber: string | null;

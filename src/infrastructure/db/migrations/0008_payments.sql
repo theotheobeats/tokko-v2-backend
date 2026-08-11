@@ -4,7 +4,7 @@ CREATE TABLE `payments` (
 	`store_id` text NOT NULL,
 	`amount` integer NOT NULL,
 	`currency` text DEFAULT 'IDR' NOT NULL,
-	`provider` text DEFAULT 'xendit' NOT NULL,
+	`provider` text DEFAULT 'hosted' NOT NULL,
 	`channel` text,
 	`status` text DEFAULT 'pending' NOT NULL,
 	`external_id` text NOT NULL,

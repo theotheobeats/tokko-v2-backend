@@ -22,7 +22,7 @@ export interface PaymentProps {
   /** Payment method the customer picked (qris / bank_transfer / ewallet / credit_card). */
   channel: string | null;
   status: PaymentStatusType;
-  /** Provider's invoice id (Xendit invoice id). */
+  /** Provider's invoice id. */
   externalId: string;
   /** Provider-hosted payment page URL. */
   invoiceUrl: string;
@@ -57,7 +57,7 @@ export class Payment {
       storeId: params.storeId,
       amount: Math.round(params.amount),
       currency: params.currency ?? "IDR",
-      provider: params.provider ?? PaymentProvider.Xendit,
+      provider: params.provider ?? PaymentProvider.Hosted,
       channel: params.channel?.trim() || null,
       status: PaymentStatus.Pending,
       externalId: params.externalId.trim(),

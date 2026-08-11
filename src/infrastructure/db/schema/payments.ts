@@ -4,7 +4,7 @@ import { orders } from "./orders";
 import { stores } from "./stores";
 
 /**
- * Payment attempts for orders (provider: Xendit).
+ * Payment attempts for orders (hosted checkout provider).
  *
  * One order can have several payment attempts (expired/failed → customer
  * retries with a new payment). The webhook marks the attempt paid and the
@@ -22,12 +22,12 @@ export const payments = sqliteTable(
       .references(() => stores.id),
     amount: integer("amount").notNull(), // integer Rupiah
     currency: text("currency").notNull().default("IDR"),
-    provider: text("provider").notNull().default("xendit"),
+    provider: text("provider").notNull().default("hosted"),
     /** Payment method the customer picked: qris | bank_transfer | ewallet | credit_card. */
     channel: text("channel"),
     /** pending | paid | failed | expired. */
     status: text("status").notNull().default("pending"),
-    /** Provider invoice id (Xendit invoice id) — unique per attempt. */
+    /** Provider invoice id — unique per attempt. */
     externalId: text("external_id").notNull().unique(),
     /** Provider-hosted payment page URL. */
     invoiceUrl: text("invoice_url").notNull(),

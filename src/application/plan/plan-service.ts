@@ -71,7 +71,7 @@ export class PlanService {
     };
   }
 
-  /** Online checkout (Xendit) availability comes from the tier config — all tiers have it. */
+  /** Online checkout (hosted payment) availability comes from the tier config — all tiers have it. */
   async canUseOnlineCheckout(store: Store): Promise<boolean> {
     return tierConfigFor(await this.tierOf(store)).onlineCheckout;
   }

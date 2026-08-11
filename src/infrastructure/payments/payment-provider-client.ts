@@ -1,14 +1,15 @@
 /**
- * Xendit payment provider client.
+ * Hosted-payment provider client (hosted checkout / invoices API).
  *
- * Uses the Invoices API (hosted checkout page). Sandbox-safe: real calls
- * when a XENDIT_SECRET_KEY is configured; a deterministic mock otherwise
- * (mirrors the AI layer's mock pattern so dev/tests work without keys).
+ * Sandbox-safe: real calls when a PAYMENT_PROVIDER_SECRET_KEY is configured;
+ * a deterministic mock otherwise (mirrors the AI layer's mock pattern so
+ * dev/tests work without keys).
  *
  * Env:
- *   XENDIT_SECRET_KEY    (secret) — sandbox or production secret key
- *   XENDIT_WEBHOOK_TOKEN (secret) — verified on incoming webhooks
- *   XENDIT_FORCE_MOCK    (var)    — "1" forces mock even with a key
+ *   PAYMENT_PROVIDER_SECRET_KEY     (secret) — sandbox or production secret key
+ *   PAYMENT_PROVIDER_WEBHOOK_TOKEN  (secret) — verified on incoming webhooks
+ *   PAYMENT_PROVIDER_API_URL        (var)    — provider API base URL (see wrangler.jsonc)
+ *   PAYMENT_PROVIDER_FORCE_MOCK     (var)    — "1" forces mock even with a key
  */
 
 export interface CreateInvoiceInput {
@@ -16,7 +17,7 @@ export interface CreateInvoiceInput {
   amount: number;
   description: string;
   customer?: { givenNames?: string; email?: string; mobileNumber?: string };
-  /** Restrict the invoice to these Xendit payment methods. */
+  /** Restrict the invoice to these provider payment methods. */
   paymentMethods?: string[];
   successRedirectUrl?: string;
   failureRedirectUrl?: string;
@@ -27,10 +28,10 @@ export interface InvoiceResult {
   invoiceUrl: string;
 }
 
-export type XenditInvoiceStatus = "PENDING" | "PAID" | "EXPIRED" | "FAILED";
+export type InvoiceStatus = "PENDING" | "PAID" | "EXPIRED" | "FAILED";
 
 export interface InvoiceStatusResult {
-  status: XenditInvoiceStatus;
+  status: InvoiceStatus;
   paidAt?: string;
   paymentMethod?: string;
 }
@@ -40,27 +41,32 @@ export interface PaymentProviderClient {
   getInvoice(externalId: string): Promise<InvoiceStatusResult>;
 }
 
-export interface XenditEnv {
-  XENDIT_SECRET_KEY?: string;
-  XENDIT_WEBHOOK_TOKEN?: string;
-  XENDIT_FORCE_MOCK?: string;
+export interface ProviderEnv {
+  PAYMENT_PROVIDER_SECRET_KEY?: string;
+  PAYMENT_PROVIDER_WEBHOOK_TOKEN?: string;
+  PAYMENT_PROVIDER_API_URL?: string;
+  PAYMENT_PROVIDER_FORCE_MOCK?: string;
   NODE_ENV?: string;
 }
 
-const XENDIT_API = "https://api.xendit.co";
-
 /** Real payments are used whenever a non-mock key is configured. */
-export function useRealPayments(env: XenditEnv): boolean {
-  if (env.XENDIT_FORCE_MOCK === "1" || env.XENDIT_FORCE_MOCK === "true") return false;
-  const key = env.XENDIT_SECRET_KEY;
-  return !!key && !key.startsWith("xnd_mock");
+export function useRealPayments(env: ProviderEnv): boolean {
+  if (env.PAYMENT_PROVIDER_FORCE_MOCK === "1" || env.PAYMENT_PROVIDER_FORCE_MOCK === "true") return false;
+  const key = env.PAYMENT_PROVIDER_SECRET_KEY;
+  return !!key && !key.startsWith("mock_");
 }
 
-export class XenditClient implements PaymentProviderClient {
-  constructor(private readonly secretKey: string) {}
+export class PaymentProviderHttpClient implements PaymentProviderClient {
+  constructor(
+    private readonly secretKey: string,
+    private readonly apiUrl: string,
+  ) {}
 
   private async request(path: string, init?: RequestInit): Promise<any> {
-    const res = await fetch(`${XENDIT_API}${path}`, {
+    if (!this.apiUrl) {
+      throw new Error("PAYMENT_PROVIDER_API_URL belum dikonfigurasi");
+    }
+    const res = await fetch(`${this.apiUrl}${path}`, {
       ...init,
       headers: {
         Authorization: `Basic ${btoa(`${this.secretKey}:`)}`,
@@ -70,7 +76,7 @@ export class XenditClient implements PaymentProviderClient {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`Xendit ${res.status}: ${body.slice(0, 300)}`);
+      throw new Error(`Payment provider ${res.status}: ${body.slice(0, 300)}`);
     }
     return res.json();
   }
@@ -120,13 +126,13 @@ export class XenditClient implements PaymentProviderClient {
  * Deterministic mock for dev/tests — no network, no keys.
  * Generates a realistic-looking invoice URL (not reachable).
  */
-export class MockXenditClient implements PaymentProviderClient {
-  constructor(private readonly prefix = "xnd_mock") {}
+export class MockPaymentProvider implements PaymentProviderClient {
+  constructor(private readonly prefix = "mock") {}
 
   async createInvoice(input: CreateInvoiceInput): Promise<InvoiceResult> {
     return {
       externalId: input.externalId,
-      invoiceUrl: `https://checkout.xendit.co/web/${this.prefix}-${input.externalId}`,
+      invoiceUrl: `https://checkout.payments.test/web/${this.prefix}-${input.externalId}`,
     };
   }
 
@@ -150,10 +156,12 @@ export class UnavailablePaymentProvider implements PaymentProviderClient {
   }
 }
 
-/** Pick the client based on env: real key → Xendit; dev/test → mock; prod → unavailable. */
-export function createPaymentProvider(env: XenditEnv): PaymentProviderClient {
-  const key = env.XENDIT_SECRET_KEY;
-  if (useRealPayments(env) && key) return new XenditClient(key);
+/** Pick the client based on env: real key → provider; dev/test → mock; prod → unavailable. */
+export function createPaymentProvider(env: ProviderEnv): PaymentProviderClient {
+  const key = env.PAYMENT_PROVIDER_SECRET_KEY;
+  if (useRealPayments(env) && key) {
+    return new PaymentProviderHttpClient(key, env.PAYMENT_PROVIDER_API_URL ?? "");
+  }
   if (env.NODE_ENV === "production") return new UnavailablePaymentProvider();
-  return new MockXenditClient();
+  return new MockPaymentProvider();
 }

@@ -36,7 +36,7 @@ export const stores = sqliteTable("stores", {
   originContactPhone: text("origin_contact_phone"),
   originLatitude: real("origin_latitude"),
   originLongitude: real("origin_longitude"),
-  paymentOnline: integer("payment_online").notNull().default(1), // SQLite boolean (0/1) — Xendit online payments
+  paymentOnline: integer("payment_online").notNull().default(1), // SQLite boolean (0/1) — online payments
   bankName: text("bank_name"), // manual transfer — bank name
   bankAccountNumber: text("bank_account_number"), // manual transfer — account number
   bankAccountName: text("bank_account_name"), // manual transfer — account holder

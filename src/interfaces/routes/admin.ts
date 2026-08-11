@@ -18,7 +18,7 @@ import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscrip
 import { D1CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
 import { ListAdminSubscriptions, SetStorePlan, UpdateStoreTrial } from "../../application/admin/admin-subscriptions";
 import { SyncPendingPayments } from "../../application/payment/sync-payments";
-import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
+import { createPaymentProvider } from "../../infrastructure/payments/payment-provider-client";
 import { createAuth } from "../../lib/auth";
 import { GetAdminStats } from "../../application/admin/admin-stats";
 import {
@@ -658,7 +658,7 @@ adminRouter.patch("/subscriptions/:storeId", zValidator("json", subscriptionPatc
 });
 
 // ---------------------------------------------------------------------------
-// Payment reconciliation — on-demand Xendit status sync (lost-webhook fallback)
+// Payment reconciliation — on-demand provider status sync (lost-webhook fallback)
 // ---------------------------------------------------------------------------
 
 // POST /api/admin/payments/sync?orderId=&storeId=

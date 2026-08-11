@@ -2,7 +2,7 @@
  * Admin — subscription/plan management use cases.
  *
  * Phase 1 is manual billing: admins set plans, extend trials and grant the
- * commission path. Phase 3 wires this to Xendit recurring / xenPlatform
+ * commission path. Phase 3 wires this to provider recurring billing.
  * webhooks (the same endpoints will be driven by the billing service).
  */
 
