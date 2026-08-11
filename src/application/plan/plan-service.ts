@@ -54,8 +54,8 @@ export class PlanService {
     };
   }
 
-  /** Online checkout (Xendit) is available on Pro & Commerce — the storefront gate. */
+  /** Online checkout (Xendit) availability comes from the tier config — all tiers have it. */
   async canUseOnlineCheckout(store: Store): Promise<boolean> {
-    return (await this.tierOf(store)) === "commerce" || (await this.tierOf(store)) === "pro";
+    return tierConfigFor(await this.tierOf(store)).onlineCheckout;
   }
 }
