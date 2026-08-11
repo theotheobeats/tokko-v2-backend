@@ -41,33 +41,46 @@ app.use("*", async (c, next) => {
       ? origin
       : undefined;
 
-  if (allowed) {
-    c.header("Access-Control-Allow-Origin", allowed);
-    c.header("Access-Control-Allow-Credentials", "true");
+  // Headers are applied DIRECTLY to c.res.headers — after the handler runs
+  // (see below) — so they survive even when a handler returns a raw Response
+  // from another framework (better-auth's auth.handler()), which Hono's
+  // c.header() does NOT merge into.
+  const applyCors = () => {
+    if (!allowed) return;
+    c.res.headers.set("Access-Control-Allow-Origin", allowed);
+    c.res.headers.set("Access-Control-Allow-Credentials", "true");
     // Chrome Private Network Access: required when the page is on a local/
     // private network (VPN, office) — otherwise the preflight fails with
     // "CORS request did not succeed" + a 204 missing-ACAO error.
-    c.header("Access-Control-Allow-Private-Network", "true");
-    c.header("Vary", "Origin");
-  }
+    c.res.headers.set("Access-Control-Allow-Private-Network", "true");
+    c.res.headers.set("Access-Control-Expose-Headers", "Content-Length");
+    c.res.headers.set("Vary", "Origin");
+  };
 
-  // Preflight — explicit so the 204 ALWAYS carries the headers (Hono's cors
-  // returns 204 without ACAO when its origin callback bails, which browsers
-  // surface as "CORS header Access-Control-Allow-Origin missing").
+  // Preflight — explicit Response so the 204 ALWAYS carries the headers
+  // (Hono's cors returns 204 without ACAO when its origin callback bails,
+  // which browsers surface as "CORS header Access-Control-Allow-Origin missing").
   if (c.req.method === "OPTIONS" && c.req.header("access-control-request-method")) {
-    c.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    c.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
-    c.header("Access-Control-Expose-Headers", "Content-Length");
-    // Short cache: stale preflights from deploys clear in 60s instead of 10min.
-    c.header("Access-Control-Max-Age", "60");
-    return c.body(null, 204);
+    const headers = new Headers({
+      "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization",
+      "Access-Control-Expose-Headers": "Content-Length",
+      // Short cache: stale preflights from deploys clear in 60s instead of 10min.
+      "Access-Control-Max-Age": "60",
+    });
+    if (allowed) {
+      headers.set("Access-Control-Allow-Origin", allowed);
+      headers.set("Access-Control-Allow-Credentials", "true");
+      headers.set("Access-Control-Allow-Private-Network", "true");
+    }
+    headers.set("Vary", "Origin");
+    return new Response(null, { status: 204, headers });
   }
 
-  if (allowed) {
-    c.header("Access-Control-Expose-Headers", "Content-Length");
-  }
-
-  return next();
+  await next();
+  // c.res is now the handler's response — apply CORS directly on its headers
+  // so raw Responses (better-auth) get them too.
+  applyCors();
 });
 
 // ---------------------------------------------------------------------------
