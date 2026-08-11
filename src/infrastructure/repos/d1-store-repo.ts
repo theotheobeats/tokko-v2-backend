@@ -126,6 +126,26 @@ export class D1StoreRepository implements StoreRepository {
     };
   }
 
+  /** Trial lifecycle: all stores with a trial deadline set. */
+  async listByTrialSet(): Promise<Store[]> {
+    const rows = await this.db
+      .select()
+      .from(stores)
+      .where(sql`${stores.trialEndsAt} IS NOT NULL`)
+      .all();
+    return rows.map((r) => this._toDomain(r));
+  }
+
+  /** Trial lifecycle: stores paused before the given ISO cutoff (archive job). */
+  async listPausedBefore(cutoffIso: string): Promise<Store[]> {
+    const rows = await this.db
+      .select()
+      .from(stores)
+      .where(and(sql`${stores.pausedAt} IS NOT NULL`, sql`${stores.archivedAt} IS NULL`, sql`${stores.pausedAt} < ${cutoffIso}`))
+      .all();
+    return rows.map((r) => this._toDomain(r));
+  }
+
   // -----------------------------------------------------------------------
   // Mapping helpers
   // -----------------------------------------------------------------------
@@ -171,6 +191,9 @@ export class D1StoreRepository implements StoreRepository {
       aiStoreGenerations: row.aiStoreGenerations,
       aiDescriptions: row.aiDescriptions,
       customDomain: row.customDomain,
+      trialReminderSentAt: row.trialReminderSentAt,
+      pausedAt: row.pausedAt,
+      archivedAt: row.archivedAt,
     });
   }
 
@@ -214,6 +237,9 @@ export class D1StoreRepository implements StoreRepository {
       aiStoreGenerations: props.aiStoreGenerations,
       aiDescriptions: props.aiDescriptions,
       customDomain: props.customDomain,
+      trialReminderSentAt: props.trialReminderSentAt,
+      pausedAt: props.pausedAt,
+      archivedAt: props.archivedAt,
     };
   }
 }

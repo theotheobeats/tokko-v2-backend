@@ -117,6 +117,20 @@ app.route("/api/stores", categoriesRouter); // product categories
 app.route("/api/stores", shippingRouter); // Biteship shipping rates + origin settings
 
 // ---------------------------------------------------------------------------
-// Export
+// Export — worker entry (fetch + cron scheduled)
 // ---------------------------------------------------------------------------
-export default app;
+import { runTrialLifecycle } from "./interfaces/cron/trial-lifecycle";
+
+export default {
+  // Hono's fetch must be bound so `this` stays the app instance.
+  fetch: app.fetch.bind(app),
+  /** Daily trial-lifecycle job: day-10 reminder, day-14 pause, >30d archive. */
+  async scheduled(_event: unknown, env: Env, _ctx: unknown) {
+    try {
+      const result = await runTrialLifecycle(env);
+      console.log("[cron] trial lifecycle:", JSON.stringify(result));
+    } catch (err) {
+      console.error("[cron] trial lifecycle failed:", err);
+    }
+  },
+};

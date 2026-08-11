@@ -11,6 +11,8 @@ import { UpdateOrderFulfillment } from "../../application/order/update-order-ful
 import { D1OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import { D1ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
+import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { PlanService } from "../../application/plan/plan-service";
 import type { EntityId } from "../../domain/shared/types";
 import { OrderStatus } from "../../domain/order/types";
 
@@ -70,6 +72,10 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
   }
   if (!store.isPublished) {
     return c.json({ error: { code: "STORE_NOT_PUBLISHED", message: "Toko belum dipublikasikan." } }, 404);
+  }
+  // Trial expired → store paused (read-only, orders off).
+  if (store.isPaused) {
+    return c.json({ error: { code: "STORE_PAUSED", message: "Toko sedang libur — pesanan nonaktif." } }, 403);
   }
 
   const input = c.req.valid("json");
@@ -152,8 +158,10 @@ ordersRouter.get("/:storeId/orders", async (c) => {
 
   const orderRepo = new D1OrderRepository(db);
   const useCase = new ListOrders(orderRepo);
+  // Order-history retention window from the store's tier (31d/1y/3y).
+  const plan = await new PlanService(new D1SubscriptionRepository(db)).viewOf(store);
 
-  const result = await useCase.execute({ storeId, status, limit, offset });
+  const result = await useCase.execute({ storeId, status, limit, offset, retentionDays: plan.retentionDays });
 
   if (!result.ok) return c.json({ error: { code: "UNKNOWN" } }, 500);
   return c.json(result.value);

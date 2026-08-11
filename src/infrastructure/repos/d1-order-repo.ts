@@ -13,8 +13,8 @@ import { generateOrderCode } from "../../domain/order/rules";
 
 export interface OrderRepository {
   findById(id: EntityId): Promise<Order | null>;
-  findByStoreId(storeId: EntityId, filters?: { status?: OrderStatus; limit?: number; offset?: number }): Promise<Order[]>;
-  countByStoreId(storeId: EntityId, filters?: { status?: OrderStatus }): Promise<{ all: number; pending: number; contacted: number; completed: number }>;
+  findByStoreId(storeId: EntityId, filters?: { status?: OrderStatus; since?: string; limit?: number; offset?: number }): Promise<Order[]>;
+  countByStoreId(storeId: EntityId, filters?: { status?: OrderStatus; since?: string }): Promise<{ all: number; pending: number; contacted: number; completed: number }>;
   save(order: Order): Promise<void>;
   /** Admin: list orders across all stores. */
   listAll(filters?: { status?: OrderStatus; storeId?: EntityId; limit?: number; offset?: number }): Promise<Order[]>;
@@ -42,11 +42,12 @@ export class D1OrderRepository implements OrderRepository {
 
   async findByStoreId(
     storeId: EntityId,
-    filters?: { status?: OrderStatus; limit?: number; offset?: number }
+    filters?: { status?: OrderStatus; since?: string; limit?: number; offset?: number }
   ): Promise<Order[]> {
-    const where = filters?.status
-      ? and(eq(orders.storeId, storeId as string), eq(orders.status, filters.status))
-      : eq(orders.storeId, storeId as string);
+    const conditions = [eq(orders.storeId, storeId as string)];
+    if (filters?.status) conditions.push(eq(orders.status, filters.status));
+    if (filters?.since) conditions.push(sql`${orders.createdAt} >= ${filters.since}`);
+    const where = conditions.length > 1 ? and(...conditions) : conditions[0];
 
     const rows = await this.db
       .select()
@@ -60,14 +61,23 @@ export class D1OrderRepository implements OrderRepository {
     return rows.map((r) => this._toDomain(r));
   }
 
-  async countByStoreId(storeId: EntityId): Promise<{ all: number; pending: number; contacted: number; completed: number }> {
+  async countByStoreId(
+    storeId: EntityId,
+    filters?: { status?: OrderStatus; since?: string }
+  ): Promise<{ all: number; pending: number; contacted: number; completed: number }> {
     const { count } = await import("drizzle-orm");
 
+    const base = (extra: any[] = []) => {
+      const conditions: any[] = [eq(orders.storeId, storeId as string), ...extra];
+      if (filters?.since) conditions.push(sql`${orders.createdAt} >= ${filters.since}`);
+      return conditions.length > 1 ? and(...conditions) : conditions[0];
+    };
+
     const [allRows, pendingRows, contactedRows, completedRows] = await Promise.all([
-      this.db.select({ count: count() }).from(orders).where(eq(orders.storeId, storeId as string)).get(),
-      this.db.select({ count: count() }).from(orders).where(and(eq(orders.storeId, storeId as string), eq(orders.status, "pending"))).get(),
-      this.db.select({ count: count() }).from(orders).where(and(eq(orders.storeId, storeId as string), eq(orders.status, "contacted"))).get(),
-      this.db.select({ count: count() }).from(orders).where(and(eq(orders.storeId, storeId as string), eq(orders.status, "completed"))).get(),
+      this.db.select({ count: count() }).from(orders).where(base()).get(),
+      this.db.select({ count: count() }).from(orders).where(base([eq(orders.status, "pending")])).get(),
+      this.db.select({ count: count() }).from(orders).where(base([eq(orders.status, "contacted")])).get(),
+      this.db.select({ count: count() }).from(orders).where(base([eq(orders.status, "completed")])).get(),
     ]);
 
     return {

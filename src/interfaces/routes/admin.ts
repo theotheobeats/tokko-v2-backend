@@ -542,6 +542,23 @@ adminRouter.get("/logs", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Trial lifecycle — manual run (test the daily cron on demand)
+// ---------------------------------------------------------------------------
+adminRouter.post("/cron/trial-lifecycle", async (c) => {
+  const db = createDb(c.env.DB);
+  const { runTrialLifecycle } = await import("../cron/trial-lifecycle");
+  const result = await runTrialLifecycle(c.env);
+  await writeAdminLog(db, {
+    adminId: c.get("adminId"),
+    action: "cron.trial-lifecycle",
+    targetType: "store",
+    targetId: "cron",
+    detail: { ...result },
+  });
+  return c.json(result);
+});
+
+// ---------------------------------------------------------------------------
 // Subscriptions / Plans (manual billing — Phase 1)
 // ---------------------------------------------------------------------------
 
