@@ -23,6 +23,9 @@ export const subscriptions = sqliteTable("subscriptions", {
   currentPeriodEnd: text("current_period_end"), // ISO — when the paid period ends
   externalRef: text("external_ref"), // external billing reference (Phase 3)
   renewalInvoiceExternalId: text("renewal_invoice_external_id"), // pending auto-renewal invoice (Phase 3)
+  // Next-term plan change (paid now, applied at current_period_end):
+  pendingPlan: text("pending_plan"), // pro | commerce — takes effect next term
+  pendingCycle: text("pending_cycle"), // monthly | annual
   startedAt: text("started_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

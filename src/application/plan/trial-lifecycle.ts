@@ -15,6 +15,7 @@ import type { Store } from "../../domain/store/store";
 import type { StoreRepository } from "../store/store-repo";
 import type { SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { Subscription } from "../../domain/plan/subscription";
+import { PERIOD_DAYS } from "../../domain/plan/pricing";
 import type { Plan, BillingCycle } from "../../domain/plan/types";
 
 export const REMINDER_WINDOW_MS = 4 * 24 * 60 * 60 * 1000; // day ~10 of a 14-day trial
@@ -36,6 +37,8 @@ export interface TrialLifecycleResult {
   paused: number;
   archived: number;
   renewals: number;
+  /** Next-term plan changes applied at their period boundary. */
+  switches: number;
 }
 
 export class RunTrialLifecycle {
@@ -49,7 +52,7 @@ export class RunTrialLifecycle {
   ) {}
 
   async execute(now = new Date()): Promise<TrialLifecycleResult> {
-    const result: TrialLifecycleResult = { reminded: 0, paused: 0, archived: 0, renewals: 0 };
+    const result: TrialLifecycleResult = { reminded: 0, paused: 0, archived: 0, renewals: 0, switches: 0 };
     const nowMs = now.getTime();
 
     const stores = await this.storeRepo.listByTrialSet();
@@ -93,7 +96,34 @@ export class RunTrialLifecycle {
       if (!store || store.isPaused) continue;
 
       const msLeft = new Date(sub.currentPeriodEnd).getTime() - nowMs;
-      if (msLeft <= RENEWAL_WINDOW_MS && msLeft > 0 && !sub.renewalInvoiceExternalId && this.createRenewalInvoice) {
+      if (msLeft <= 0) {
+        if (sub.pendingPlan && sub.pendingCycle) {
+          // Prepaid next-term change (upgrade/downgrade) applies now.
+          const baseMs = Math.max(new Date(sub.currentPeriodEnd).getTime(), nowMs);
+          await this.subRepo.save(Subscription.from({
+            ...sub.toJSON(),
+            plan: sub.pendingPlan,
+            cycle: sub.pendingCycle,
+            currentPeriodEnd: new Date(baseMs + PERIOD_DAYS[sub.pendingCycle] * 86_400_000).toISOString(),
+            pendingPlan: null,
+            pendingCycle: null,
+            updatedAt: new Date().toISOString(),
+          }));
+          store.resume();
+          await this.storeRepo.save(store);
+          result.switches += 1;
+        } else {
+          // Period ended without payment → pause (data kept).
+          store.pause();
+          await this.storeRepo.save(store);
+          result.paused += 1;
+        }
+      } else if (
+        msLeft <= RENEWAL_WINDOW_MS &&
+        !sub.renewalInvoiceExternalId &&
+        !sub.pendingPlan && // next term already prepaid via a plan change
+        this.createRenewalInvoice
+      ) {
         // Auto-renewal invoice (disclosed at checkout; cancel anytime).
         try {
           const invoice = await this.createRenewalInvoice({ store, plan: sub.plan, cycle: sub.cycle });
@@ -106,11 +136,6 @@ export class RunTrialLifecycle {
         } catch (e) {
           console.error("[billing] renewal invoice failed:", e);
         }
-      } else if (msLeft <= 0) {
-        // Period ended without payment → pause (data kept).
-        store.pause();
-        await this.storeRepo.save(store);
-        result.paused += 1;
       }
     }
 
