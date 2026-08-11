@@ -153,11 +153,23 @@ describe("CreateDeliveryOrder", () => {
     if (!result.ok) expect(result.error).toBeInstanceOf(DeliveryOrderAlreadyShippedError);
   });
 
-  it("rejects orders with an incomplete destination", async () => {
+  it("rejects orders with an incomplete destination (no structured fields AND no postal in the composed address)", async () => {
     const { storeRepo, orderRepo, productRepo, provider } = mocks();
-    orderRepo.findById = vi.fn().mockResolvedValue(makeOrder({ destinationPostalCode: null, destinationDetail: null }));
+    orderRepo.findById = vi.fn().mockResolvedValue(makeOrder({ destinationPostalCode: null, destinationDetail: null, shippingAddress: "Jl. Tanpa Kode Pos" }));
     const result = await new CreateDeliveryOrder(orderRepo, storeRepo, productRepo, provider).execute({ storeId: STORE_ID, orderId: ORDER_ID });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBeInstanceOf(DeliveryOrderDestinationMissingError);
+  });
+
+  it("falls back to the composed shipping address for legacy orders without structured destination", async () => {
+    const { storeRepo, orderRepo, productRepo, provider } = mocks();
+    orderRepo.findById = vi.fn().mockResolvedValue(makeOrder({ destinationPostalCode: null, destinationDetail: null }));
+
+    const result = await new CreateDeliveryOrder(orderRepo, storeRepo, productRepo, provider).execute({ storeId: STORE_ID, orderId: ORDER_ID });
+
+    expect(result.ok).toBe(true);
+    const arg = (provider.createOrder as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.recipient.postalCode).toBe("30163"); // extracted from the composed address
+    expect(arg.recipient.address).toContain("Jl. Ciumbuleuit 1");
   });
 });

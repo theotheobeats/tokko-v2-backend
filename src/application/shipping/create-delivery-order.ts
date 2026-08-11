@@ -49,7 +49,18 @@ export class CreateDeliveryOrder {
     if (!order.paymentConfirmed) return err(new DeliveryOrderNotPaidError());
     if (!order.shippingCourier || !order.shippingService) return err(new DeliveryOrderNoShippingError());
     if (order.trackingNumber || order.biteshipOrderId) return err(new DeliveryOrderAlreadyShippedError());
-    if (!order.destinationPostalCode || !order.destinationDetail) return err(new DeliveryOrderDestinationMissingError());
+
+    // Destination: structured fields when present; otherwise fall back to the
+    // composed shipping address (orders created before structured destination
+    // was persisted) — the postal code is extracted from the address string.
+    const destPostal =
+      order.destinationPostalCode ??
+      order.shippingAddress?.match(/\b\d{5}\b/)?.[0] ??
+      "";
+    const destAddress = order.destinationDetail
+      ? composeDestination(order)
+      : (order.shippingAddress?.trim() ?? "");
+    if (!destPostal || !destAddress) return err(new DeliveryOrderDestinationMissingError());
 
     // Item weights from the product repo — never the client.
     const items: { name: string; value: number; quantity: number; weight: number; length?: number; width?: number; height?: number }[] = [];
@@ -76,7 +87,7 @@ export class CreateDeliveryOrder {
     // Resolve origin/destination areas (best-effort; postal codes always sent).
     const [originArea, destArea] = await Promise.all([
       this.provider.resolveArea(store.originPostalCode ?? ""),
-      this.provider.resolveArea(order.destinationPostalCode),
+      this.provider.resolveArea(destPostal),
     ]);
 
     let result: DeliveryOrderResult;
@@ -99,8 +110,8 @@ export class CreateDeliveryOrder {
         recipient: {
           name: order.customerName,
           phone: order.customerPhone,
-          address: composeDestination(order),
-          postalCode: order.destinationPostalCode,
+          address: destAddress,
+          postalCode: destPostal,
           areaId: destArea?.areaId ?? null,
           coordinates: destArea ? { latitude: destArea.latitude, longitude: destArea.longitude } : null,
         },
