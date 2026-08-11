@@ -15,6 +15,7 @@ import { D1ReportRepository } from "../../infrastructure/repos/d1-report-repo";
 import { D1ConsentRepository } from "../../infrastructure/repos/d1-consent-repo";
 import { D1PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { D1CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
 import { ListAdminSubscriptions, SetStorePlan, UpdateStoreTrial } from "../../application/admin/admin-subscriptions";
 import { createAuth } from "../../lib/auth";
 import { GetAdminStats } from "../../application/admin/admin-stats";
@@ -578,6 +579,7 @@ adminRouter.get("/subscriptions", async (c) => {
   const useCase = new ListAdminSubscriptions(
     new D1StoreRepository(db),
     new D1SubscriptionRepository(db),
+    new D1CommissionLedger(db),
   );
   const res = await useCase.execute({ q, limit, offset });
   return c.json(res);

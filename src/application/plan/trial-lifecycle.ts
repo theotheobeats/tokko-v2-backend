@@ -14,18 +14,28 @@
 import type { Store } from "../../domain/store/store";
 import type { StoreRepository } from "../store/store-repo";
 import type { SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { Subscription } from "../../domain/plan/subscription";
+import type { Plan, BillingCycle } from "../../domain/plan/types";
 
 export const REMINDER_WINDOW_MS = 4 * 24 * 60 * 60 * 1000; // day ~10 of a 14-day trial
+/** Auto-renewal invoice is created when the paid period ends within this window. */
+export const RENEWAL_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 export const ARCHIVE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface TrialEmailer {
   send(input: { to: string; subject: string; html: string; text?: string }): Promise<boolean>;
 }
 
+/** Creates the auto-renewal invoice for a subscription (wired to Xendit in the runner). */
+export interface RenewalInvoiceCreator {
+  (input: { store: Store; plan: Plan; cycle: BillingCycle }): Promise<{ externalId: string }>;
+}
+
 export interface TrialLifecycleResult {
   reminded: number;
   paused: number;
   archived: number;
+  renewals: number;
 }
 
 export class RunTrialLifecycle {
@@ -35,10 +45,11 @@ export class RunTrialLifecycle {
     private readonly emailer: TrialEmailer,
     private readonly ownerEmail: (userId: string) => Promise<string | null>,
     private readonly appOrigin = "https://7okko.com",
+    private readonly createRenewalInvoice?: RenewalInvoiceCreator,
   ) {}
 
   async execute(now = new Date()): Promise<TrialLifecycleResult> {
-    const result: TrialLifecycleResult = { reminded: 0, paused: 0, archived: 0 };
+    const result: TrialLifecycleResult = { reminded: 0, paused: 0, archived: 0, renewals: 0 };
     const nowMs = now.getTime();
 
     const stores = await this.storeRepo.listByTrialSet();
@@ -68,6 +79,35 @@ export class RunTrialLifecycle {
         result.reminded += 1;
       } else if (msLeft <= 0) {
         // Trial over → pause (data kept, storefront read-only).
+        store.pause();
+        await this.storeRepo.save(store);
+        result.paused += 1;
+      }
+    }
+
+    // Subscriptions: auto-renew within 3 days of the period end, pause when lapsed.
+    const subs = await this.subRepo.listActive();
+    for (const sub of subs) {
+      if (!sub.currentPeriodEnd) continue;
+      const store = await this.storeRepo.findById(sub.storeId as never);
+      if (!store || store.isPaused) continue;
+
+      const msLeft = new Date(sub.currentPeriodEnd).getTime() - nowMs;
+      if (msLeft <= RENEWAL_WINDOW_MS && msLeft > 0 && !sub.renewalInvoiceExternalId && this.createRenewalInvoice) {
+        // Auto-renewal invoice (disclosed at checkout; cancel anytime).
+        try {
+          const invoice = await this.createRenewalInvoice({ store, plan: sub.plan, cycle: sub.cycle });
+          await this.subRepo.save(Subscription.from({
+            ...sub.toJSON(),
+            renewalInvoiceExternalId: invoice.externalId,
+            updatedAt: new Date().toISOString(),
+          }));
+          result.renewals += 1;
+        } catch (e) {
+          console.error("[billing] renewal invoice failed:", e);
+        }
+      } else if (msLeft <= 0) {
+        // Period ended without payment → pause (data kept).
         store.pause();
         await this.storeRepo.save(store);
         result.paused += 1;

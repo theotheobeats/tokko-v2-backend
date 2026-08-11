@@ -22,6 +22,7 @@ export const subscriptions = sqliteTable("subscriptions", {
   status: text("status").notNull().default("active"), // "active" | "expired" | "canceled"
   currentPeriodEnd: text("current_period_end"), // ISO — when the paid period ends
   externalRef: text("external_ref"), // external billing reference (Phase 3)
+  renewalInvoiceExternalId: text("renewal_invoice_external_id"), // pending auto-renewal invoice (Phase 3)
   startedAt: text("started_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
