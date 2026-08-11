@@ -18,6 +18,8 @@ export interface SubscriptionProps {
   /** Next-term plan change — paid now, applied at current_period_end. */
   pendingPlan: Plan | null;
   pendingCycle: BillingCycle | null;
+  /** Cancel at period end — keeps working until the term ends, then no renewal. */
+  cancelAtPeriodEnd: boolean;
   startedAt: string;
   updatedAt: string;
 }
@@ -37,6 +39,7 @@ export class Subscription {
     renewalInvoiceExternalId?: string | null;
     pendingPlan?: Plan | null;
     pendingCycle?: BillingCycle | null;
+    cancelAtPeriodEnd?: boolean;
     startedAt?: string;
     updatedAt?: string;
   }): Subscription {
@@ -52,6 +55,7 @@ export class Subscription {
       renewalInvoiceExternalId: params.renewalInvoiceExternalId ?? null,
       pendingPlan: params.pendingPlan ?? null,
       pendingCycle: params.pendingCycle ?? null,
+      cancelAtPeriodEnd: params.cancelAtPeriodEnd ?? false,
       startedAt: params.startedAt ?? new Date().toISOString(),
       updatedAt: params.updatedAt ?? new Date().toISOString(),
     });
@@ -72,6 +76,7 @@ export class Subscription {
   get renewalInvoiceExternalId() { return this.props.renewalInvoiceExternalId; }
   get pendingPlan() { return this.props.pendingPlan; }
   get pendingCycle() { return this.props.pendingCycle; }
+  get cancelAtPeriodEnd() { return this.props.cancelAtPeriodEnd; }
   get startedAt() { return this.props.startedAt; }
   get updatedAt() { return this.props.updatedAt; }
 

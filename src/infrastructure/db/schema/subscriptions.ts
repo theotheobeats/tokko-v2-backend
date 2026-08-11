@@ -1,4 +1,4 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { stores } from "./stores";
 
@@ -26,6 +26,10 @@ export const subscriptions = sqliteTable("subscriptions", {
   // Next-term plan change (paid now, applied at current_period_end):
   pendingPlan: text("pending_plan"), // pro | commerce — takes effect next term
   pendingCycle: text("pending_cycle"), // monthly | annual
+  // Cancellation at period end (Stripe-style): plan stays active until the
+  // current term ends, then no renewal + store pauses. Set/cleared by the
+  // store owner via the cancel endpoint.
+  cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" }).notNull().default(false),
   startedAt: text("started_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

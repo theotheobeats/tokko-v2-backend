@@ -31,6 +31,8 @@ export interface PlanView {
   pendingStartsAt: string | null;
   /** End of the current paid term (null when none). */
   currentPeriodEnd: string | null;
+  /** Cancel at period end — keeps working until the term ends, then no renewal. */
+  cancelAtPeriodEnd: boolean;
 }
 
 export class PlanService {
@@ -65,6 +67,7 @@ export class PlanService {
       pendingCycle: sub?.pendingCycle ?? null,
       pendingStartsAt: sub?.pendingPlan ? sub.currentPeriodEnd : null,
       currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+      cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
     };
   }
 
