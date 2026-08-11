@@ -97,6 +97,12 @@ export class CreatePayment {
     if (!order) return err(new OrderNotFoundError());
     if (order.paymentConfirmed) return err(new OrderAlreadyPaidError());
 
+    // Reuse an existing pending payment instead of creating a duplicate
+    // invoice — a retry/double-click must never produce two payable invoices
+    // for the same order (double-charge risk).
+    const existing = await this.paymentRepo.findByOrderId(order.id);
+    const pending = existing.find((p) => p.status === "pending");
+    if (pending) return ok(pending);
     const externalId = `tokko-${crypto.randomUUID()}`;
     try {
       const invoice = await this.provider.createInvoice({
