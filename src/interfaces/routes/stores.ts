@@ -20,6 +20,8 @@ import { mockAIGenerate, generateStore } from "../../infrastructure/ai/deepseek-
 import { useRealAi } from "../../infrastructure/ai/ai-mode";
 import { PAYMENT_METHOD_CATALOG, DEFAULT_ENABLED_PAYMENT_METHODS } from "../../application/payment/payment-method-catalog";
 import { COURIER_CATALOG, DEFAULT_COURIERS } from "../../application/shipping/courier-catalog";
+import { PlanService, type PlanView } from "../../application/plan/plan-service";
+import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
 
@@ -40,7 +42,7 @@ function storeJSON(store: {
   paymentOnline: boolean; bankName: string | null;
   bankAccountNumber: string | null; bankAccountName: string | null;
   enabledPaymentMethods: string[] | null; enabledCouriers: string[] | null;
-}) {
+}, plan?: PlanView) {
   return {
     id: store.id,
     name: store.name,
@@ -70,6 +72,7 @@ function storeJSON(store: {
     bankAccountName: store.bankAccountName,
     enabledPaymentMethods: store.enabledPaymentMethods,
     enabledCouriers: store.enabledCouriers,
+    ...(plan ? { plan } : {}),
   };
 }
 
@@ -81,6 +84,11 @@ async function requireAuth(c: any) {
     return c.json({ error: { code: "UNAUTHORIZED", message: "Silakan login terlebih dahulu." } }, 401);
   }
   return session;
+}
+
+/** PlanService bound to a request's D1. */
+function planService(db: ReturnType<typeof createDb>) {
+  return new PlanService(new D1SubscriptionRepository(db));
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +172,8 @@ storesRouter.post("/generate", zValidator("json", generateSchema), async (c) => 
     productCategory: input.productCategory,
     aesthetic: input.aesthetic as typeof Aesthetic[keyof typeof Aesthetic],
     whatsappNumber: input.whatsappNumber,
+    // Trial lifecycle starts at signup (14 days) — Phase 1 window; expiry cron is Phase 2.
+    trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
   });
 
   if (!result.ok) {
@@ -200,7 +210,7 @@ storesRouter.get("/me", async (c) => {
   }
 
   return c.json({
-    store: storeJSON(store),
+    store: storeJSON(store, await planService(db).viewOf(store)),
   });
 });
 
@@ -247,8 +257,14 @@ storesRouter.get("/by-subdomain", async (c) => {
     return c.json({ error: { code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan." } }, 404);
   }
 
+  const plan = await planService(db).viewOf(store);
+  const base = storeJSON(store, plan);
+  // Online checkout is Commerce-only — hide it from non-commerce storefronts
+  // (the merchant toggle stays on their settings, but it doesn't surface).
+  const storePayload = { ...base, paymentOnline: base.paymentOnline && plan.onlineCheckout };
+
   return c.json({
-    store: storeJSON(store),
+    store: storePayload,
     sections: serializePage(page, store.designTokens).sections,
     products: products.map((p) => ({
       ...p,
@@ -309,6 +325,13 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     whatsappNumber: body.whatsappNumber,
   });
 
+  // Gate: online checkout (Xendit) is Commerce-only.
+  if (body.paymentOnline === true && !(await planService(db).canUseOnlineCheckout(store))) {
+    return c.json({
+      error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Commerce.", field: "paymentOnline" },
+    }, 403);
+  }
+
   if (body.heroImageUrl !== undefined) {
     store.setHeroImage(body.heroImageUrl);
   }
@@ -345,7 +368,7 @@ storesRouter.patch("/:id", zValidator("json", z.object({
 
   await storeRepo.save(store);
 
-  return c.json({ store: storeJSON(store) });
+  return c.json({ store: storeJSON(store, await planService(db).viewOf(store)) });
 });
 
 // ---------------------------------------------------------------------------
@@ -477,8 +500,10 @@ storesRouter.post("/:id/publish", async (c) => {
     return c.json({ error: result.error }, status);
   }
 
+  const saved = await storeRepo.findById(storeId);
+  if (!saved) return c.json({ error: { code: "NOT_FOUND" } }, 404);
   return c.json({
-    store: storeJSON(result.value),
+    store: storeJSON(saved, await planService(db).viewOf(saved)),
   });
 });
 
@@ -507,8 +532,10 @@ storesRouter.post("/:id/unpublish", async (c) => {
     return c.json({ error: result.error }, 404);
   }
 
+  const saved = await storeRepo.findById(storeId);
+  if (!saved) return c.json({ error: { code: "NOT_FOUND" } }, 404);
   return c.json({
-    store: storeJSON(result.value),
+    store: storeJSON(saved, await planService(db).viewOf(saved)),
   });
 });
 

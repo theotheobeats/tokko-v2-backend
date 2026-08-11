@@ -14,6 +14,8 @@ import { DeleteProduct } from "../../application/product/delete-product";
 import { D1ProductRepository } from "../../infrastructure/repos/d1-product-repo";
 import { D1CategoryRepository } from "../../infrastructure/repos/d1-category-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
+import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { PlanService } from "../../application/plan/plan-service";
 import type { EntityId } from "../../domain/shared/types";
 
 const productsRouter = new Hono<{ Bindings: Env }>();
@@ -235,7 +237,9 @@ productsRouter.post("/:storeId/products", zValidator("json", createSchema), asyn
 
   const input = c.req.valid("json");
   const productRepo = new D1ProductRepository(db);
-  const useCase = new CreateProduct(productRepo, new D1CategoryRepository(db));
+  // Tier-driven product cap (trial 50 / pro 1000 / commerce 5000, hard cap 10000).
+  const plan = await new PlanService(new D1SubscriptionRepository(db)).viewOf(store);
+  const useCase = new CreateProduct(productRepo, new D1CategoryRepository(db), plan.productLimit);
 
   const result = await useCase.execute({
     storeId,
@@ -376,11 +380,23 @@ productsRouter.post("/:storeId/products/generate-description", zValidator("json"
       : async ({ name, category }) => `${name} adalah produk ${category} berkualitas premium, dibuat dengan bahan pilihan terbaik. Cocok untuk berbagai kebutuhan Anda.`
   );
 
+  // Gate: trial gets 10 AI descriptions, paid plans unlimited.
+  const plan = await new PlanService(new D1SubscriptionRepository(db)).viewOf(store);
+  if (plan.aiDescriptionLimit !== null && store.aiDescriptions >= plan.aiDescriptionLimit) {
+    return c.json({
+      error: { code: "PLAN_LIMIT_REACHED", message: `Batas deskripsi AI trial (${plan.aiDescriptionLimit}x) tercapai — upgrade ke Pro untuk tak terbatas.` },
+    }, 403);
+  }
+
   const result = await useCase.execute(input);
 
   if (!result.ok) {
     return c.json({ error: result.error }, 422);
   }
+
+  // Track usage — only on success.
+  store.incrementAiDescriptions();
+  await storeRepo.save(store);
 
   return c.json(result.value);
 });

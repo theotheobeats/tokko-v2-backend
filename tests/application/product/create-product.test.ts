@@ -157,6 +157,39 @@ const SHIPPABLE = { weight: 500, width: 10, length: 10, height: 5 };
     expect(result.ok).toBe(true);
   });
 
+  // TIER-DRIVEN LIMIT (Phase 1)
+  it("rejects at the tier-driven limit (e.g. trial = 50)", async () => {
+    const fullRepo = mockRepo({ countByStoreId: vi.fn().mockResolvedValue(50) });
+    const uc = new CreateProduct(fullRepo, undefined, 50);
+
+    const result = await uc.execute({
+      storeId,
+      name: "Cake",
+      price: 50000,
+      ...SHIPPABLE,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("PRODUCT_LIMIT_REACHED");
+      expect(result.error.message).toContain("50");
+    }
+  });
+
+  it("allows up to the tier-driven limit (commerce = 5000)", async () => {
+    const repo4999 = mockRepo({ countByStoreId: vi.fn().mockResolvedValue(4999) });
+    const uc = new CreateProduct(repo4999, undefined, 5000);
+
+    const result = await uc.execute({
+      storeId,
+      name: "Cake",
+      price: 50000,
+      ...SHIPPABLE,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   // PRODUCT TYPE
   it("should default to product type", async () => {
     const result = await useCase.execute({

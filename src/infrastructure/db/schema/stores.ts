@@ -42,6 +42,12 @@ export const stores = sqliteTable("stores", {
   bankAccountName: text("bank_account_name"), // manual transfer — account holder
   enabledPaymentMethods: text("enabled_payment_methods"), // JSON array of catalog ids — null = all
   enabledCouriers: text("enabled_couriers"), // JSON array of courier codes — null = all
+  // Subscription / plan — trial lifecycle + tier gates (Phase 1).
+  trialEndsAt: text("trial_ends_at"), // ISO timestamp — set at signup, cleared on first payment
+  commissionRate: real("commission_rate"), // commission path — 3.5 default / 2.5 with custom domain
+  aiStoreGenerations: integer("ai_store_generations").notNull().default(0), // trial: 1x
+  aiDescriptions: integer("ai_descriptions").notNull().default(0), // trial: 10x
+  customDomain: text("custom_domain"), // BYOD — future; drives the 2.5% commission discount
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });

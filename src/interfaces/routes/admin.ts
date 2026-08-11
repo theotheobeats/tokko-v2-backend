@@ -14,6 +14,8 @@ import { D1TicketRepository } from "../../infrastructure/repos/d1-ticket-repo";
 import { D1ReportRepository } from "../../infrastructure/repos/d1-report-repo";
 import { D1ConsentRepository } from "../../infrastructure/repos/d1-consent-repo";
 import { D1PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
+import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { ListAdminSubscriptions, SetStorePlan, UpdateStoreTrial } from "../../application/admin/admin-subscriptions";
 import { createAuth } from "../../lib/auth";
 import { GetAdminStats } from "../../application/admin/admin-stats";
 import {
@@ -45,6 +47,7 @@ import type { EntityId } from "../../domain/shared/types";
 import type { TicketStatus } from "../../domain/support/types";
 import type { OrderStatus } from "../../domain/order/types";
 import { ReportResolution } from "../../domain/support/types";
+import { resolveTier } from "../../domain/plan/types";
 
 /**
  * Admin panel API — every route requires an admin session.
@@ -536,6 +539,99 @@ adminRouter.get("/logs", async (c) => {
   const useCase = new ListAdminLogsUseCase(db);
   const res = await useCase.execute({ adminId, action, targetType, limit, offset });
   return c.json(res);
+});
+
+// ---------------------------------------------------------------------------
+// Subscriptions / Plans (manual billing — Phase 1)
+// ---------------------------------------------------------------------------
+
+/** Default paid period end when not supplied (monthly ≈ 31d, annual ≈ 365d). */
+function defaultPeriodEnd(plan: "pro" | "commerce", cycle?: "monthly" | "annual"): string {
+  const days = cycle === "annual" ? 365 : 31;
+  return new Date(Date.now() + days * 86_400_000).toISOString();
+}
+
+// GET /api/admin/subscriptions?q=&limit=&offset=
+adminRouter.get("/subscriptions", async (c) => {
+  const q = c.req.query("q");
+  const limit = parseInt(c.req.query("limit") ?? "50");
+  const offset = parseInt(c.req.query("offset") ?? "0");
+
+  const db = createDb(c.env.DB);
+  const useCase = new ListAdminSubscriptions(
+    new D1StoreRepository(db),
+    new D1SubscriptionRepository(db),
+  );
+  const res = await useCase.execute({ q, limit, offset });
+  return c.json(res);
+});
+
+// PATCH /api/admin/subscriptions/:storeId
+// Body (any subset): { plan, cycle, currentPeriodEnd, clearTrial, extendTrialDays, commissionRate }
+const subscriptionPatchSchema = z.object({
+  plan: z.enum(["pro", "commerce"]).optional(),
+  cycle: z.enum(["monthly", "annual"]).optional(),
+  currentPeriodEnd: z.string().nullable().optional(),
+  clearTrial: z.boolean().optional(),
+  extendTrialDays: z.number().int().positive().max(365).optional(),
+  commissionRate: z.number().min(0).max(100).nullable().optional(),
+});
+
+adminRouter.patch("/subscriptions/:storeId", zValidator("json", subscriptionPatchSchema), async (c) => {
+  const db = createDb(c.env.DB);
+  const storeId = c.req.param("storeId") as EntityId;
+  const body = c.req.valid("json");
+
+  const storeRepo = new D1StoreRepository(db);
+  const subRepo = new D1SubscriptionRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+
+  if (body.plan) {
+    const result = await new SetStorePlan(storeRepo, subRepo).execute({
+      storeId,
+      plan: body.plan,
+      cycle: body.cycle,
+      currentPeriodEnd: body.currentPeriodEnd ?? defaultPeriodEnd(body.plan, body.cycle),
+    });
+    if (!result.ok) return c.json({ error: { code: "NOT_FOUND" } }, 404);
+  }
+
+  if (body.clearTrial || body.extendTrialDays) {
+    const result = await new UpdateStoreTrial(storeRepo).execute({
+      storeId,
+      clearTrial: body.clearTrial,
+      extendTrialDays: body.extendTrialDays,
+    });
+    if (!result.ok) return c.json({ error: { code: "NOT_FOUND" } }, 404);
+  }
+
+  if (body.commissionRate !== undefined) {
+    store.setCommissionRate(body.commissionRate);
+    await storeRepo.save(store);
+  }
+
+  await writeAdminLog(db, {
+    adminId: c.get("adminId"),
+    action: "subscription.update",
+    targetType: "store",
+    targetId: storeId,
+    detail: { ...body },
+  });
+
+  // Return the updated plan view.
+  const updated = await storeRepo.findById(storeId);
+  const sub = await subRepo.findActiveByStoreId(storeId);
+  if (!updated) return c.json({ error: { code: "NOT_FOUND" } }, 404);
+  return c.json({
+    plan: {
+      store: { id: updated.id, name: updated.name, subdomain: updated.subdomain, status: updated.status },
+      tier: resolveTier(updated, sub),
+      trialEndsAt: updated.trialEndsAt,
+      commissionRate: updated.commissionRate,
+      subscription: sub ? sub.toJSON() : null,
+    },
+  });
 });
 
 export { adminRouter };
