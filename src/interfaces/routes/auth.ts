@@ -6,6 +6,10 @@ import { createDb } from "../../infrastructure/db/drizzle";
 import type { Env } from "../../types";
 import { eq, count } from "drizzle-orm";
 import { stores, consents } from "../../infrastructure/db/schema";
+import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
+import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { PlanService } from "../../application/plan/plan-service";
+import type { EntityId } from "../../domain/shared/types";
 
 // Versi dokumen legal yang sedang berlaku — dicatat pada consent log.
 const TERMS_VERSION = "1.0";
@@ -27,6 +31,12 @@ function serializeStoreRow(row: typeof stores.$inferSelect) {
     heroImageUrl: row.heroImageUrl,
     logoUrl: row.logoUrl,
     originAddress: row.originAddress,
+    originRt: row.originRt,
+    originRw: row.originRw,
+    originKelurahan: row.originKelurahan,
+    originKecamatan: row.originKecamatan,
+    originCity: row.originCity,
+    originProvince: row.originProvince,
     originPostalCode: row.originPostalCode,
     originContactName: row.originContactName,
     originContactPhone: row.originContactPhone,
@@ -278,6 +288,11 @@ authRouter.get("/me", async (c) => {
     .where(eq(stores.ownerId, session.user.id))
     .get();
 
+  // Attach the plan view (tier, limits, pending change…) — the auth-context
+  // store powers the dashboard banner, product limits and settings.
+  const storeDomain = storeRow ? await new D1StoreRepository(db).findById(storeRow.id as EntityId) : null;
+  const plan = storeDomain ? await new PlanService(new D1SubscriptionRepository(db)).viewOf(storeDomain) : null;
+
   const consentRow = await db
     .select({ c: count() })
     .from(consents)
@@ -286,7 +301,7 @@ authRouter.get("/me", async (c) => {
 
   return c.json({
     user: serializeUser(session.user),
-    store: storeRow ? serializeStoreRow(storeRow) : null,
+    store: storeRow ? { ...serializeStoreRow(storeRow), plan } : null,
     hasConsent: (consentRow?.c ?? 0) > 0,
   });
 });
