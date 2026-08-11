@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "tokko-api-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "rules": [
+    { "type": "Text", "globs": ["**/*.md"], "fallthrough": true }
+  ],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "tokko-db-staging", "database_id": "4c6cf08d-b472-48e3-8487-411c5b8f4f62", "migrations_dir": "src/infrastructure/db/migrations" }
+  ],
+  "r2_buckets": [
+    { "binding": "IMAGES", "bucket_name": "tokko-images-staging" }
+  ],
+  "vars": {
+    "LLM_MODEL": "deepseek-chat",
+    "BETTER_AUTH_URL": "https://staging-api.7okko.com",
+    "FRONTEND_URL": "https://staging.7okko.com",
+    "RESEND_FROM": "no-reply@7okko.com",
+    "NODE_ENV": "production"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "dev": {
+    "port": 8787
+  }
+}
