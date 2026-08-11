@@ -29,6 +29,17 @@ export const orders = sqliteTable("orders", {
   shippingCourier: text("shipping_courier"), // Biteship courier company (e.g. "jne")
   shippingService: text("shipping_service"), // service type (e.g. "reg")
   shippingDuration: text("shipping_duration"), // ETA label (e.g. "1 - 2 days")
+  // Structured destination — persisted from checkout so Biteship delivery
+  // orders can be created without parsing the composed string.
+  destinationDetail: text("destination_detail"),
+  destinationKelurahan: text("destination_kelurahan"),
+  destinationKecamatan: text("destination_kecamatan"),
+  destinationCity: text("destination_city"),
+  destinationProvince: text("destination_province"),
+  destinationPostalCode: text("destination_postal_code"),
+  // Biteship delivery order refs (set when a resi is created).
+  biteshipOrderId: text("biteship_order_id"),
+  biteshipTrackingId: text("biteship_tracking_id"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
