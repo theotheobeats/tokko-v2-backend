@@ -14,6 +14,8 @@ export interface PaymentRepository {
   findByExternalId(externalId: string): Promise<Payment | null>;
   findByOrderId(orderId: EntityId): Promise<Payment[]>;
   listByStoreId(storeId: EntityId, filters?: { status?: PaymentStatus; limit?: number; offset?: number }): Promise<{ payments: Payment[]; total: number }>;
+  /** All pending attempts — admin payment reconciliation. */
+  listPending(): Promise<Payment[]>;
   save(payment: Payment): Promise<void>;
 }
 
@@ -75,6 +77,17 @@ export class D1PaymentRepository implements PaymentRepository {
       payments: rows.map((r) => this._toDomain(r)),
       total: totalRow?.count ?? 0,
     };
+  }
+
+  /** All pending attempts — admin payment reconciliation. */
+  async listPending(): Promise<Payment[]> {
+    const rows = await this.db
+      .select()
+      .from(payments)
+      .where(eq(payments.status, "pending"))
+      .orderBy(sql`${payments.createdAt} ASC`)
+      .all();
+    return rows.map((r) => this._toDomain(r));
   }
 
   async save(payment: Payment): Promise<void> {

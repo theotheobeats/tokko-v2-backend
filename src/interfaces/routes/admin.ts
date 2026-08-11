@@ -17,6 +17,8 @@ import { D1PaymentRepository } from "../../infrastructure/repos/d1-payment-repo"
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { D1CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
 import { ListAdminSubscriptions, SetStorePlan, UpdateStoreTrial } from "../../application/admin/admin-subscriptions";
+import { SyncPendingPayments } from "../../application/payment/sync-payments";
+import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
 import { createAuth } from "../../lib/auth";
 import { GetAdminStats } from "../../application/admin/admin-stats";
 import {
@@ -653,6 +655,36 @@ adminRouter.patch("/subscriptions/:storeId", zValidator("json", subscriptionPatc
       subscription: sub ? sub.toJSON() : null,
     },
   });
+});
+
+// ---------------------------------------------------------------------------
+// Payment reconciliation — on-demand Xendit status sync (lost-webhook fallback)
+// ---------------------------------------------------------------------------
+
+// POST /api/admin/payments/sync?orderId=&storeId=
+adminRouter.post("/payments/sync", async (c) => {
+  const db = createDb(c.env.DB);
+  const orderId = c.req.query("orderId");
+  const storeId = c.req.query("storeId");
+
+  const result = await new SyncPendingPayments(
+    new D1PaymentRepository(db),
+    new D1OrderRepository(db),
+    createPaymentProvider(c.env),
+  ).execute({
+    storeId: storeId ? (storeId as EntityId) : undefined,
+    orderId: orderId ? (orderId as EntityId) : undefined,
+  });
+
+  await writeAdminLog(db, {
+    adminId: c.get("adminId"),
+    action: "payments.sync",
+    targetType: "payment",
+    targetId: orderId ?? "all",
+    detail: result.ok ? { ...result.value } : { failed: true },
+  });
+
+  return c.json(result.ok ? result.value : { error: "SYNC_FAILED" }, result.ok ? 200 : 500);
 });
 
 export { adminRouter };
