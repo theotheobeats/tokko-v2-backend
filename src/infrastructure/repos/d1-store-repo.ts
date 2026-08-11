@@ -166,6 +166,11 @@ export class D1StoreRepository implements StoreRepository {
       bankAccountName: row.bankAccountName,
       enabledPaymentMethods: row.enabledPaymentMethods ? (JSON.parse(row.enabledPaymentMethods) as string[]) : null,
       enabledCouriers: row.enabledCouriers ? (JSON.parse(row.enabledCouriers) as string[]) : null,
+      trialEndsAt: row.trialEndsAt,
+      commissionRate: row.commissionRate,
+      aiStoreGenerations: row.aiStoreGenerations,
+      aiDescriptions: row.aiDescriptions,
+      customDomain: row.customDomain,
     });
   }
 
@@ -204,6 +209,11 @@ export class D1StoreRepository implements StoreRepository {
       bankAccountName: props.bankAccountName,
       enabledPaymentMethods: props.enabledPaymentMethods ? JSON.stringify(props.enabledPaymentMethods) : null,
       enabledCouriers: props.enabledCouriers ? JSON.stringify(props.enabledCouriers) : null,
+      trialEndsAt: props.trialEndsAt,
+      commissionRate: props.commissionRate,
+      aiStoreGenerations: props.aiStoreGenerations,
+      aiDescriptions: props.aiDescriptions,
+      customDomain: props.customDomain,
     };
   }
 }

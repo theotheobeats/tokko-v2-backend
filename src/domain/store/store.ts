@@ -48,6 +48,12 @@ export interface StoreProps {
   // Enabled payment methods / couriers (null = platform defaults, all).
   enabledPaymentMethods: string[] | null;
   enabledCouriers: string[] | null;
+  // Subscription / plan — trial lifecycle + tier gates.
+  trialEndsAt: string | null;
+  commissionRate: number | null;
+  aiStoreGenerations: number;
+  aiDescriptions: number;
+  customDomain: string | null;
 }
 
 export class Store {
@@ -100,6 +106,11 @@ export class Store {
       bankAccountName: null,
       enabledPaymentMethods: null,
       enabledCouriers: null,
+      trialEndsAt: null,
+      commissionRate: null,
+      aiStoreGenerations: 0,
+      aiDescriptions: 0,
+      customDomain: null,
     });
   }
 
@@ -143,6 +154,11 @@ export class Store {
   get bankAccountName() { return this.props.bankAccountName; }
   get enabledPaymentMethods() { return this.props.enabledPaymentMethods; }
   get enabledCouriers() { return this.props.enabledCouriers; }
+  get trialEndsAt() { return this.props.trialEndsAt; }
+  get commissionRate() { return this.props.commissionRate; }
+  get aiStoreGenerations() { return this.props.aiStoreGenerations; }
+  get aiDescriptions() { return this.props.aiDescriptions; }
+  get customDomain() { return this.props.customDomain; }
 
   /** Manual transfer is configured when all three bank fields are filled. */
   get hasBankDetails(): boolean {
@@ -312,6 +328,41 @@ export class Store {
     }
     this.props.suspendedAt = null;
     this.props.suspendedReason = null;
+    return this;
+  }
+
+  /** Set the trial deadline (ISO). Cleared on first payment. */
+  setTrialEndsAt(iso: string | null): Store {
+    this.props.trialEndsAt = iso;
+    return this;
+  }
+
+  /** Trial is live when a deadline exists and hasn't passed. */
+  get isTrialActive(): boolean {
+    return Boolean(this.props.trialEndsAt && new Date(this.props.trialEndsAt).getTime() > Date.now());
+  }
+
+  /** Commission path rate (3.5 default, 2.5 with custom domain). */
+  setCommissionRate(rate: number | null): Store {
+    this.props.commissionRate = rate;
+    return this;
+  }
+
+  /** Track AI store-generation usage (trial: 1x). */
+  incrementAiStoreGenerations(): Store {
+    this.props.aiStoreGenerations += 1;
+    return this;
+  }
+
+  /** Track AI product-description usage (trial: 10x). */
+  incrementAiDescriptions(): Store {
+    this.props.aiDescriptions += 1;
+    return this;
+  }
+
+  /** BYOD — custom domain (future; drives the 2.5% commission discount). */
+  setCustomDomain(domain: string | null): Store {
+    this.props.customDomain = domain?.trim().toLowerCase() || null;
     return this;
   }
 

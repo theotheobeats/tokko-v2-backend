@@ -51,6 +51,8 @@ export class CreateProduct {
   constructor(
     private readonly productRepo: ProductRepository,
     private readonly categoryRepo?: CategoryRepository,
+    /** Tier-driven product cap (default 20 = legacy behavior when not provided). */
+    private readonly productLimit: number = 20,
   ) {}
 
   async execute(input: CreateProductInput): Promise<Result<ProductWithVariants, CreateProductError>> {
@@ -99,10 +101,10 @@ export class CreateProduct {
       }
     }
 
-    // Check limit
+    // Check limit — tier-driven (trial 50 / pro 1000 / commerce 5000, hard cap 10000).
     const count = await this.productRepo.countByStoreId(input.storeId);
-    if (count >= 20) {
-      return err({ code: "PRODUCT_LIMIT_REACHED", message: "Maksimal 20 produk per toko." });
+    if (count >= this.productLimit) {
+      return err({ code: "PRODUCT_LIMIT_REACHED", message: `Maksimal ${this.productLimit} produk per toko.` });
     }
 
     // Slug: explicit (validated) or auto-generated from the name

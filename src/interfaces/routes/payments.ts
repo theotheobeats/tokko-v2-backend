@@ -7,6 +7,8 @@ import { createDb } from "../../infrastructure/db/drizzle";
 import { D1PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import { D1OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
+import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
+import { PlanService } from "../../application/plan/plan-service";
 import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
 import {
   CreatePayment,
@@ -52,6 +54,19 @@ paymentsRouter.post("/orders/:orderId/payment", zValidator("json", createPayment
   const orderId = c.req.param("orderId") as EntityId;
   const db = createDb(c.env.DB);
   const input = c.req.valid("json");
+
+  // Gate: online checkout is Commerce-only (defense in depth — the storefront
+  // also hides it via the payload's effective paymentOnline).
+  const order = await new D1OrderRepository(db).findById(orderId);
+  if (!order) return c.json({ error: { code: "ORDER_NOT_FOUND", message: "Pesanan tidak ditemukan." } }, 404);
+  const store = await new D1StoreRepository(db).findById(order.storeId);
+  if (!store) return c.json({ error: { code: "STORE_NOT_FOUND" } }, 404);
+  const canOnline = await new PlanService(new D1SubscriptionRepository(db)).canUseOnlineCheckout(store);
+  if (!canOnline) {
+    return c.json({
+      error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Commerce." },
+    }, 403);
+  }
 
   const useCase = new CreatePayment(
     new D1OrderRepository(db),

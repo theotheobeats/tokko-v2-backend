@@ -28,6 +28,8 @@ export interface GenerateStoreInput {
   productCategory: string;
   aesthetic: Aesthetic;
   whatsappNumber: string;
+  /** Trial deadline (ISO) — set at signup; cleared on first payment (Phase 2). */
+  trialEndsAt?: string;
 }
 
 export interface GenerateStoreOutput {
@@ -126,6 +128,11 @@ export class GenerateStore {
 
     // Set product count (for publish invariant)
     store.setProductCount(products.length);
+
+    // Trial lifecycle starts here (Phase 1: window only — the expiry cron is Phase 2).
+    if (input.trialEndsAt) store.setTrialEndsAt(input.trialEndsAt);
+    // Track AI store-generation usage (trial: 1x).
+    store.incrementAiStoreGenerations();
 
     // 5. Create Page with sections — normalize first so the hero always
     // leads and a Kategori strip sits directly below it (see normalize-sections).
