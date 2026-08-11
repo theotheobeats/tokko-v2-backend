@@ -12,6 +12,8 @@ import type { SubscriptionRepository } from "../../infrastructure/repos/d1-subsc
 export interface PlanView {
   tier: Tier;
   trialEndsAt: string | null;
+  /** Trial expired → store readable but orders off (trial-lifecycle cron). */
+  paused: boolean;
   /** Tokko branding watermark shown on the storefront (trial only). */
   watermark: boolean;
   onlineCheckout: boolean;
@@ -41,6 +43,7 @@ export class PlanService {
     return {
       tier,
       trialEndsAt: store.trialEndsAt,
+      paused: store.isPaused,
       watermark: !cfg.brandingRemoved,
       onlineCheckout: cfg.onlineCheckout,
       payouts: cfg.payouts,
