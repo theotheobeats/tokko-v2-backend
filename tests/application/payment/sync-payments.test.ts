@@ -57,7 +57,7 @@ describe("SyncPendingPayments", () => {
       getInvoice: vi.fn().mockResolvedValue({ status: "PAID", paidAt: "2026-08-11T00:00:00Z", paymentMethod: "QRIS" }),
     } as unknown as PaymentProviderClient;
 
-    const result = await new SyncPendingPayments(paymentRepo, orderRepo, provider).execute();
+    const result = await new SyncPendingPayments(paymentRepo, orderRepo, () => provider).execute();
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ checked: 1, updated: 1, paid: 1 });
@@ -77,7 +77,7 @@ describe("SyncPendingPayments", () => {
       getInvoice: vi.fn().mockResolvedValue({ status: "PENDING" }),
     } as unknown as PaymentProviderClient;
 
-    const result = await new SyncPendingPayments(paymentRepo, orderRepo, provider).execute();
+    const result = await new SyncPendingPayments(paymentRepo, orderRepo, () => provider).execute();
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ checked: 1, updated: 0, paid: 0 });
@@ -100,7 +100,7 @@ describe("SyncPendingPayments", () => {
         .mockRejectedValueOnce(new Error("xendit down")),
     } as unknown as PaymentProviderClient;
 
-    const result = await new SyncPendingPayments(paymentRepo, orderRepo, provider).execute();
+    const result = await new SyncPendingPayments(paymentRepo, orderRepo, () => provider).execute();
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ checked: 2, updated: 1, paid: 0 });

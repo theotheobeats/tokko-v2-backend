@@ -7,6 +7,7 @@ import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
 import { Payment } from "../../domain/payment/payment";
 import type { PaymentStatus } from "../../domain/payment/types";
+import type { PaymentProvider as PaymentProviderType } from "../../domain/payment/types";
 import type { PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import type { PaymentProviderClient } from "../../infrastructure/payments/xendit-client";
@@ -83,6 +84,8 @@ export interface CreatePaymentInput {
   customerEmail?: string;
   successRedirectUrl?: string;
   failureRedirectUrl?: string;
+  /** Which provider this payment runs on (resolved by the registry). */
+  provider?: PaymentProviderType;
 }
 
 export class CreatePayment {
@@ -130,6 +133,7 @@ export class CreatePayment {
         channel: input.channel ?? null,
         externalId: invoice.externalId,
         invoiceUrl: invoice.invoiceUrl,
+        provider: input.provider,
       });
 
       await this.paymentRepo.save(payment);

@@ -18,7 +18,8 @@ import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscrip
 import { D1CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
 import { ListAdminSubscriptions, SetStorePlan, UpdateStoreTrial } from "../../application/admin/admin-subscriptions";
 import { SyncPendingPayments } from "../../application/payment/sync-payments";
-import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
+import { createProviderClient, resolveActivePaymentProvider } from "../../infrastructure/payments/registry";
+import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { createAuth } from "../../lib/auth";
 import { GetAdminStats } from "../../application/admin/admin-stats";
 import {
@@ -658,7 +659,7 @@ adminRouter.patch("/subscriptions/:storeId", zValidator("json", subscriptionPatc
 });
 
 // ---------------------------------------------------------------------------
-// Payment reconciliation — on-demand Xendit status sync (lost-webhook fallback)
+// Payment reconciliation — on-demand provider status sync (lost-webhook fallback)
 // ---------------------------------------------------------------------------
 
 // POST /api/admin/payments/sync?orderId=&storeId=
@@ -670,7 +671,7 @@ adminRouter.post("/payments/sync", async (c) => {
   const result = await new SyncPendingPayments(
     new D1PaymentRepository(db),
     new D1OrderRepository(db),
-    createPaymentProvider(c.env),
+    (providerId) => createProviderClient(c.env, providerId),
   ).execute({
     storeId: storeId ? (storeId as EntityId) : undefined,
     orderId: orderId ? (orderId as EntityId) : undefined,
@@ -685,6 +686,42 @@ adminRouter.post("/payments/sync", async (c) => {
   });
 
   return c.json(result.ok ? result.value : { error: "SYNC_FAILED" }, result.ok ? 200 : 500);
+});
+
+// ---------------------------------------------------------------------------
+// Payment provider switch (admin) — which gateway handles NEW payments
+// ---------------------------------------------------------------------------
+
+const providerSwitchSchema = z.object({
+  provider: z.enum(["singapay", "xendit"]),
+});
+
+// GET /api/admin/payments/provider
+adminRouter.get("/payments/provider", async (c) => {
+  const db = createDb(c.env.DB);
+  const settings = new D1AppSettingsRepository(db);
+  const provider = await resolveActivePaymentProvider((k) => settings.get(k));
+  return c.json({ provider });
+});
+
+// PATCH /api/admin/payments/provider  { provider: "singapay" | "xendit" }
+adminRouter.patch("/payments/provider", zValidator("json", providerSwitchSchema), async (c) => {
+  const adminId = c.get("adminId");
+  const { provider } = c.req.valid("json");
+  const db = createDb(c.env.DB);
+
+  const settings = new D1AppSettingsRepository(db);
+  await settings.set("payment_provider", provider);
+
+  await writeAdminLog(db, {
+    adminId,
+    action: "payments.provider",
+    targetType: "settings",
+    targetId: "payment_provider",
+    detail: { provider },
+  });
+
+  return c.json({ provider });
 });
 
 export { adminRouter };

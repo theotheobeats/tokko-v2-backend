@@ -10,7 +10,8 @@ import { D1OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { PlanService } from "../../application/plan/plan-service";
-import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
+import { createProviderClient, resolveActivePaymentProvider } from "../../infrastructure/payments/registry";
+import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { SUBSCRIPTION_EXTERNAL_ID_PREFIX, PENDING_PLAN_EXTERNAL_ID_PREFIX } from "../../domain/plan/pricing";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
 import {
@@ -71,10 +72,14 @@ paymentsRouter.post("/orders/:orderId/payment", zValidator("json", createPayment
     }, 403);
   }
 
+  // Route through the active payment provider (admin switch, app_settings).
+  const settings = new D1AppSettingsRepository(db);
+  const providerId = await resolveActivePaymentProvider((k) => settings.get(k));
+
   const useCase = new CreatePayment(
     new D1OrderRepository(db),
     new D1PaymentRepository(db),
-    createPaymentProvider(c.env),
+    createProviderClient(c.env, providerId),
   );
 
   const result = await useCase.execute({
@@ -86,6 +91,7 @@ paymentsRouter.post("/orders/:orderId/payment", zValidator("json", createPayment
     customerEmail: input.customerEmail || undefined,
     successRedirectUrl: input.successRedirectUrl,
     failureRedirectUrl: input.failureRedirectUrl,
+    provider: providerId,
   });
 
   if (!result.ok) {
@@ -119,7 +125,7 @@ paymentsRouter.get("/orders/:orderId/payments", async (c) => {
     const ageMs = Date.now() - new Date(latest.createdAt).getTime();
     if (ageMs > 10 * 60 * 1000) {
       try {
-        const status = await createPaymentProvider(c.env).getInvoice(latest.externalId);
+        const status = await createProviderClient(c.env, latest.provider).getInvoice(latest.externalId);
         if (status.status === "PAID") latest.markPaid(status.paidAt ?? undefined);
         else if (status.status === "EXPIRED") latest.markExpired();
         else if (status.status === "FAILED") latest.markFailed();

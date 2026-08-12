@@ -16,6 +16,7 @@ export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
 
 export const PaymentProvider = {
   Xendit: "xendit",
+  SingaPay: "singapay",
 } as const;
 export type PaymentProvider = (typeof PaymentProvider)[keyof typeof PaymentProvider];
 

@@ -22,6 +22,12 @@ export interface Env {
   XENDIT_SECRET_KEY?: string;
   XENDIT_WEBHOOK_TOKEN?: string;
   XENDIT_FORCE_MOCK?: string;
+
+  // Payments — SingaPay (Phase 1). Client uses these; mocked when unset.
+  SINGAPAY_CLIENT_ID?: string;
+  SINGAPAY_CLIENT_SECRET?: string;
+  SINGAPAY_WEBHOOK_SECRET?: string;
+  SINGAPAY_FORCE_MOCK?: string;
   // Public API origin used for payment success/failure redirects.
   API_PUBLIC_URL?: string;
 
