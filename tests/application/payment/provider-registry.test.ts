@@ -4,7 +4,6 @@ import {
   createProviderClient,
   isPaymentProviderId,
   DEFAULT_PAYMENT_PROVIDER,
-  PaymentProviderUnavailableError,
 } from "../../../src/infrastructure/payments/registry";
 import { CreatePayment } from "../../../src/application/payment/payment-use-cases";
 import { Order } from "../../../src/domain/order/order";
@@ -59,8 +58,11 @@ describe("createProviderClient", () => {
     expect(typeof client.getInvoice).toBe("function");
   });
 
-  it("throws a clear error for singapay until the client lands (Phase 1)", () => {
-    expect(() => createProviderClient(devEnv, "singapay")).toThrow(PaymentProviderUnavailableError);
+  it("routes singapay to the SingaPay client (mock in dev without keys)", () => {
+    const client = createProviderClient(devEnv, "singapay");
+    expect(client).toBeDefined();
+    expect(typeof client.createInvoice).toBe("function");
+    expect(typeof client.getInvoice).toBe("function");
   });
 });
 

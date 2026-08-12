@@ -11,6 +11,7 @@
 
 import type { Env } from "../../types";
 import { createPaymentProvider as createXenditProvider } from "./xendit-client";
+import { createSingaPayProvider } from "./singapay-client";
 import type { PaymentProviderClient } from "./xendit-client";
 import type { PaymentProvider as PaymentProviderType } from "../../domain/payment/types";
 
@@ -34,23 +35,12 @@ export async function resolveActivePaymentProvider(
   return isPaymentProviderId(value) ? value : DEFAULT_PAYMENT_PROVIDER;
 }
 
-export class PaymentProviderUnavailableError extends Error {
-  code = "PAYMENT_PROVIDER_UNAVAILABLE";
-  constructor(provider: PaymentProviderId) {
-    super(
-      provider === "singapay"
-        ? "Pembayaran online via SingaPay belum aktif"
-        : "Penyedia pembayaran tidak tersedia",
-    );
-  }
-}
-
-/** Client for a provider. Xendit → the existing client; SingaPay → Phase 1. */
+/** Client for a provider: Xendit → existing client; SingaPay → payment links. */
 export function createProviderClient(env: Env, provider: PaymentProviderType): PaymentProviderClient {
   switch (provider) {
     case "xendit":
       return createXenditProvider(env);
     case "singapay":
-      throw new PaymentProviderUnavailableError(provider);
+      return createSingaPayProvider(env);
   }
 }
