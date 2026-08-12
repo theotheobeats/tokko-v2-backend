@@ -36,7 +36,8 @@ import {
 import type { EntityId } from "../../domain/shared/types";
 import { PaymentChannel } from "../../domain/payment/types";
 import { D1PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
-import { HandleDisbursementWebhook } from "../../application/admin/admin-payouts";
+import { GetPayoutSummary, HandleDisbursementWebhook, PayoutStoreNotFoundError } from "../../application/admin/admin-payouts";
+import { createSingaPayAccountsClient } from "../../infrastructure/payments/singapay-client";
 
 /**
  * Payment routes (mounted under /api):
@@ -387,6 +388,45 @@ paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
   }
 
   return c.json({ handled: result.value.handled });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/stores/:storeId/payouts (auth, owner)
+//
+// Merchant-facing saldo + payout history (orange #8 — UU model: merchants
+// see their SingaPay balance and disbursement status; only admins move money).
+// ---------------------------------------------------------------------------
+paymentsRouter.get("/stores/:storeId/payouts", async (c) => {
+  const session = await requireUser(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("storeId") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "STORE_NOT_FOUND" } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN" } }, 403);
+  }
+
+  const summaryResult = await new GetPayoutSummary(
+    storeRepo,
+    new D1CommissionLedger(db),
+    createSingaPayAccountsClient(c.env),
+  ).execute(storeId);
+  if (!summaryResult.ok) {
+    return c.json(
+      { error: summaryResult.error },
+      summaryResult.error instanceof PayoutStoreNotFoundError ? 404 : 502,
+    );
+  }
+
+  const history = await new D1PayoutRepository(db).list({ storeId, limit: 20 });
+  return c.json({
+    summary: summaryResult.value,
+    payouts: history.payouts,
+    total: history.total,
+  });
 });
 
 // ---------------------------------------------------------------------------
