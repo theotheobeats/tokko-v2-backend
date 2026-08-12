@@ -109,6 +109,19 @@ export interface SingaPayAccount {
   brand_name?: string | null;
 }
 
+/** Live payment-methods catalog entry (SingaPay does not publish fee rates via API). */
+export interface SingaPayPaymentMethod {
+  code: string;
+  name: string;
+  group: string;
+  desc?: string | null;
+}
+
+export interface SingaPayPaymentMethodCatalog {
+  payment_methods: SingaPayPaymentMethod[];
+  available_codes: string[];
+}
+
 /** Real payments are used whenever a full credential set is configured. */
 export function useRealSingaPay(env: SingaPayEnv): boolean {
   if (env.SINGAPAY_FORCE_MOCK === "1" || env.SINGAPAY_FORCE_MOCK === "true") return false;
@@ -122,7 +135,7 @@ export function useRealSingaPay(env: SingaPayEnv): boolean {
  * account catalog changes. Unknown ids are dropped; if nothing maps, the
  * whitelist is omitted (all active methods allowed).
  */
-const SINGAPAY_METHOD_CODES: Record<string, string[]> = {
+export const SINGAPAY_METHOD_CODES: Record<string, string[]> = {
   qris: ["QRIS"],
   bca: ["VA_BCA"],
   mandiri: ["VA_MANDIRI"],
@@ -324,6 +337,14 @@ export class SingaPayClient implements PaymentProviderClient {
       kyb_onboarding_url: normalizeKybUrl(account.kyb_onboarding_url, this.creds.kybUrlBase),
     };
   }
+
+  /** Live payment-methods catalog for this account (codes/names/groups). */
+  async listPaymentMethods(): Promise<SingaPayPaymentMethodCatalog> {
+    return this.request<SingaPayPaymentMethodCatalog>(
+      "/api/v1.0/payment-link-manage/payment-methods",
+      { method: "GET" },
+    );
+  }
 }
 
 /**
@@ -354,6 +375,17 @@ export class MockSingaPayProvider implements PaymentProviderClient {
       status: "inactive",
       kyb_status: "kyb_in_review",
       kyb_onboarding_url: `https://checkout.payments.test/kyb/${this.prefix}`,
+    };
+  }
+
+  async listPaymentMethods(): Promise<SingaPayPaymentMethodCatalog> {
+    return {
+      payment_methods: [
+        { code: "QRIS", name: "QRIS", group: "QRIS" },
+        { code: "VA_BRI", name: "VA BRI", group: "va" },
+        { code: "GOPAY", name: "GoPay", group: "ewallet" },
+      ],
+      available_codes: ["QRIS", "VA_BRI", "GOPAY"],
     };
   }
 
@@ -393,6 +425,7 @@ export interface SingaPayAccountsClientLike {
     accountType: "personal_managed" | "business_managed";
   }): Promise<SingaPayAccount>;
   getAccount(accountId: string): Promise<SingaPayAccount>;
+  listPaymentMethods(): Promise<SingaPayPaymentMethodCatalog>;
 }
 
 /** Create a SingaPay client for merchant KYB flows (real or mock). */

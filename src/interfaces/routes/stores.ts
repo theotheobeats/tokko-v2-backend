@@ -18,14 +18,14 @@ import { BusinessType, Aesthetic } from "../../domain/store/types";
 import type { EntityId } from "../../domain/shared/types";
 import { mockAIGenerate, generateStore } from "../../infrastructure/ai/deepseek-client";
 import { useRealAi } from "../../infrastructure/ai/ai-mode";
-import { PAYMENT_METHOD_CATALOG, DEFAULT_ENABLED_PAYMENT_METHODS } from "../../application/payment/payment-method-catalog";
+import { PAYMENT_METHOD_CATALOG, DEFAULT_ENABLED_PAYMENT_METHODS, type PaymentMethodInfo } from "../../application/payment/payment-method-catalog";
 import { COURIER_CATALOG, DEFAULT_COURIERS } from "../../application/shipping/courier-catalog";
 import { PlanService, type PlanView } from "../../application/plan/plan-service";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
 import { activatePendingPlan } from "../../application/plan/pending-plan";
 import { createProviderClient, resolveActivePaymentProvider, providerIsReal } from "../../infrastructure/payments/registry";
-import { createSingaPayAccountsClient } from "../../infrastructure/payments/singapay-client";
+import { createSingaPayAccountsClient, SINGAPAY_METHOD_CODES } from "../../infrastructure/payments/singapay-client";
 import { StartMerchantKYB, GetMerchantKYBStatus, KYBStoreNotFoundError } from "../../application/kyb/merchant-kyb";
 import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
@@ -552,7 +552,10 @@ storesRouter.post("/:id/subscription/cancel", zValidator("json", z.object({ canc
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/stores/:id/payment-methods — catalog + per-store enabled flags
+// GET /api/stores/:id/payment-methods — active provider + method list
+// (SingaPay: live catalog from the API merged with our fee schedule;
+// Xendit: static catalog. SingaPay does not publish fee rates via API —
+// fees are charged per transaction, so unknown methods show no rate.)
 // ---------------------------------------------------------------------------
 storesRouter.get("/:id/payment-methods", async (c) => {
   const session = await requireAuth(c);
@@ -565,8 +568,40 @@ storesRouter.get("/:id/payment-methods", async (c) => {
   if (!store) return c.json({ error: { code: "NOT_FOUND" } }, 404);
   if (store.ownerId !== session.user.id) return c.json({ error: { code: "FORBIDDEN" } }, 403);
 
+  const settings = new D1AppSettingsRepository(db);
+  const providerId = await resolveActivePaymentProvider((k) => settings.get(k));
   const enabled = new Set(store.enabledPaymentMethods ?? DEFAULT_ENABLED_PAYMENT_METHODS);
+
+  // SingaPay: live catalog (codes/names/groups) merged with our fee schedule.
+  if (providerId === "singapay") {
+    try {
+      const live = await createSingaPayAccountsClient(c.env).listPaymentMethods();
+      const oursByCode = new Map<string, PaymentMethodInfo>();
+      for (const m of PAYMENT_METHOD_CATALOG) {
+        for (const code of SINGAPAY_METHOD_CODES[m.id] ?? []) oursByCode.set(code, m);
+      }
+      return c.json({
+        provider: providerId,
+        methods: live.payment_methods.map((pm) => {
+          const ours = oursByCode.get(pm.code);
+          return {
+            id: ours?.id ?? pm.code,
+            label: pm.name,
+            group: pm.group,
+            feePercent: ours?.feePercent ?? null,
+            feeFixed: ours?.feeFixed ?? null,
+            enabled: ours ? enabled.has(ours.id) : false,
+            providerCode: pm.code,
+          };
+        }),
+      });
+    } catch {
+      // provider unreachable — fall through to the static catalog
+    }
+  }
+
   return c.json({
+    provider: providerId,
     methods: PAYMENT_METHOD_CATALOG.map((m) => ({
       id: m.id,
       label: m.label,
