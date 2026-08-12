@@ -65,6 +65,7 @@ interface SingaPayPaymentLink {
   payment_url: string;
   status?: string;
   is_expired?: boolean;
+  current_usage?: number;
   payment_date?: string | null;
 }
 
@@ -236,7 +237,9 @@ export class SingaPayClient implements PaymentProviderClient {
 
     const link = (links ?? []).find((l) => l.reff_no === externalId);
     if (!link) return { status: "PENDING" }; // created but not yet visible / no attempt
-    if (link.payment_date) return { status: "PAID", paidAt: link.payment_date };
+    // current_usage is the reliable paid indicator — SingaPay populates
+    // payment_date with created_at at creation, so it can't be trusted alone.
+    if ((link.current_usage ?? 0) > 0) return { status: "PAID", paidAt: link.payment_date ?? undefined };
     if (link.is_expired) return { status: "EXPIRED" };
     return { status: "PENDING" };
   }

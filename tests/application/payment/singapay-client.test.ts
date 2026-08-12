@@ -227,15 +227,15 @@ describe("SingaPayClient.createInvoice", () => {
 });
 
 describe("SingaPayClient.getInvoice", () => {
-  it("maps a paid link to PAID with the payment date", async () => {
+  it("maps a used link (current_usage > 0) to PAID with the payment date", async () => {
     const { fn } = mockFetch({
       "/access-token/b2b": { status: 200, success: true, data: { access_token: "jwt-abc", expires_in: "216000" } },
       "/payment-link-manage/": {
         status: 200,
         success: true,
         data: [
-          { reff_no: "tokko-paid-1", payment_date: "2026-08-12T00:00:00.000000Z", is_expired: false },
-          { reff_no: "tokko-other", payment_date: null, is_expired: false },
+          { reff_no: "tokko-paid-1", current_usage: 1, payment_date: "2026-08-12T00:00:00.000000Z", is_expired: false },
+          { reff_no: "tokko-other", current_usage: 0, payment_date: null, is_expired: false },
         ],
       },
     });
@@ -243,6 +243,24 @@ describe("SingaPayClient.getInvoice", () => {
 
     const result = await new SingaPayClient(creds).getInvoice("tokko-paid-1");
     expect(result).toEqual({ status: "PAID", paidAt: "2026-08-12T00:00:00.000000Z" });
+  });
+
+  it("does NOT treat a fresh link as paid even when payment_date is set (sandbox sets it to created_at)", async () => {
+    const { fn } = mockFetch({
+      "/access-token/b2b": { status: 200, success: true, data: { access_token: "jwt-abc", expires_in: "216000" } },
+      "/payment-link-manage/": {
+        status: 200,
+        success: true,
+        data: [
+          // Mirrors the real sandbox: payment_date == created_at, current_usage 0
+          { reff_no: "tokko-fresh", current_usage: 0, payment_date: "2026-08-12T11:39:18+07:00", is_expired: false },
+        ],
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const result = await new SingaPayClient(creds).getInvoice("tokko-fresh");
+    expect(result.status).toBe("PENDING");
   });
 
   it("maps an expired link to EXPIRED", async () => {
