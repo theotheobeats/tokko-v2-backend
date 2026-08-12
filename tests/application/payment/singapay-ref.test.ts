@@ -26,12 +26,19 @@ describe("encodeSingaPayRef", () => {
   });
 
   it("passes order refs through unchanged (≤40 chars, no marker)", () => {
-    const order = "tokko-3f7c9a2e-1111-4222-8333-444455556666";
+    const order = "tokko-528844df84a54724a60acfc31b4e7bd3"; // 38 chars
+    expect(order.length).toBeLessThanOrEqual(40);
     expect(encodeSingaPayRef(order)).toBe(order);
   });
 
   it("throws on an unknown plan", () => {
     expect(() => encodeSingaPayRef(subExternalId("gold"))).toThrow();
+  });
+
+  it("throws on any other >40-char id (SingaPay cap regression guard)", () => {
+    const longOrder = `tokko-${crypto.randomUUID()}`; // 42 chars
+    expect(longOrder.length).toBeGreaterThan(40);
+    expect(() => encodeSingaPayRef(longOrder)).toThrow(/terlalu panjang/);
   });
 });
 

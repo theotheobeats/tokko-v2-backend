@@ -94,7 +94,8 @@ export class CreatePayment {
     const existing = await this.paymentRepo.findByOrderId(order.id);
     const pending = existing.find((p) => p.status === "pending");
     if (pending) return ok(pending);
-    const externalId = `tokko-${crypto.randomUUID()}`;
+    // 38 chars (UUID without dashes) — SingaPay caps reff_no at 40.
+    const externalId = `tokko-${crypto.randomUUID().replace(/-/g, "")}`;
     try {
       const invoice = await this.provider.createInvoice({
         externalId,

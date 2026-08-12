@@ -92,6 +92,9 @@ export function encodeSingaPayRef(externalId: string): string {
   if (externalId.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)) {
     return encodeRef("p", externalId.slice(PENDING_PLAN_EXTERNAL_ID_PREFIX.length));
   }
+  if (externalId.length > 40) {
+    throw new Error(`External id terlalu panjang untuk SingaPay reff_no (${externalId.length} > 40)`);
+  }
   return externalId;
 }
 

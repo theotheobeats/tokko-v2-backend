@@ -432,14 +432,21 @@ storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionC
   const externalId = subscriptionExternalId(store.id, plan, cycle, `${Date.now()}`);
   const label = plan === "pro" ? "Pro" : "Commerce";
   const cycleLabel = cycle === "annual" ? "tahunan" : "bulanan";
-  const invoice = await provider.createInvoice({
-    externalId,
-    amount,
-    description: `Langganan Tokko ${label} (${cycleLabel})`,
-    customer: { givenNames: store.name, email: session.user.email },
-    successRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
-    failureRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
-  });
+  let invoice;
+  try {
+    invoice = await provider.createInvoice({
+      externalId,
+      amount,
+      description: `Langganan Tokko ${label} (${cycleLabel})`,
+      customer: { givenNames: store.name, email: session.user.email },
+      successRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
+      failureRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
+    });
+  } catch (e) {
+    return c.json({
+      error: { code: "PAYMENT_PROVIDER_ERROR", message: e instanceof Error ? e.message : "Gagal membuat pembayaran." },
+    }, 502);
+  }
 
   return c.json({
     invoiceUrl: invoice.invoiceUrl,

@@ -119,6 +119,21 @@ function mockProvider(): PaymentProviderClient {
 }
 
 describe("CreatePayment records the provider", () => {
+  it("generates an external id within SingaPay's 40-char reff_no cap", async () => {
+    const order = makeOrder();
+    const paymentRepo = mockPaymentRepo();
+    const orderRepo = mockOrderRepo();
+    orderRepo.findById.mockResolvedValue(order);
+    const provider = mockProvider();
+
+    const useCase = new CreatePayment(orderRepo, paymentRepo, provider);
+    const result = await useCase.execute({ orderId: order.id, provider: "singapay" });
+
+    expect(result.ok).toBe(true);
+    const sent = (provider.createInvoice as ReturnType<typeof vi.fn>).mock.calls[0][0] as { externalId: string };
+    expect(sent.externalId.length).toBeLessThanOrEqual(40);
+  });
+
   it("stores the registry-resolved provider on the payment", async () => {
     const order = makeOrder();
     const paymentRepo = mockPaymentRepo();

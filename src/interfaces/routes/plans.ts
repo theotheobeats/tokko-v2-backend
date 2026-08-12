@@ -48,14 +48,21 @@ plansRouter.post("/checkout", zValidator("json", z.object({
   const provider = createProviderClient(c.env, providerId);
   const externalId = pendingPlanExternalId(session.user.id, plan, cycle, `${Date.now()}`);
   const frontendOrigin = c.env.FRONTEND_URL ?? "https://7okko.com";
-  const invoice = await provider.createInvoice({
-    externalId,
-    amount,
-    description: `Paket Tokko ${plan === "pro" ? "Pro" : "Commerce"} (${cycle === "annual" ? "tahunan" : "bulanan"})`,
-    customer: { givenNames: session.user.name ?? undefined, email: session.user.email },
-    successRedirectUrl: `${frontendOrigin}/onboarding`,
-    failureRedirectUrl: `${frontendOrigin}/choose-plan`,
-  });
+  let invoice;
+  try {
+    invoice = await provider.createInvoice({
+      externalId,
+      amount,
+      description: `Paket Tokko ${plan === "pro" ? "Pro" : "Commerce"} (${cycle === "annual" ? "tahunan" : "bulanan"})`,
+      customer: { givenNames: session.user.name ?? undefined, email: session.user.email },
+      successRedirectUrl: `${frontendOrigin}/onboarding`,
+      failureRedirectUrl: `${frontendOrigin}/choose-plan`,
+    });
+  } catch (e) {
+    return c.json({
+      error: { code: "PAYMENT_PROVIDER_ERROR", message: e instanceof Error ? e.message : "Gagal membuat pembayaran." },
+    }, 502);
+  }
 
   return c.json({ invoiceUrl: invoice.invoiceUrl, externalId, plan, cycle, amount }, 201);
 });
