@@ -12,6 +12,11 @@ import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscrip
 import { PlanService } from "../../application/plan/plan-service";
 import { createProviderClient, resolveActivePaymentProvider } from "../../infrastructure/payments/registry";
 import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
+import {
+  verifySingaPayWebhookSignature,
+  normalizeSingaPayWebhook,
+  type SingaPayWebhookPayload,
+} from "../../infrastructure/payments/singapay-webhook";
 import { SUBSCRIPTION_EXTERNAL_ID_PREFIX, PENDING_PLAN_EXTERNAL_ID_PREFIX } from "../../domain/plan/pricing";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
 import {
@@ -34,6 +39,7 @@ import { PaymentChannel } from "../../domain/payment/types";
  *   POST /api/orders/:orderId/payment        — create a payment attempt (public)
  *   GET  /api/orders/:orderId/payments       — payment status (public, for polling)
  *   POST /api/webhooks/xendit                — Xendit webhook (token-verified)
+ *   POST /api/webhooks/singapay              — SingaPay webhook (HMAC-SHA512 verified)
  *   GET  /api/stores/:storeId/payments       — store payments (auth, owner)
  */
 
@@ -209,6 +215,77 @@ paymentsRouter.post("/webhooks/xendit", async (c) => {
     },
   );
   const result = await useCase.execute(payload);
+
+  if (!result.ok) {
+    if (result.error instanceof PaymentNotFoundError) return c.json({ error: result.error }, 404);
+    if (result.error instanceof WebhookAmountMismatchError) return c.json({ error: result.error }, 400);
+    return c.json({ error: result.error }, 400);
+  }
+
+  return c.json({ handled: result.value.handled });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/webhooks/singapay (SingaPay server → HMAC-SHA512 verified)
+//
+// Register this path (https://staging-api.7okko.com/api/webhooks/singapay) as
+// the merchant's `transaction_notif_url`. The endpoint string used for
+// signature verification MUST match the configured path exactly.
+// Order payments only — subscriptions/pending plans stay on Xendit for now.
+// ---------------------------------------------------------------------------
+paymentsRouter.post("/webhooks/singapay", async (c) => {
+  const env = c.env as Env;
+  const secret = env.SINGAPAY_WEBHOOK_SECRET;
+  if (!secret) {
+    return c.json({ error: { code: "WEBHOOK_UNAVAILABLE", message: "Webhook SingaPay belum dikonfigurasi." } }, 503);
+  }
+
+  const rawBody = await c.req.text();
+  // Headers → plain object (verify reads via bracket access, not Headers.get).
+  const headerObj: Record<string, string> = {};
+  c.req.raw.headers.forEach((value, key) => {
+    headerObj[key] = value;
+  });
+  const valid = await verifySingaPayWebhookSignature({
+    rawBody,
+    headers: headerObj,
+    clientSecret: secret,
+    endpoint: "/api/webhooks/singapay",
+  });
+  if (!valid) {
+    return c.json({ error: { code: "WEBHOOK_UNAUTHORIZED" } }, 401);
+  }
+
+  let payload: SingaPayWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody) as SingaPayWebhookPayload;
+  } catch {
+    return c.json({ error: { code: "VALIDATION", message: "Payload JSON tidak valid." } }, 400);
+  }
+
+  const normalized = normalizeSingaPayWebhook(payload);
+  if (!normalized) {
+    return c.json({ handled: false });
+  }
+
+  // Subscriptions & pending plans are Xendit-backed — ignore their refs here.
+  if (
+    normalized.external_id.startsWith(SUBSCRIPTION_EXTERNAL_ID_PREFIX) ||
+    normalized.external_id.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)
+  ) {
+    return c.json({ handled: false });
+  }
+
+  const db = createDb(env.DB);
+  const useCase = new HandleXenditWebhook(
+    new D1PaymentRepository(db),
+    new D1OrderRepository(db),
+    {
+      storeRepo: new D1StoreRepository(db),
+      ledger: new D1CommissionLedger(db),
+    },
+  );
+  const result = await useCase.execute(normalized);
 
   if (!result.ok) {
     if (result.error instanceof PaymentNotFoundError) return c.json({ error: result.error }, 404);

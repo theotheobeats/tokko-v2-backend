@@ -81,6 +81,9 @@ async function hmacSha512Hex(key: string, message: string): Promise<string> {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Shared HMAC-SHA512 hex helper (also used by webhook signature verification). */
+export { hmacSha512Hex };
+
 export class SingaPayClient implements PaymentProviderClient {
   constructor(
     private readonly creds: {

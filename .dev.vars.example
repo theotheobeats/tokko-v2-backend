@@ -25,3 +25,13 @@ RESEND_API_KEY=
 # Webhook URL to register: https://api.7okko.com/api/webhooks/xendit
 XENDIT_SECRET_KEY=
 XENDIT_WEBHOOK_TOKEN=
+
+# SingaPay payments — primary provider (sandbox). Mock when credentials absent.
+# Webhook URL to register: http://localhost:8787/api/webhooks/singapay
+SINGAPAY_CLIENT_ID=
+SINGAPAY_CLIENT_SECRET=
+SINGAPAY_PARTNER_ID=
+SINGAPAY_ACCOUNT_ID=
+SINGAPAY_API_URL=https://sandbox-payment-b2b.singapay.id
+SINGAPAY_WEBHOOK_SECRET=
+SINGAPAY_FORCE_MOCK=
