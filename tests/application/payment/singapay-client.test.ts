@@ -291,7 +291,8 @@ describe("SingaPayClient.createInvoice", () => {
 
     const client = new SingaPayClient({ ...creds, clientId: "SGP-CLIENT-KYB" });
     const created = await client.createSubAccount({ name: "Anna Bakery", accountType: "personal_managed" });
-    expect(created.kyb_onboarding_url).toContain("kyb.singapay.id");
+    // host is normalized onto the default KYB base (the provider echoes the caller's Host)
+    expect(created.kyb_onboarding_url).toBe("https://sandbox-paymentlink.singapay.id/anna-bakery");
     const fetched = await client.getAccount(created.id);
     expect(fetched.kyb_status).toBe("kyb_in_review");
 
