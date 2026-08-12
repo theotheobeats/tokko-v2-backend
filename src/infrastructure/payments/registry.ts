@@ -10,8 +10,8 @@
  */
 
 import type { Env } from "../../types";
-import { createPaymentProvider as createXenditProvider } from "./xendit-client";
-import { createSingaPayProvider } from "./singapay-client";
+import { createPaymentProvider as createXenditProvider, useRealPayments } from "./xendit-client";
+import { createSingaPayProvider, useRealSingaPay } from "./singapay-client";
 import type { PaymentProviderClient } from "./xendit-client";
 import type { PaymentProvider as PaymentProviderType } from "../../domain/payment/types";
 
@@ -43,4 +43,9 @@ export function createProviderClient(env: Env, provider: PaymentProviderType): P
     case "singapay":
       return createSingaPayProvider(env);
   }
+}
+
+/** Whether the provider is in REAL mode (no mock invoices for billing flows). */
+export function providerIsReal(env: Env, provider: PaymentProviderType): boolean {
+  return provider === "xendit" ? useRealPayments(env) : useRealSingaPay(env);
 }

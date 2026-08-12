@@ -33,6 +33,7 @@ import type {
   InvoiceStatusResult,
   PaymentProviderClient,
 } from "./xendit-client";
+import { encodeSingaPayRef } from "./singapay-ref";
 
 export interface SingaPayEnv {
   SINGAPAY_CLIENT_ID?: string;
@@ -197,13 +198,17 @@ export class SingaPayClient implements PaymentProviderClient {
     // 24h expiry — matches Xendit's default invoice lifetime.
     const expiredAt = Date.now() + 24 * 60 * 60 * 1000;
     const label = input.description || "Pesanan 7okko";
+    // Plan external ids are >40 chars (SingaPay's reff_no cap) — encode them
+    // into a compact 33-char ref; the webhook decodes it back.
+    const reffNo =
+      input.externalId.length > 40 ? encodeSingaPayRef(input.externalId) : input.externalId;
 
     const data = await this.request<SingaPayPaymentLink>(
       `/api/v1.0/payment-link-manage/${this.creds.accountId}`,
       {
         method: "POST",
         body: JSON.stringify({
-          reff_no: input.externalId,
+          reff_no: reffNo,
           title: label,
           required_customer_detail: true,
           customer_pays_fee: false,
@@ -221,7 +226,9 @@ export class SingaPayClient implements PaymentProviderClient {
     );
 
     return {
-      externalId: data.reff_no ?? input.externalId,
+      // Always the canonical external id (orders pass through; plan ids are
+      // reconstructed on the webhook via decodeSingaPayRef).
+      externalId: input.externalId,
       invoiceUrl: data.payment_url,
     };
   }
@@ -235,7 +242,8 @@ export class SingaPayClient implements PaymentProviderClient {
       { method: "GET" },
     );
 
-    const link = (links ?? []).find((l) => l.reff_no === externalId);
+    const ref = externalId.length > 40 ? encodeSingaPayRef(externalId) : externalId;
+    const link = (links ?? []).find((l) => l.reff_no === ref);
     if (!link) return { status: "PENDING" }; // created but not yet visible / no attempt
     // current_usage is the reliable paid indicator — SingaPay populates
     // payment_date with created_at at creation, so it can't be trusted alone.

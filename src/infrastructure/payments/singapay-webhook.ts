@@ -18,6 +18,7 @@
  */
 
 import { hmacSha512Hex } from "./singapay-client";
+import { decodeSingaPayRef } from "./singapay-ref";
 
 export interface SingaPayWebhookHeaders {
   "x-signature"?: string | null;
@@ -117,8 +118,11 @@ export function normalizeSingaPayWebhook(
   const tx = payload?.data?.transaction;
 
   // Prefer the payment link's reference (ours); fall back to the tx ref.
-  const externalId = link?.reff_no || tx?.reff_no;
-  if (!externalId) return null;
+  const ref = link?.reff_no || tx?.reff_no;
+  if (!ref) return null;
+
+  // Plan refs are compact-encoded (>40-char canonical ids) — decode them back.
+  const externalId = decodeSingaPayRef(ref) ?? ref;
 
   const amount = tx?.amount?.value;
   return {

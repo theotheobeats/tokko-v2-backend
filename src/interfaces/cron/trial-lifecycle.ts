@@ -16,11 +16,15 @@ export async function runTrialLifecycle(env: Env): Promise<TrialLifecycleResult>
   const db = createDb(env.DB);
   const userRepo = new D1AdminUserRepository(db);
 
-  // Auto-renewal invoices need real payments (no mock invoices for billing).
-  const { createPaymentProvider, useRealPayments } = await import("../../infrastructure/payments/xendit-client");
+  // Auto-renewal invoices need real payments (no mock invoices for billing);
+  // route through the active provider like all other payment flows.
+  const { createProviderClient, resolveActivePaymentProvider, providerIsReal } =
+    await import("../../infrastructure/payments/registry");
+  const { D1AppSettingsRepository } = await import("../../infrastructure/repos/d1-app-settings-repo");
   const { subscriptionExternalId, priceFor } = await import("../../domain/plan/pricing");
-  const provider = createPaymentProvider(env);
-  const createRenewalInvoice = useRealPayments(env)
+  const providerId = await resolveActivePaymentProvider((k) => new D1AppSettingsRepository(db).get(k));
+  const provider = createProviderClient(env, providerId);
+  const createRenewalInvoice = providerIsReal(env, providerId)
     ? async (input: { store: { id: string }; plan: "pro" | "commerce"; cycle: "monthly" | "annual" }) => {
         const externalId = subscriptionExternalId(input.store.id, input.plan, input.cycle, `renew-${Date.now()}`);
         const invoice = await provider.createInvoice({

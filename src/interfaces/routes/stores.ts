@@ -24,7 +24,8 @@ import { PlanService, type PlanView } from "../../application/plan/plan-service"
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
 import { activatePendingPlan } from "../../application/plan/pending-plan";
-import { createPaymentProvider } from "../../infrastructure/payments/xendit-client";
+import { createProviderClient, resolveActivePaymentProvider, providerIsReal } from "../../infrastructure/payments/registry";
+import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
@@ -418,14 +419,15 @@ storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionC
   const { plan, cycle } = c.req.valid("json");
   const amount = priceFor(plan, cycle);
 
-  // Real payments required — no mock invoices for subscriptions.
-  const provider = createPaymentProvider(c.env);
-  const { useRealPayments } = await import("../../infrastructure/payments/xendit-client");
-  if (!useRealPayments(c.env)) {
+  // Route through the active provider (admin switch); real payments only —
+  // no mock invoices for subscriptions.
+  const providerId = await resolveActivePaymentProvider((k) => new D1AppSettingsRepository(db).get(k));
+  if (!providerIsReal(c.env, providerId)) {
     return c.json({
       error: { code: "PAYMENT_UNAVAILABLE", message: "Pembayaran langganan belum tersedia saat ini." },
     }, 502);
   }
+  const provider = createProviderClient(c.env, providerId);
 
   const externalId = subscriptionExternalId(store.id, plan, cycle, `${Date.now()}`);
   const label = plan === "pro" ? "Pro" : "Commerce";

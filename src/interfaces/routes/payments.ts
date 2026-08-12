@@ -268,15 +268,46 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
     return c.json({ handled: false });
   }
 
-  // Subscriptions & pending plans are Xendit-backed — ignore their refs here.
-  if (
-    normalized.external_id.startsWith(SUBSCRIPTION_EXTERNAL_ID_PREFIX) ||
-    normalized.external_id.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)
-  ) {
-    return c.json({ handled: false });
+  const db = createDb(env.DB);
+
+  // Pre-store plan purchase (plan-selection gate at signup) → pending plan row.
+  if (normalized.external_id.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)) {
+    const { HandlePendingPlanPayment, PendingPlanAmountMismatchError } =
+      await import("../../application/plan/pending-plan");
+    const pendingResult = await new HandlePendingPlanPayment(
+      new D1PendingPlanRepository(db),
+      new D1StoreRepository(db),
+      new D1SubscriptionRepository(db),
+    ).execute(normalized);
+    if (!pendingResult.ok) {
+      if (pendingResult.error instanceof PendingPlanAmountMismatchError) {
+        return c.json({ error: { code: "PENDING_PLAN_AMOUNT_MISMATCH" } }, 400);
+      }
+      return c.json({ error: { code: "UNKNOWN" } }, 400);
+    }
+    return c.json({ handled: pendingResult.value.handled });
   }
 
-  const db = createDb(env.DB);
+  // Subscription invoices (tokko-sub::…) route to plan activation.
+  if (normalized.external_id.startsWith(SUBSCRIPTION_EXTERNAL_ID_PREFIX)) {
+    const { HandleSubscriptionInvoice, SubscriptionStoreNotFoundError, SubscriptionAmountMismatchError } =
+      await import("../../application/plan/subscription-webhook");
+    const subResult = await new HandleSubscriptionInvoice(
+      new D1StoreRepository(db),
+      new D1SubscriptionRepository(db),
+    ).execute(normalized);
+    if (!subResult.ok) {
+      if (subResult.error instanceof SubscriptionStoreNotFoundError) {
+        return c.json({ error: { code: "SUBSCRIPTION_STORE_NOT_FOUND" } }, 404);
+      }
+      if (subResult.error instanceof SubscriptionAmountMismatchError) {
+        return c.json({ error: { code: "SUBSCRIPTION_AMOUNT_MISMATCH" } }, 400);
+      }
+      return c.json({ error: { code: "UNKNOWN" } }, 400);
+    }
+    return c.json({ handled: subResult.value.handled });
+  }
+
   const useCase = new HandleXenditWebhook(
     new D1PaymentRepository(db),
     new D1OrderRepository(db),

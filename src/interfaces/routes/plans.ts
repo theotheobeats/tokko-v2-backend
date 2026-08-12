@@ -13,7 +13,13 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { createAuth } from "../../lib/auth";
 import type { Env } from "../../types";
-import { createPaymentProvider, useRealPayments } from "../../infrastructure/payments/xendit-client";
+import { createDb } from "../../infrastructure/db/drizzle";
+import {
+  createProviderClient,
+  resolveActivePaymentProvider,
+  providerIsReal,
+} from "../../infrastructure/payments/registry";
+import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { pendingPlanExternalId, priceFor } from "../../domain/plan/pricing";
 
 const plansRouter = new Hono<{ Bindings: Env }>();
@@ -31,12 +37,15 @@ plansRouter.post("/checkout", zValidator("json", z.object({
   const { plan, cycle } = c.req.valid("json");
   const amount = priceFor(plan, cycle);
 
-  // Real payments required — no mock invoices for paid plans.
-  if (!useRealPayments(c.env)) {
+  // Route through the active provider (admin switch); real payments only —
+  // no mock invoices for paid plans.
+  const db = createDb(c.env.DB);
+  const providerId = await resolveActivePaymentProvider((k) => new D1AppSettingsRepository(db).get(k));
+  if (!providerIsReal(c.env, providerId)) {
     return c.json({ error: { code: "PAYMENT_UNAVAILABLE", message: "Pembayaran belum tersedia saat ini." } }, 502);
   }
 
-  const provider = createPaymentProvider(c.env);
+  const provider = createProviderClient(c.env, providerId);
   const externalId = pendingPlanExternalId(session.user.id, plan, cycle, `${Date.now()}`);
   const frontendOrigin = c.env.FRONTEND_URL ?? "https://7okko.com";
   const invoice = await provider.createInvoice({

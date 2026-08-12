@@ -212,6 +212,36 @@ describe("SingaPayClient.createInvoice", () => {
     expect(linkHeaders["X-Proxy-Token"]).toBe("topsecret");
   });
 
+  it("encodes >40-char plan ids into a compact ref and returns the canonical id", async () => {
+    const canonical = `tokko-sub::550e8400-e29b-41d4-a716-446655440000::pro::monthly::${Date.now()}`;
+    const { fn, calls } = mockFetch({
+      "/access-token/b2b": {
+        status: 200,
+        success: true,
+        data: { access_token: "jwt-abc", token_type: "Bearer", expires_in: "216000" },
+      },
+      "/payment-link-manage/": {
+        status: 200,
+        success: true,
+        data: { reff_no: "tokko-plan-1", payment_url: "https://sandbox-paymentlink.singapay.id/b2b/PLPLAN" },
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const client = new SingaPayClient({ ...creds, clientId: "SGP-CLIENT-PLAN" });
+    const result = await client.createInvoice({ externalId: canonical, amount: 49000, description: "x" });
+
+    // canonical id returned to the caller
+    expect(result.externalId).toBe(canonical);
+
+    // the ref sent to SingaPay is ≤40 chars and decodes back to canonical
+    const linkCall = calls.find((c) => c.url.includes("payment-link-manage/"));
+    const body = JSON.parse(String(linkCall!.init!.body));
+    expect(body.reff_no.length).toBeLessThanOrEqual(40);
+    const { decodeSingaPayRef } = await import("../../../src/infrastructure/payments/singapay-ref");
+    expect(decodeSingaPayRef(body.reff_no)).toContain("::pro::monthly::");
+  });
+
   it("throws a clear error when the token exchange fails", async () => {
     const { fn } = mockFetch({
       "/access-token/b2b": { status: 200, success: false, error: { code: 401, message: "Unauthorized" } },
