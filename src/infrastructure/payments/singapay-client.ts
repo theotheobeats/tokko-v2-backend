@@ -496,20 +496,38 @@ export class SingaPayClient implements PaymentProviderClient {
 }
 
 /**
+ * Mock-only KYB timestamps (module-level, per isolate) — the provider client
+ * is constructed per request, so per-instance state would lose the account
+ * creation time between requests. The mock simulates SingaPay's async KYB
+ * approval: `kyb_verified` ~3s after the sub-account was created. This is
+ * what lets the e2e checkout journey exercise the full online-payment path
+ * without real credentials.
+ */
+const mockKybCreatedAt = new Map<string, number>();
+
+/**
  * Deterministic mock for dev/tests — no network, no keys.
  * Generates a realistic-looking hosted payment URL (not reachable).
  */
 export class MockSingaPayProvider implements PaymentProviderClient {
   constructor(private readonly prefix = "mock") {}
 
+  private kybStatusFor(accountId: string): "kyb_in_review" | "kyb_verified" {
+    const created = mockKybCreatedAt.get(accountId);
+    if (created === undefined) return "kyb_in_review";
+    return Date.now() - created >= 3_000 ? "kyb_verified" : "kyb_in_review";
+  }
+
   async createSubAccount(input: {
     name: string;
     accountType: "personal_managed" | "business_managed";
   }): Promise<SingaPayAccount> {
+    const id = `mock-acc-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    mockKybCreatedAt.set(id, Date.now());
     return {
-      id: `mock-acc-${Date.now()}`,
+      id,
       name: input.name,
-      status: "inactive",
+      status: "active",
       account_type: input.accountType,
       kyb_status: "kyb_in_review",
       kyb_onboarding_url: `https://checkout.payments.test/kyb/${this.prefix}`,
@@ -520,8 +538,8 @@ export class MockSingaPayProvider implements PaymentProviderClient {
     return {
       id: accountId,
       name: "Mock",
-      status: "inactive",
-      kyb_status: "kyb_in_review",
+      status: "active",
+      kyb_status: this.kybStatusFor(accountId),
       kyb_onboarding_url: `https://checkout.payments.test/kyb/${this.prefix}`,
     };
   }
