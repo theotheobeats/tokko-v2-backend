@@ -27,6 +27,7 @@ import { activatePendingPlan } from "../../application/plan/pending-plan";
 import { createProviderClient, resolveActivePaymentProvider, providerIsReal } from "../../infrastructure/payments/registry";
 import { createSingaPayAccountsClient, SINGAPAY_METHOD_CODES } from "../../infrastructure/payments/singapay-client";
 import { StartMerchantKYB, GetMerchantKYBStatus, KYBStoreNotFoundError } from "../../application/kyb/merchant-kyb";
+import { isSupportedBankCode, swiftCodeFor } from "../../application/admin/admin-payouts";
 import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
@@ -50,6 +51,7 @@ function storeJSON(store: {
   bankAccountNumber: string | null; bankAccountName: string | null;
   enabledPaymentMethods: string[] | null; enabledCouriers: string[] | null;
   singapayAccountId: string | null; kybStatus: string | null;
+  payoutBankCode: string | null; payoutBankAccountNumber: string | null; payoutBankAccountName: string | null;
 }, plan?: PlanView) {
   return {
     id: store.id,
@@ -84,6 +86,9 @@ function storeJSON(store: {
     // the public storefront strips these (see by-subdomain).
     singapayAccountId: store.singapayAccountId,
     kybStatus: store.kybStatus,
+    payoutBankCode: store.payoutBankCode,
+    payoutBankAccountNumber: store.payoutBankAccountNumber,
+    payoutBankAccountName: store.payoutBankAccountName,
     ...(plan ? { plan } : {}),
   };
 }
@@ -339,6 +344,10 @@ storesRouter.patch("/:id", zValidator("json", z.object({
   bankAccountName: z.string().nullable().optional(),
   enabledPaymentMethods: z.array(z.string()).optional(),
   enabledCouriers: z.array(z.string()).optional(),
+  // Payout bank (SingaPay disbursement destination)
+  payoutBankCode: z.string().optional(),
+  payoutBankAccountNumber: z.string().nullable().optional(),
+  payoutBankAccountName: z.string().nullable().optional(),
 })), async (c) => {
   const session = await requireAuth(c);
   if (session instanceof Response) return session;
@@ -416,6 +425,21 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     enabledPaymentMethods: body.enabledPaymentMethods,
     enabledCouriers: body.enabledCouriers,
   });
+
+  // Payout bank — validated against the supported bank codes.
+  if (body.payoutBankCode !== undefined || body.payoutBankAccountNumber !== undefined) {
+    const code = body.payoutBankCode ?? store.payoutBankCode ?? "";
+    if (!isSupportedBankCode(code)) {
+      return c.json({
+        error: { code: "VALIDATION", message: "Bank tujuan pencairan tidak didukung — pilih dari daftar.", field: "payoutBankCode" },
+      }, 400);
+    }
+    store.setPayoutBank({
+      code,
+      accountNumber: (body.payoutBankAccountNumber ?? store.payoutBankAccountNumber ?? "").replace(/\D/g, ""),
+      accountName: body.payoutBankAccountName ?? store.payoutBankAccountName ?? null,
+    });
+  }
 
   await storeRepo.save(store);
 
@@ -531,6 +555,40 @@ storesRouter.get("/:id/kyb", async (c) => {
     return c.json({ error: result.error }, 502);
   }
   return c.json({ kyb: result.value });
+});
+
+// POST /api/stores/:id/payout-bank/check — validate the payout bank account
+// via SingaPay's check-beneficiary (best-effort; digital banks have no SWIFT).
+storesRouter.post("/:id/payout-bank/check", zValidator("json", z.object({
+  bankCode: z.string(),
+  accountNumber: z.string(),
+})), async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const { bankCode, accountNumber } = c.req.valid("json");
+  if (!isSupportedBankCode(bankCode)) {
+    return c.json({ valid: false, message: "Bank tidak didukung." });
+  }
+  const swift = swiftCodeFor(bankCode);
+  if (!swift) {
+    return c.json({ valid: null, message: "Bank digital tidak bisa dicek otomatis — akan diverifikasi saat pencairan." });
+  }
+  try {
+    await createSingaPayAccountsClient(c.env).checkBeneficiary({ bankSwiftCode: swift, bankAccountNumber: accountNumber });
+    return c.json({ valid: true, message: "Rekening valid." });
+  } catch {
+    return c.json({ valid: false, message: "Rekening tidak ditemukan di bank tersebut — periksa nomor rekening." });
+  }
 });
 
 // ---------------------------------------------------------------------------

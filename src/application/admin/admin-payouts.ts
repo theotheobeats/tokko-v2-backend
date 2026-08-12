@@ -73,6 +73,39 @@ export function bankCodeFor(name: string | null | undefined): string | null {
   return ID_BANK_CODES[key] ?? null;
 }
 
+/** Whether a national bank code is in the supported set. */
+export function isSupportedBankCode(code: string | null | undefined): boolean {
+  return !!code && Object.values(ID_BANK_CODES).includes(code);
+}
+
+/** Bank name for a national code (reverse lookup, first match). */
+export function bankNameFor(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const entry = Object.entries(ID_BANK_CODES).find(([, c]) => c === code);
+  return entry?.[0] ?? null;
+}
+
+/** SWIFT/BIC per national code — needed by check-beneficiary (v1). */
+const BANK_SWIFT: Record<string, string> = {
+  "014": "CENAIDJA", // BCA
+  "008": "BMRIIDJA", // Mandiri
+  "009": "BNINIDJA", // BNI
+  "002": "BRINIDJA", // BRI
+  "200": "BTANIDJA", // BTN
+  "013": "BBBAIDJA", // Permata
+  "022": "BNIAIDJA", // CIMB Niaga
+  "011": "BDINIDJA", // Danamon
+  "016": "IBBEIDJA", // Maybank
+  "451": "BSMSIDJA", // BSI
+  "028": "NISPIDJA", // OCBC NISP
+  "213": "BTPSIDJA", // BTPN
+};
+
+/** SWIFT for a national code; null for digital banks (no SWIFT). */
+export function swiftCodeFor(bankCode: string | null | undefined): string | null {
+  return bankCode ? (BANK_SWIFT[bankCode] ?? null) : null;
+}
+
 export interface PayoutSummaryView {
   storeId: string;
   storeName: string;
@@ -105,6 +138,11 @@ export class GetPayoutSummary {
       }
     }
     const commissionOwed = await this.ledger.sumByStoreId(store.id);
+    // Prefer the dedicated payout bank; fall back to the manual-transfer bank.
+    const bankCode = store.payoutBankCode ?? bankCodeFor(store.bankName);
+    const accountNumber = store.payoutBankAccountNumber ?? store.bankAccountNumber;
+    const accountName = store.payoutBankAccountName ?? store.bankAccountName;
+    const bankName = bankNameFor(bankCode) ?? store.bankName;
 
     return ok({
       storeId: store.id,
@@ -114,10 +152,10 @@ export class GetPayoutSummary {
       kybStatus: store.kybStatus,
       balance,
       commissionOwed,
-      payoutBank: store.bankAccountNumber
-        ? { name: store.bankName, accountNumber: store.bankAccountNumber, holder: store.bankAccountName }
+      payoutBank: accountNumber
+        ? { name: bankName, accountNumber, holder: accountName }
         : null,
-      bankCode: bankCodeFor(store.bankName),
+      bankCode,
     });
   }
 }
@@ -152,9 +190,11 @@ export class RunPayout {
     if (!store) return err(new PayoutStoreNotFoundError());
     if (!store.singapayAccountId) return err(new PayoutNoAccountError());
     if (store.kybStatus !== "kyb_verified") return err(new PayoutKYBNotVerifiedError());
-    if (!store.bankAccountNumber) return err(new PayoutNoBankError());
-    const bankCode = bankCodeFor(store.bankName);
-    if (!bankCode) return err(new PayoutBankUnsupportedError());
+    // Prefer the dedicated payout bank; fall back to the manual-transfer bank.
+    const bankCode = store.payoutBankCode ?? bankCodeFor(store.bankName) ?? "";
+    const bankAccountNumber = store.payoutBankAccountNumber ?? store.bankAccountNumber ?? "";
+    if (!bankAccountNumber) return err(new PayoutNoBankError());
+    if (!isSupportedBankCode(bankCode)) return err(new PayoutBankUnsupportedError());
 
     let balance: SingaPayBalance;
     try {
@@ -183,7 +223,7 @@ export class RunPayout {
         accountId: store.singapayAccountId,
         referenceNumber: ref,
         bankCode,
-        bankAccountNumber: store.bankAccountNumber,
+        bankAccountNumber,
         amount: payoutAmount,
         notes: `Pencairan Tokko — ${store.name}`,
       });

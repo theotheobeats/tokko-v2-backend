@@ -182,6 +182,21 @@ describe("RunPayout", () => {
     if (!result.ok) expect(result.error).toBeInstanceOf(PayoutInsufficientBalanceError);
   });
 
+  it("prefers the dedicated payout bank over the manual-transfer bank", async () => {
+    const store = makeStore();
+    store.updatePaymentProviderAccount("01KYBTESTACCOUNT000000000000", "kyb_verified");
+    store.setPayoutBank({ code: "008", accountNumber: "9876543210", accountName: "Anna" });
+    const storeRepo = mockStoreRepo();
+    storeRepo.findById.mockResolvedValue(store);
+    const accounts = mockAccounts();
+
+    const result = await new RunPayout(storeRepo, mockLedger(100_000), mockPayoutRepo(), accounts, "x").execute(store.id);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(accounts.disburse).toHaveBeenCalledWith(expect.objectContaining({ bankCode: "008", bankAccountNumber: "9876543210" }));
+    }
+  });
+
   it("wraps provider failures", async () => {
     const store = makeStore();
     store.updatePaymentProviderAccount("01KYBTESTACCOUNT000000000000", "kyb_verified");

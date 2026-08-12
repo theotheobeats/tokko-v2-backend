@@ -43,6 +43,12 @@ export const stores = sqliteTable("stores", {
   // SingaPay managed sub-account (merchant KYB) — funds settle to the merchant's own account.
   singapayAccountId: text("singapay_account_id"),
   kybStatus: text("kyb_status"),
+  // Payout bank — where the merchant receives their money (SingaPay disbursement
+  // destination). National bank code from our supported list; distinct from the
+  // manual-transfer bank customers see at checkout.
+  payoutBankCode: text("payout_bank_code"),
+  payoutBankAccountNumber: text("payout_bank_account_number"),
+  payoutBankAccountName: text("payout_bank_account_name"),
   enabledPaymentMethods: text("enabled_payment_methods"), // JSON array of catalog ids — null = all
   enabledCouriers: text("enabled_couriers"), // JSON array of courier codes — null = all
   // Subscription / plan — trial lifecycle + tier gates (Phase 1).
