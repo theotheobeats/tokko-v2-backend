@@ -88,9 +88,11 @@ ${EMAIL_BLOCK}
 ${LISTEN} {
 	# Shared-secret guard: only requests with the matching token are forwarded.
 	@authed header X-Proxy-Token "${TOKEN}"
-	# handle_path strips the /singapay prefix before proxying — the Worker
-	# calls ${apiUrl}/api/v1.0/..., SingaPay must receive /api/v1.0/...
-	handle_path /singapay/* {
+	# Strip the /singapay prefix so SingaPay receives /api/v1.0/... — use
+	# handle + uri strip_prefix (handle_path rejects named matchers, so the
+	# token guard can't ride on it — that would open a public proxy).
+	handle @authed {
+		uri strip_prefix /singapay
 		reverse_proxy ${UPSTREAM} {
 			header_up Host sandbox-payment-b2b.singapay.id
 		}
