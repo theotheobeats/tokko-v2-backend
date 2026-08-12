@@ -86,6 +86,9 @@ export class StartMerchantKYB {
       const account = await this.accounts.getAccount(store.singapayAccountId);
       if (account.kyb_status && account.kyb_status !== store.kybStatus) {
         store.updatePaymentProviderAccount(store.singapayAccountId, account.kyb_status);
+        // Enforce e-payment once approved — online checkout is mandatory for
+        // verified merchants; WhatsApp/manual is the pre-verification fallback.
+        if (account.kyb_status === "kyb_verified") store.setPaymentOnline(true);
         await this.storeRepo.save(store);
       }
       return ok(toView(account));
@@ -112,6 +115,8 @@ export class GetMerchantKYBStatus {
       const account = await this.accounts.getAccount(store.singapayAccountId);
       if (account.kyb_status && account.kyb_status !== store.kybStatus) {
         store.updatePaymentProviderAccount(store.singapayAccountId, account.kyb_status);
+        // Enforce e-payment once approved (same rule as StartMerchantKYB).
+        if (account.kyb_status === "kyb_verified") store.setPaymentOnline(true);
         await this.storeRepo.save(store);
       }
       return ok(toView(account));

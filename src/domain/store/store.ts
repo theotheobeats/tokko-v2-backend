@@ -439,6 +439,12 @@ export class Store {
     return this;
   }
 
+  /** Force online checkout on/off (KYB verification auto-enables it). */
+  setPaymentOnline(value: boolean): Store {
+    this.props.paymentOnline = value;
+    return this;
+  }
+
   /** Snapshot for serialization */
   toJSON(): StoreProps {
     return { ...this.props };

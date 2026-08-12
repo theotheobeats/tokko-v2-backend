@@ -370,6 +370,19 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     }, 403);
   }
 
+  // Enforce e-payment once merchant KYB is approved (SingaPay) — online
+  // checkout is mandatory for verified merchants; WhatsApp/manual transfer is
+  // only the pre-verification fallback.
+  if (body.paymentOnline === false && store.kybStatus === "kyb_verified") {
+    const settings = new D1AppSettingsRepository(db);
+    const providerId = await resolveActivePaymentProvider((k) => settings.get(k));
+    if (providerId === "singapay") {
+      return c.json({
+        error: { code: "KYB_ENFORCED", message: "Pembayaran online wajib aktif setelah verifikasi merchant selesai.", field: "paymentOnline" },
+      }, 403);
+    }
+  }
+
   if (body.heroImageUrl !== undefined) {
     store.setHeroImage(body.heroImageUrl);
   }
