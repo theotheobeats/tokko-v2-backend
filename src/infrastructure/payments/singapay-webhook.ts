@@ -52,6 +52,31 @@ export interface NormalizedSingaPayWebhook {
   amount?: number;
 }
 
+/**
+ * SingaPay disbursement-transaction notification (money-out result), per
+ * their docs (/docs/v1/webhooks/disbursement-transaction).
+ */
+export interface SingaPayDisbursementWebhookPayload {
+  response_code?: string;
+  response_message?: string;
+  data?: {
+    transaction_id?: string;
+    /** Our idempotency key — set as `reference_number` at transfer time. */
+    reference_number?: string;
+    transaction_status?: { code?: string; desc?: string };
+    failed_reason?: string | null;
+    failed_code?: string | null;
+  };
+}
+
+/** Internal disbursement-webhook shape — feeds the payout status use case. */
+export interface NormalizedSingaPayDisbursementWebhook {
+  referenceNumber: string;
+  transactionId: string | null;
+  status: "submitted" | "settled" | "failed";
+  failedReason: string | null;
+}
+
 const TIMESTAMP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes — replay protection
 
 async function sha256Hex(data: string): Promise<string> {
@@ -135,5 +160,33 @@ export function normalizeSingaPayWebhook(
     paid_at: link?.payment_date ?? null,
     payment_method: payload?.data?.payment?.method ?? null,
     amount: amount !== undefined && amount !== null ? Number(amount) : undefined,
+  };
+}
+
+/**
+ * Map a SingaPay disbursement-transaction notification to the internal shape.
+ * Status codes per SingaPay docs: "00" = Success, "06" = Failed; the envelope's
+ * response_code mirrors it ("SP000" success / "SP001" failure). Unknown codes
+ * map to "submitted" (keep waiting — never assume success).
+ */
+export function normalizeSingaPayDisbursementWebhook(
+  payload: SingaPayDisbursementWebhookPayload,
+): NormalizedSingaPayDisbursementWebhook | null {
+  const data = payload?.data;
+  const referenceNumber = data?.reference_number;
+  if (!referenceNumber) return null;
+
+  const code = data?.transaction_status?.code ?? "";
+  const desc = (data?.transaction_status?.desc ?? "").toLowerCase();
+  const envelopeCode = payload?.response_code ?? "";
+
+  const isFailed = code === "06" || desc.includes("fail") || envelopeCode === "SP001";
+  const isSuccess = code === "00" || desc.includes("success") || envelopeCode === "SP000";
+
+  return {
+    referenceNumber,
+    transactionId: data?.transaction_id ?? null,
+    status: isFailed ? "failed" : isSuccess ? "settled" : "submitted",
+    failedReason: data?.failed_reason ?? null,
   };
 }

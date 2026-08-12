@@ -16,6 +16,7 @@ import type { StoreRepository } from "../store/store-repo";
 import type { CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
 import type { PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
 import type { SingaPayAccountsClientLike, SingaPayBalance } from "../../infrastructure/payments/singapay-client";
+import type { NormalizedSingaPayDisbursementWebhook } from "../../infrastructure/payments/singapay-webhook";
 
 export class PayoutStoreNotFoundError extends Error {
   code = "STORE_NOT_FOUND";
@@ -41,6 +42,11 @@ export class PayoutInsufficientBalanceError extends Error {
   code = "PAYOUT_INSUFFICIENT_BALANCE";
   constructor() { super("Saldo tidak cukup untuk komisi + pencairan."); }
 }
+export class PayoutNotFoundError extends Error {
+  code = "PAYOUT_NOT_FOUND";
+  constructor() { super("Pencairan tidak ditemukan."); }
+}
+
 export class PayoutProviderError extends Error {
   code = "PAYOUT_PROVIDER_ERROR";
   constructor(message: string) { super(message); }
@@ -247,5 +253,34 @@ export class RunPayout {
     } catch (e) {
       return err(new PayoutProviderError(e instanceof Error ? e.message : "Pencairan gagal."));
     }
+  }
+}
+
+/**
+ * Disbursement notification (SingaPay → us, `disbursement_notif_url`).
+ *
+ * Money-out results arrive asynchronously AFTER the transfer was submitted:
+ * this use case flips the payout from `submitted` to `settled` (code "00" /
+ * SP000) or `failed` (code "06" / SP001, with failed_reason). Idempotent —
+ * a settled payout is terminal; repeated/late notifications are no-ops.
+ */
+export class HandleDisbursementWebhook {
+  constructor(private readonly payoutRepo: PayoutRepository) {}
+
+  async execute(
+    input: NormalizedSingaPayDisbursementWebhook,
+  ): Promise<Result<{ handled: boolean }, PayoutNotFoundError>> {
+    const payout = await this.payoutRepo.findByRef(input.referenceNumber);
+    if (!payout) return err(new PayoutNotFoundError());
+
+    // Already terminal (settled, or failed with a recorded reason) — ignore.
+    if (payout.status !== "submitted") return ok({ handled: false });
+
+    await this.payoutRepo.updateStatus(payout.id, {
+      status: input.status === "failed" ? "failed" : "settled",
+      providerTransactionId: input.transactionId,
+      failedReason: input.failedReason,
+    });
+    return ok({ handled: true });
   }
 }

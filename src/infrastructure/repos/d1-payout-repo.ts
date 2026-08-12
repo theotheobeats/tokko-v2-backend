@@ -20,6 +20,17 @@ export interface PayoutRecord {
 export interface PayoutRepository {
   create(input: Omit<PayoutRecord, "id" | "createdAt">): Promise<PayoutRecord>;
   list(filters?: { storeId?: EntityId; limit?: number; offset?: number }): Promise<{ payouts: PayoutRecord[]; total: number }>;
+  /** Find the payout created with this reference_number (disbursement webhook). */
+  findByRef(referenceNumber: string): Promise<PayoutRecord | null>;
+  /** Apply a provider-reported status change (disbursement webhook). */
+  updateStatus(
+    id: string,
+    patch: {
+      status: "settled" | "failed";
+      providerTransactionId?: string | null;
+      failedReason?: string | null;
+    },
+  ): Promise<void>;
 }
 
 export class D1PayoutRepository implements PayoutRepository {
@@ -68,6 +79,30 @@ export class D1PayoutRepository implements PayoutRepository {
       payouts: rows.map((r) => this._toRecord(r)),
       total: Number(totalRow?.count ?? 0),
     };
+  }
+
+  async findByRef(referenceNumber: string): Promise<PayoutRecord | null> {
+    const row = await this.db
+      .select()
+      .from(payouts)
+      .where(eq(payouts.payoutRef, referenceNumber))
+      .get();
+    return row ? this._toRecord(row) : null;
+  }
+
+  async updateStatus(
+    id: string,
+    patch: { status: "settled" | "failed"; providerTransactionId?: string | null; failedReason?: string | null },
+  ): Promise<void> {
+    await this.db
+      .update(payouts)
+      .set({
+        status: patch.status,
+        ...(patch.providerTransactionId !== undefined ? { providerTransactionId: patch.providerTransactionId } : {}),
+        ...(patch.failedReason !== undefined ? { failedReason: patch.failedReason } : {}),
+      })
+      .where(eq(payouts.id, id))
+      .run();
   }
 
   private _toRecord(row: typeof payouts.$inferSelect): PayoutRecord {

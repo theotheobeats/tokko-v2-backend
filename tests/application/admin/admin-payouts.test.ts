@@ -50,6 +50,8 @@ function mockPayoutRepo(): PayoutRepository {
   return {
     create: vi.fn().mockImplementation(async (input) => ({ ...input, id: "payout-1", createdAt: "2026-08-12T00:00:00Z" })),
     list: vi.fn().mockResolvedValue({ payouts: [], total: 0 }),
+    findByRef: vi.fn().mockResolvedValue(null),
+    updateStatus: vi.fn().mockResolvedValue(undefined),
   };
 }
 

@@ -15,7 +15,9 @@ import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-setti
 import {
   verifySingaPayWebhookSignature,
   normalizeSingaPayWebhook,
+  normalizeSingaPayDisbursementWebhook,
   type SingaPayWebhookPayload,
+  type SingaPayDisbursementWebhookPayload,
 } from "../../infrastructure/payments/singapay-webhook";
 import { SUBSCRIPTION_EXTERNAL_ID_PREFIX, PENDING_PLAN_EXTERNAL_ID_PREFIX } from "../../domain/plan/pricing";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
@@ -33,6 +35,8 @@ import {
 } from "../../application/payment/payment-use-cases";
 import type { EntityId } from "../../domain/shared/types";
 import { PaymentChannel } from "../../domain/payment/types";
+import { D1PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
+import { HandleDisbursementWebhook } from "../../application/admin/admin-payouts";
 
 /**
  * Payment routes (mounted under /api):
@@ -327,6 +331,59 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
     if (result.error instanceof PaymentNotFoundError) return c.json({ error: result.error }, 404);
     if (result.error instanceof WebhookAmountMismatchError) return c.json({ error: result.error }, 400);
     return c.json({ error: result.error }, 400);
+  }
+
+  return c.json({ handled: result.value.handled });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/webhooks/singapay/disbursement (SingaPay server → verified)
+//
+// Money-out results. Register this path as the `disbursement_notif_url`;
+// the signature endpoint string MUST match the configured path exactly.
+// Flipping payouts `submitted → settled/failed` removes the manual inquiry
+// step from the admin workflow.
+// ---------------------------------------------------------------------------
+paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
+  const env = c.env as Env;
+  const secret = env.SINGAPAY_WEBHOOK_SECRET;
+  if (!secret) {
+    return c.json({ error: { code: "WEBHOOK_UNAVAILABLE", message: "Webhook SingaPay belum dikonfigurasi." } }, 503);
+  }
+
+  const rawBody = await c.req.text();
+  const headerObj: Record<string, string> = {};
+  c.req.raw.headers.forEach((value, key) => {
+    headerObj[key] = value;
+  });
+  const valid = await verifySingaPayWebhookSignature({
+    rawBody,
+    headers: headerObj,
+    clientSecret: secret,
+    endpoint: "/api/webhooks/singapay/disbursement",
+  });
+  if (!valid) {
+    return c.json({ error: { code: "WEBHOOK_UNAUTHORIZED" } }, 401);
+  }
+
+  let payload: SingaPayDisbursementWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody) as SingaPayDisbursementWebhookPayload;
+  } catch {
+    return c.json({ error: { code: "VALIDATION", message: "Payload JSON tidak valid." } }, 400);
+  }
+
+  const normalized = normalizeSingaPayDisbursementWebhook(payload);
+  if (!normalized) {
+    return c.json({ handled: false });
+  }
+
+  const db = createDb(env.DB);
+  const result = await new HandleDisbursementWebhook(new D1PayoutRepository(db)).execute(normalized);
+  if (!result.ok) {
+    // Unknown payout ref — 404 so SingaPay retries (covers the race where
+    // the notification lands before the payout row is committed).
+    return c.json({ error: { code: "PAYOUT_NOT_FOUND" } }, 404);
   }
 
   return c.json({ handled: result.value.handled });
