@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
+import { createRandomStringGenerator } from "@better-auth/utils/random";
 import { encodeSingaPayRef, decodeSingaPayRef } from "../../../src/infrastructure/payments/singapay-ref";
+
+/**
+ * Mirrors better-auth core's generateId exactly (src/utils/id.ts):
+ *   createRandomStringGenerator("a-z", "A-Z", "0-9")(size || 32)
+ * The real generateId lives at @better-auth/core/dist/utils/id, which the
+ * package exports map blocks — this uses the same shared primitive with the
+ * same arguments, so a charset/length change in the primitive fails the test.
+ */
+const betterAuthGenerateId = () => createRandomStringGenerator("a-z", "A-Z", "0-9")(32);
 
 const UUID = "550e8400-e29b-41d4-a716-446655440000";
 /** better-auth default user id: 32-char base62 (generateId(size||32)). */
@@ -62,6 +72,19 @@ describe("decodeSingaPayRef", () => {
     const decoded = decodeSingaPayRef(encodeSingaPayRef(preExternalId()))!;
     expect(decoded.startsWith("tokko-pre::")).toBe(true);
     expect(decoded).toContain(`::${USER_ID}::commerce::annual::`);
+  });
+
+  it("round-trips a pending-plan ref with better-auth's real id generator output", () => {
+    const userId = betterAuthGenerateId();
+    // Guards the format contract itself — if better-auth ever changes shape,
+    // this assertion (not just the round-trip) fails loudly.
+    expect(userId).toMatch(/^[A-Za-z0-9]{32}$/);
+
+    const canonical = `tokko-pre::${userId}::pro::monthly::1723456789012`;
+    const ref = encodeSingaPayRef(canonical);
+    expect(ref.length).toBeLessThanOrEqual(40);
+    const decoded = decodeSingaPayRef(ref)!;
+    expect(decoded).toContain(`::${userId}::pro::monthly::`);
   });
 
   it("round-trips all plan/cycle combos for both kinds", () => {
