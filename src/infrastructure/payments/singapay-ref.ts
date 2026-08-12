@@ -2,19 +2,20 @@
  * Compact reversible encoding for SingaPay payment-link `reff_no`.
  *
  * SingaPay caps reff_no at 40 chars, but our canonical plan external ids are
- * 60+ chars (`tokko-sub::<uuid36>::pro::monthly::<nonce>`). For those we send
- * a compact 33-char ref and decode it back to the canonical id on the webhook:
+ * 60-80 chars (`tokko-sub::<id>::<plan>::<cycle>::<nonce>`). For those we send
+ * a compact ref and decode it back to the canonical id on the webhook:
  *
- *   tk <kind> <b64url(uuid)> <plan> <cycle> <nonce>
- *    2    1        22          1      1       6   = 33 chars
+ *   <kind><id><plan><cycle><nonce4>
+ *    kind:  s = subscription (tokko-sub::) | p = pending plan (tokko-pre::)
+ *    plan:  o = pro | c = commerce
+ *    cycle: m = monthly | a = annual
+ *    nonce: 4 hex chars (regenerated — the canonical nonce is only a
+ *           uniqueness marker and is never parsed)
  *
- *   kind:  s = subscription (tokko-sub::) | p = pending plan (tokko-pre::)
- *   plan:  o = pro | c = commerce
- *   cycle: m = monthly | a = annual
- *   nonce: 6 hex chars (regenerated — the canonical nonce is only a
- *          uniqueness marker and is never parsed)
+ *   s (store id = UUID):   s <b64url(16B)=22> <p> <c> <n4>  → 29 chars
+ *   p (user id = better-auth 32-char base62): p <raw 32> <p> <c> <n4> → 39 chars
  *
- * Order external ids (`tokko-<uuid>`, ≤ 40 chars) pass through untouched.
+ * Order external ids (`tokko-<uuid-no-dashes>`, 38 chars) pass through.
  */
 
 import {
@@ -22,8 +23,9 @@ import {
   PENDING_PLAN_EXTERNAL_ID_PREFIX,
 } from "../../domain/plan/pricing";
 
-export const SINGAPAY_REF_MARKER = "tk";
-const REF_LENGTH = 33; // 2 + 1 + 22 + 1 + 1 + 6
+const NONCE_LEN = 4;
+const REF_LEN_S = 29; // 1 + 22 + 1 + 1 + 4
+const REF_LEN_P = 39; // 1 + 32 + 1 + 1 + 4
 
 const PLAN_CODE: Record<string, string> = { pro: "o", commerce: "c" };
 const CYCLE_CODE: Record<string, string> = { monthly: "m", annual: "a" };
@@ -70,15 +72,18 @@ function b64urlToUuid(b64: string): string | null {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function encodeRef(kind: "s" | "p", rest: string): string {
-  const [id, plan, cycle] = rest.split("::");
-  const planCode = PLAN_CODE[plan];
-  const cycleCode = CYCLE_CODE[cycle];
-  if (!id || !planCode || !cycleCode) {
-    throw new Error("External id tidak bisa di-encode untuk SingaPay");
+function parseCanonical(
+  externalId: string,
+): { kind: "s" | "p"; id: string; plan: string; cycle: string } | null {
+  if (externalId.startsWith(SUBSCRIPTION_EXTERNAL_ID_PREFIX)) {
+    const [id, plan, cycle] = externalId.slice(SUBSCRIPTION_EXTERNAL_ID_PREFIX.length).split("::");
+    return { kind: "s", id, plan, cycle };
   }
-  const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 6);
-  return `${SINGAPAY_REF_MARKER}${kind}${uuidToB64url(id)}${planCode}${cycleCode}${nonce}`;
+  if (externalId.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)) {
+    const [id, plan, cycle] = externalId.slice(PENDING_PLAN_EXTERNAL_ID_PREFIX.length).split("::");
+    return { kind: "p", id, plan, cycle };
+  }
+  return null;
 }
 
 /**
@@ -86,16 +91,30 @@ function encodeRef(kind: "s" | "p", rest: string): string {
  * Non-plan refs (order payments) are returned unchanged.
  */
 export function encodeSingaPayRef(externalId: string): string {
-  if (externalId.startsWith(SUBSCRIPTION_EXTERNAL_ID_PREFIX)) {
-    return encodeRef("s", externalId.slice(SUBSCRIPTION_EXTERNAL_ID_PREFIX.length));
+  const parsed = parseCanonical(externalId);
+  if (!parsed) {
+    if (externalId.length > 40) {
+      throw new Error(`External id terlalu panjang untuk SingaPay reff_no (${externalId.length} > 40)`);
+    }
+    return externalId;
   }
-  if (externalId.startsWith(PENDING_PLAN_EXTERNAL_ID_PREFIX)) {
-    return encodeRef("p", externalId.slice(PENDING_PLAN_EXTERNAL_ID_PREFIX.length));
+
+  const planCode = PLAN_CODE[parsed.plan];
+  const cycleCode = CYCLE_CODE[parsed.cycle];
+  if (!planCode || !cycleCode) {
+    throw new Error("External id tidak bisa di-encode untuk SingaPay");
   }
-  if (externalId.length > 40) {
-    throw new Error(`External id terlalu panjang untuk SingaPay reff_no (${externalId.length} > 40)`);
+  const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, NONCE_LEN);
+
+  if (parsed.kind === "s") {
+    // store id is one of our UUIDs
+    return `s${uuidToB64url(parsed.id)}${planCode}${cycleCode}${nonce}`;
   }
-  return externalId;
+  // pending-plan user id is better-auth's 32-char base62 id — raw, fits
+  if (!/^[A-Za-z0-9]{32}$/.test(parsed.id)) {
+    throw new Error(`ID pengguna tidak valid: ${parsed.id}`);
+  }
+  return `p${parsed.id}${planCode}${cycleCode}${nonce}`;
 }
 
 /**
@@ -103,14 +122,23 @@ export function encodeSingaPayRef(externalId: string): string {
  * Returns null for non-encoded refs (order payments, foreign refs).
  */
 export function decodeSingaPayRef(ref: string): string | null {
-  if (!ref.startsWith(SINGAPAY_REF_MARKER) || ref.length !== REF_LENGTH) return null;
-  const kind = ref[2];
-  if (kind !== "s" && kind !== "p") return null;
-  const id = b64urlToUuid(ref.slice(3, 25));
-  const plan = CODE_PLAN[ref[25]];
-  const cycle = CODE_CYCLE[ref[26]];
-  const nonce = ref.slice(27, 33);
-  if (!id || !plan || !cycle || !nonce) return null;
-  const prefix = kind === "s" ? SUBSCRIPTION_EXTERNAL_ID_PREFIX : PENDING_PLAN_EXTERNAL_ID_PREFIX;
-  return `${prefix}${id}::${plan}::${cycle}::${nonce}`;
+  if (ref[0] === "s" && ref.length === REF_LEN_S) {
+    const id = b64urlToUuid(ref.slice(1, 23));
+    const plan = CODE_PLAN[ref[23]];
+    const cycle = CODE_CYCLE[ref[24]];
+    const nonce = ref.slice(25, 29);
+    if (!id || !plan || !cycle || nonce.length !== NONCE_LEN) return null;
+    return `${SUBSCRIPTION_EXTERNAL_ID_PREFIX}${id}::${plan}::${cycle}::${nonce}`;
+  }
+
+  if (ref[0] === "p" && ref.length === REF_LEN_P) {
+    const id = ref.slice(1, 33);
+    const plan = CODE_PLAN[ref[33]];
+    const cycle = CODE_CYCLE[ref[34]];
+    const nonce = ref.slice(35, 39);
+    if (!/^[A-Za-z0-9]{32}$/.test(id) || !plan || !cycle || nonce.length !== NONCE_LEN) return null;
+    return `${PENDING_PLAN_EXTERNAL_ID_PREFIX}${id}::${plan}::${cycle}::${nonce}`;
+  }
+
+  return null;
 }

@@ -1,33 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { encodeSingaPayRef, decodeSingaPayRef, SINGAPAY_REF_MARKER } from "../../../src/infrastructure/payments/singapay-ref";
+import { encodeSingaPayRef, decodeSingaPayRef } from "../../../src/infrastructure/payments/singapay-ref";
 
 const UUID = "550e8400-e29b-41d4-a716-446655440000";
+/** better-auth default user id: 32-char base62 (generateId(size||32)). */
+const USER_ID = "4yYR6t4m2NtknmI6xqCM85HztDAkVFOq";
 
 function subExternalId(plan = "pro", cycle = "monthly", nonce = "1723456789012") {
   return `tokko-sub::${UUID}::${plan}::${cycle}::${nonce}`;
 }
 
 function preExternalId(plan = "commerce", cycle = "annual", nonce = "1723456789012") {
-  return `tokko-pre::${UUID}::${plan}::${cycle}::${nonce}`;
+  return `tokko-pre::${USER_ID}::${plan}::${cycle}::${nonce}`;
 }
 
 describe("encodeSingaPayRef", () => {
-  it("encodes subscription ids into a ≤40-char ref under the marker", () => {
+  it("encodes subscription ids (UUID) into a 29-char ref", () => {
     const ref = encodeSingaPayRef(subExternalId());
+    expect(ref.length).toBe(29);
     expect(ref.length).toBeLessThanOrEqual(40);
-    expect(ref.startsWith(SINGAPAY_REF_MARKER)).toBe(true);
-    expect(ref.length).toBe(33);
+    expect(ref[0]).toBe("s");
   });
 
-  it("encodes pending-plan ids the same way", () => {
+  it("encodes pending-plan ids (better-auth 32-char) into a 39-char ref", () => {
     const ref = encodeSingaPayRef(preExternalId());
+    expect(ref.length).toBe(39);
     expect(ref.length).toBeLessThanOrEqual(40);
-    expect(ref.startsWith(SINGAPAY_REF_MARKER)).toBe(true);
+    expect(ref[0]).toBe("p");
   });
 
-  it("passes order refs through unchanged (≤40 chars, no marker)", () => {
+  it("passes order refs through unchanged (≤40 chars)", () => {
     const order = "tokko-528844df84a54724a60acfc31b4e7bd3"; // 38 chars
-    expect(order.length).toBeLessThanOrEqual(40);
     expect(encodeSingaPayRef(order)).toBe(order);
   });
 
@@ -40,46 +42,54 @@ describe("encodeSingaPayRef", () => {
     expect(longOrder.length).toBeGreaterThan(40);
     expect(() => encodeSingaPayRef(longOrder)).toThrow(/terlalu panjang/);
   });
+
+  it("throws on a pending-plan id that is not a 32-char base62 id", () => {
+    const bad = `tokko-pre::short-id::pro::monthly::1`;
+    expect(() => encodeSingaPayRef(bad)).toThrow(/ID pengguna tidak valid/);
+  });
 });
 
 describe("decodeSingaPayRef", () => {
   it("round-trips a subscription id (prefix, id, plan, cycle preserved)", () => {
-    const canonical = subExternalId("pro", "monthly");
-    const decoded = decodeSingaPayRef(encodeSingaPayRef(canonical))!;
+    const decoded = decodeSingaPayRef(encodeSingaPayRef(subExternalId("pro", "monthly")))!;
     expect(decoded.startsWith("tokko-sub::")).toBe(true);
     expect(decoded).toContain(`::${UUID}::pro::monthly::`);
-    // nonce is regenerated — must still be a valid 6-char marker
     const nonce = decoded.split("::").pop()!;
-    expect(nonce).toMatch(/^[0-9a-f]{6}$/);
+    expect(nonce).toMatch(/^[0-9a-f]{4}$/);
   });
 
-  it("round-trips all plan/cycle combos", () => {
+  it("round-trips a pending-plan id (better-auth user id, raw)", () => {
+    const decoded = decodeSingaPayRef(encodeSingaPayRef(preExternalId()))!;
+    expect(decoded.startsWith("tokko-pre::")).toBe(true);
+    expect(decoded).toContain(`::${USER_ID}::commerce::annual::`);
+  });
+
+  it("round-trips all plan/cycle combos for both kinds", () => {
     for (const plan of ["pro", "commerce"] as const) {
       for (const cycle of ["monthly", "annual"] as const) {
-        const decoded = decodeSingaPayRef(encodeSingaPayRef(subExternalId(plan, cycle)))!;
-        expect(decoded).toContain(`::${UUID}::${plan}::${cycle}::`);
+        const sub = decodeSingaPayRef(encodeSingaPayRef(subExternalId(plan, cycle)))!;
+        expect(sub).toContain(`::${UUID}::${plan}::${cycle}::`);
         const pre = decodeSingaPayRef(encodeSingaPayRef(preExternalId(plan, cycle)))!;
-        expect(pre.startsWith("tokko-pre::")).toBe(true);
-        expect(pre).toContain(`::${UUID}::${plan}::${cycle}::`);
+        expect(pre).toContain(`::${USER_ID}::${plan}::${cycle}::`);
       }
     }
   });
 
-  it("returns null for non-encoded refs (order payments)", () => {
-    expect(decodeSingaPayRef("tokko-3f7c9a2e-1111-4222-8333-444455556666")).toBeNull();
+  it("returns null for non-encoded refs (order payments, foreign refs)", () => {
+    expect(decodeSingaPayRef("tokko-528844df84a54724a60acfc31b4e7bd3")).toBeNull();
     expect(decodeSingaPayRef("18917720251110094037705")).toBeNull();
   });
 
   it("returns null for malformed refs", () => {
-    expect(decodeSingaPayRef("tkXAAAAAAAAAAAAAAAAAAAAAAomo000000")).toBeNull(); // bad kind
-    expect(decodeSingaPayRef("tkstoo-short")).toBeNull(); // wrong length
-    expect(decodeSingaPayRef("tkp!!!!!!!!!!!!!!!!!!!!!!omo000000")).toBeNull(); // bad b64
-  });
-
-  it("rejects refs with invalid plan/cycle codes", () => {
-    // build a valid-length ref with bad codes: tk s <22b64> x x <nonce6>
-    const ref = `tks${"A".repeat(22)}xx000000`;
-    expect(ref.length).toBe(33);
-    expect(decodeSingaPayRef(ref)).toBeNull();
+    expect(decodeSingaPayRef("s")).toBeNull(); // too short
+    expect(decodeSingaPayRef("p")).toBeNull(); // too short
+    // 's' with an invalid b64url id, correct length otherwise
+    expect(decodeSingaPayRef(`s${"!".repeat(22)}omo0000`)).toBeNull();
+    // 'p' with a non-base62 id
+    expect(decodeSingaPayRef(`p${"0".repeat(31)}!omo0000`)).toBeNull();
+    // valid shapes but invalid plan/cycle codes
+    const sBad = `s${"A".repeat(22)}xx0000`;
+    expect(sBad.length).toBe(29);
+    expect(decodeSingaPayRef(sBad)).toBeNull();
   });
 });
