@@ -290,11 +290,16 @@ storesRouter.get("/by-subdomain", async (c) => {
 
   const plan = await planService(db).viewOf(store);
   const base = storeJSON(store, plan);
+  // Online checkout must ALSO pass merchant KYB (SingaPay managed sub-account)
+  // — otherwise the storefront falls back to manual transfer via WhatsApp.
+  const settings = new D1AppSettingsRepository(db);
+  const providerId = await resolveActivePaymentProvider((k) => settings.get(k));
+  const kybOk = providerId !== "singapay" || store.kybStatus === "kyb_verified";
   // Online checkout is available on Pro & Commerce — hide it only from trial/none storefronts
   // (the merchant toggle stays on their settings, but it doesn't surface).
   // KYB fields are owner/admin-only — never expose them on the public storefront.
   const { singapayAccountId: _sa, kybStatus: _kb, ...publicBase } = base;
-  const storePayload = { ...publicBase, paymentOnline: base.paymentOnline && plan.onlineCheckout, paused };
+  const storePayload = { ...publicBase, paymentOnline: base.paymentOnline && plan.onlineCheckout && kybOk, paused };
 
   return c.json({
     store: storePayload,
