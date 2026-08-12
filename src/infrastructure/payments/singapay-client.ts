@@ -18,6 +18,10 @@
  *   SINGAPAY_PARTNER_ID     (secret) — X-PARTNER-ID merchant API key
  *   SINGAPAY_ACCOUNT_ID     (var)    — account ULID used in URL paths
  *   SINGAPAY_API_URL        (var)    — API base (defaults to sandbox host)
+ *   SINGAPAY_KYB_URL_BASE   (var)    — host for merchant KYB self-onboarding
+ *                                     links (defaults to sandbox payment-link
+ *                                     host — SingaPay echoes the caller's Host,
+ *                                     which through a proxy is unusable)
  *   SINGAPAY_PROXY_URL      (var)    — optional static-IP reverse proxy (VPS)
  *                                     — overrides the API base so SingaPay sees
  *                                     the proxy's fixed egress IP
@@ -41,6 +45,8 @@ export interface SingaPayEnv {
   SINGAPAY_PARTNER_ID?: string;
   SINGAPAY_ACCOUNT_ID?: string;
   SINGAPAY_API_URL?: string;
+  /** Base host for merchant KYB links (SingaPay echoes the caller's Host). */
+  SINGAPAY_KYB_URL_BASE?: string;
   /** Optional static-IP reverse proxy (VPS) — overrides the API base. */
   SINGAPAY_PROXY_URL?: string;
   /** Optional shared secret the proxy requires (X-Proxy-Token header). */
@@ -52,6 +58,27 @@ export interface SingaPayEnv {
 
 /** Sandbox API host (production base is configured via SINGAPAY_API_URL). */
 const DEFAULT_API_URL = "https://sandbox-payment-b2b.singapay.id";
+
+/** Host that actually serves the sandbox merchant KYB self-onboarding form. */
+const DEFAULT_KYB_URL_BASE = "https://sandbox-paymentlink.singapay.id";
+
+/**
+ * SingaPay builds kyb_onboarding_url from the caller's Host header — through
+ * a proxy (or any foreign Host) the link would point at the wrong origin.
+ * Rebuild it on the configured KYB base so merchants reach the real form.
+ */
+function normalizeKybUrl(url: string | null | undefined, kybBase: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const base = new URL(kybBase ?? DEFAULT_KYB_URL_BASE);
+    u.protocol = base.protocol;
+    u.host = base.host;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
 
 /** SingaPay's standard response envelope: { status, success, data }. */
 interface SingaPayEnvelope<T> {
@@ -144,6 +171,8 @@ export class SingaPayClient implements PaymentProviderClient {
       apiUrl: string;
       /** Shared secret for a VPS proxy (sent as X-Proxy-Token). */
       proxyToken?: string;
+      /** Base host for merchant KYB links (normalized after provider echo). */
+      kybUrlBase?: string;
     },
   ) {}
 
@@ -270,7 +299,7 @@ export class SingaPayClient implements PaymentProviderClient {
     accountType: "personal_managed" | "business_managed";
     inviteMembers?: string[];
   }): Promise<SingaPayAccount> {
-    return this.request<SingaPayAccount>("/api/v1.0/accounts", {
+    const account = await this.request<SingaPayAccount>("/api/v1.0/accounts", {
       method: "POST",
       body: JSON.stringify({
         name: input.name,
@@ -278,13 +307,22 @@ export class SingaPayClient implements PaymentProviderClient {
         ...(input.inviteMembers?.length ? { invite_members: input.inviteMembers } : {}),
       }),
     });
+    return {
+      ...account,
+      kyb_onboarding_url: normalizeKybUrl(account.kyb_onboarding_url, this.creds.kybUrlBase),
+    };
   }
 
   /** Fetch a sub-account (KYB status, onboarding URL, legal/brand names). */
   async getAccount(accountId: string): Promise<SingaPayAccount> {
-    return this.request<SingaPayAccount>(`/api/v1.0/accounts/${encodeURIComponent(accountId)}`, {
-      method: "GET",
-    });
+    const account = await this.request<SingaPayAccount>(
+      `/api/v1.0/accounts/${encodeURIComponent(accountId)}`,
+      { method: "GET" },
+    );
+    return {
+      ...account,
+      kyb_onboarding_url: normalizeKybUrl(account.kyb_onboarding_url, this.creds.kybUrlBase),
+    };
   }
 }
 
@@ -342,6 +380,7 @@ export function createSingaPayProvider(env: SingaPayEnv): PaymentProviderClient 
       // Proxy URL overrides the API base so SingaPay sees the proxy's static IP.
       apiUrl: env.SINGAPAY_PROXY_URL ?? env.SINGAPAY_API_URL ?? DEFAULT_API_URL,
       proxyToken: env.SINGAPAY_PROXY_TOKEN,
+      kybUrlBase: env.SINGAPAY_KYB_URL_BASE,
     });
   }
   return new MockSingaPayProvider();

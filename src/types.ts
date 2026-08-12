@@ -29,6 +29,9 @@ export interface Env {
   SINGAPAY_PARTNER_ID?: string;
   SINGAPAY_ACCOUNT_ID?: string;
   SINGAPAY_API_URL?: string;
+  // Base host for merchant KYB self-onboarding links (SingaPay echoes the
+  // caller's Host — through a proxy that would be unusable).
+  SINGAPAY_KYB_URL_BASE?: string;
   // Optional static-IP reverse proxy (VPS) — overrides the API base so
   // SingaPay sees the proxy's fixed egress IP.
   SINGAPAY_PROXY_URL?: string;

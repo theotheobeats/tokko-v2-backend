@@ -303,6 +303,37 @@ describe("SingaPayClient.createInvoice", () => {
     });
   });
 
+  it("normalizes kyb_onboarding_url onto the KYB base (proxy host echo fix)", async () => {
+    const { fn } = mockFetch({
+      "/access-token/b2b": {
+        status: 200,
+        success: true,
+        data: { access_token: "jwt-abc", token_type: "Bearer", expires_in: "216000" },
+      },
+      "/api/v1.0/accounts": {
+        status: 200,
+        success: true,
+        data: {
+          id: "01KYBTESTACCOUNT000000000000",
+          name: "Anna Bakery",
+          status: "inactive",
+          account_type: "personal_managed",
+          kyb_status: "kyb_in_review",
+          kyb_onboarding_url: "https://160.187.210.96.sslip.io/kyb/abc123", // proxy-echoed host
+        },
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const client = new SingaPayClient({
+      ...creds,
+      clientId: "SGP-CLIENT-KYBNORM",
+      kybUrlBase: "https://sandbox-paymentlink.singapay.id",
+    });
+    const acc = await client.createSubAccount({ name: "Anna Bakery", accountType: "personal_managed" });
+    expect(acc.kyb_onboarding_url).toBe("https://sandbox-paymentlink.singapay.id/kyb/abc123");
+  });
+
   it("throws a clear error when the token exchange fails", async () => {
     const { fn } = mockFetch({
       "/access-token/b2b": { status: 200, success: false, error: { code: 401, message: "Unauthorized" } },
