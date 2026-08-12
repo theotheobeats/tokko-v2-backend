@@ -582,7 +582,9 @@ export class MockSingaPayProvider implements PaymentProviderClient {
   }
 }
 
-/** Pick the client based on env: full credentials → real; else mock. */
+/** Pick the client based on env: full credentials → real; else mock in
+ * non-production, or an UNAVAILABLE provider in production (fake checkout
+ * URLs must never reach customers). */
 export function createSingaPayProvider(env: SingaPayEnv): PaymentProviderClient {
   if (useRealSingaPay(env) && env.SINGAPAY_CLIENT_ID && env.SINGAPAY_CLIENT_SECRET) {
     return new SingaPayClient({
@@ -598,7 +600,21 @@ export function createSingaPayProvider(env: SingaPayEnv): PaymentProviderClient 
       kybUrlBase: env.SINGAPAY_KYB_URL_BASE ?? new URL(env.SINGAPAY_API_URL ?? DEFAULT_API_URL).origin,
     });
   }
+  // Production without credentials must fail loudly — never serve mock URLs.
+  if (env.NODE_ENV === "production") {
+    return new UnavailableSingaPayProvider();
+  }
   return new MockSingaPayProvider();
+}
+
+/** Production fallback — payments unavailable, no fake checkout URLs. */
+class UnavailableSingaPayProvider implements PaymentProviderClient {
+  async createInvoice(): Promise<InvoiceResult> {
+    throw new Error("Pembayaran online belum tersedia di toko ini");
+  }
+  async getInvoice(): Promise<InvoiceStatusResult> {
+    throw new Error("Pembayaran online belum tersedia di toko ini");
+  }
 }
 
 /** Client surface for merchant KYB + payouts (real or mock — both implement it). */
