@@ -74,6 +74,8 @@ export interface CreatePaymentInput {
   failureRedirectUrl?: string;
   /** Which provider this payment runs on (resolved by the registry). */
   provider?: PaymentProviderType;
+  /** Merchant's provider sub-account (KYB-verified); default = platform account. */
+  accountId?: string;
 }
 
 export class CreatePayment {
@@ -110,6 +112,7 @@ export class CreatePayment {
         // (Xendit payment_methods codes ≠ SingaPay whitelist codes).
         paymentMethodIds: input.paymentMethodIds,
         channel: input.channel ?? null,
+        accountId: input.accountId,
         successRedirectUrl: input.successRedirectUrl,
         failureRedirectUrl: input.failureRedirectUrl,
       });

@@ -242,6 +242,67 @@ describe("SingaPayClient.createInvoice", () => {
     expect(decodeSingaPayRef(body.reff_no)).toContain("::pro::monthly::");
   });
 
+  it("routes through a merchant sub-account when accountId is given (create + get)", async () => {
+    const subAccount = "01KYBMERCHANT00000000000000000";
+    const { fn, calls } = mockFetch({
+      "/access-token/b2b": {
+        status: 200,
+        success: true,
+        data: { access_token: "jwt-abc", token_type: "Bearer", expires_in: "216000" },
+      },
+      "/payment-link-manage/": {
+        status: 200,
+        success: true,
+        data: [{ reff_no: "tokko-sub-acc", current_usage: 1, payment_date: "2026-08-12T00:00:00Z", is_expired: false }],
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const client = new SingaPayClient({ ...creds, clientId: "SGP-CLIENT-SUBACC" });
+    await client.createInvoice({ externalId: "tokko-sub-acc", amount: 50000, description: "x", accountId: subAccount });
+    await client.getInvoice("tokko-sub-acc", subAccount);
+
+    const linkCalls = calls.filter((c) => c.url.includes("payment-link-manage/"));
+    expect(linkCalls.length).toBe(2);
+    for (const call of linkCalls) expect(call.url).toContain(`/payment-link-manage/${subAccount}`);
+  });
+
+  it("creates + reads a managed sub-account (merchant KYB)", async () => {
+    const { fn, calls } = mockFetch({
+      "/access-token/b2b": {
+        status: 200,
+        success: true,
+        data: { access_token: "jwt-abc", token_type: "Bearer", expires_in: "216000" },
+      },
+      "/api/v1.0/accounts": {
+        status: 200,
+        success: true,
+        data: {
+          id: "01KYBTESTACCOUNT000000000000",
+          name: "Anna Bakery",
+          status: "inactive",
+          account_type: "personal_managed",
+          kyb_status: "kyb_in_review",
+          kyb_onboarding_url: "https://kyb.singapay.id/anna-bakery",
+        },
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const client = new SingaPayClient({ ...creds, clientId: "SGP-CLIENT-KYB" });
+    const created = await client.createSubAccount({ name: "Anna Bakery", accountType: "personal_managed" });
+    expect(created.kyb_onboarding_url).toContain("kyb.singapay.id");
+    const fetched = await client.getAccount(created.id);
+    expect(fetched.kyb_status).toBe("kyb_in_review");
+
+    const accountCalls = calls.filter((c) => c.url.includes("/api/v1.0/accounts"));
+    const createCall = accountCalls.find((c) => c.init?.method === "POST");
+    expect(JSON.parse(String(createCall!.init!.body))).toEqual({
+      name: "Anna Bakery",
+      account_type: "personal_managed",
+    });
+  });
+
   it("throws a clear error when the token exchange fails", async () => {
     const { fn } = mockFetch({
       "/access-token/b2b": { status: 200, success: false, error: { code: 401, message: "Unauthorized" } },

@@ -25,6 +25,8 @@ import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscrip
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
 import { activatePendingPlan } from "../../application/plan/pending-plan";
 import { createProviderClient, resolveActivePaymentProvider, providerIsReal } from "../../infrastructure/payments/registry";
+import { createSingaPayAccountsClient } from "../../infrastructure/payments/singapay-client";
+import { StartMerchantKYB, GetMerchantKYBStatus, KYBStoreNotFoundError } from "../../application/kyb/merchant-kyb";
 import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
@@ -47,6 +49,7 @@ function storeJSON(store: {
   paymentOnline: boolean; bankName: string | null;
   bankAccountNumber: string | null; bankAccountName: string | null;
   enabledPaymentMethods: string[] | null; enabledCouriers: string[] | null;
+  singapayAccountId: string | null; kybStatus: string | null;
 }, plan?: PlanView) {
   return {
     id: store.id,
@@ -77,6 +80,10 @@ function storeJSON(store: {
     bankAccountName: store.bankAccountName,
     enabledPaymentMethods: store.enabledPaymentMethods,
     enabledCouriers: store.enabledCouriers,
+    // SingaPay managed sub-account (merchant KYB) — owner/admin only;
+    // the public storefront strips these (see by-subdomain).
+    singapayAccountId: store.singapayAccountId,
+    kybStatus: store.kybStatus,
     ...(plan ? { plan } : {}),
   };
 }
@@ -285,7 +292,9 @@ storesRouter.get("/by-subdomain", async (c) => {
   const base = storeJSON(store, plan);
   // Online checkout is available on Pro & Commerce — hide it only from trial/none storefronts
   // (the merchant toggle stays on their settings, but it doesn't surface).
-  const storePayload = { ...base, paymentOnline: base.paymentOnline && plan.onlineCheckout, paused };
+  // KYB fields are owner/admin-only — never expose them on the public storefront.
+  const { singapayAccountId: _sa, kybStatus: _kb, ...publicBase } = base;
+  const storePayload = { ...publicBase, paymentOnline: base.paymentOnline && plan.onlineCheckout, paused };
 
   return c.json({
     store: storePayload,
@@ -455,6 +464,55 @@ storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionC
     cycle,
     amount,
   }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Merchant KYB (SingaPay managed sub-account) — owner only
+// ---------------------------------------------------------------------------
+
+// POST /api/stores/:id/kyb — start/resume the KYB flow (creates the
+// managed sub-account on first call, returns the self-onboarding link).
+storesRouter.post("/:id/kyb", async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const result = await new StartMerchantKYB(storeRepo, createSingaPayAccountsClient(c.env)).execute(storeId);
+  if (!result.ok) {
+    if (result.error instanceof KYBStoreNotFoundError) return c.json({ error: result.error }, 404);
+    return c.json({ error: result.error }, 502);
+  }
+  return c.json({ kyb: result.value });
+});
+
+// GET /api/stores/:id/kyb — current KYB status (live from the provider).
+storesRouter.get("/:id/kyb", async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const result = await new GetMerchantKYBStatus(storeRepo, createSingaPayAccountsClient(c.env)).execute(storeId);
+  if (!result.ok) {
+    if (result.error instanceof KYBStoreNotFoundError) return c.json({ error: result.error }, 404);
+    return c.json({ error: result.error }, 502);
+  }
+  return c.json({ kyb: result.value });
 });
 
 // ---------------------------------------------------------------------------

@@ -70,6 +70,18 @@ interface SingaPayPaymentLink {
   payment_date?: string | null;
 }
 
+/** Managed sub-account (merchant KYB). */
+export interface SingaPayAccount {
+  id: string;
+  name: string;
+  status: string; // active | inactive
+  account_type?: string | null; // owned | partner | personal_managed | business_managed
+  kyb_status?: string | null; // kyb_in_review | kyb_verified
+  kyb_onboarding_url?: string | null;
+  legal_name?: string | null;
+  brand_name?: string | null;
+}
+
 /** Real payments are used whenever a full credential set is configured. */
 export function useRealSingaPay(env: SingaPayEnv): boolean {
   if (env.SINGAPAY_FORCE_MOCK === "1" || env.SINGAPAY_FORCE_MOCK === "true") return false;
@@ -204,7 +216,7 @@ export class SingaPayClient implements PaymentProviderClient {
       input.externalId.length > 40 ? encodeSingaPayRef(input.externalId) : input.externalId;
 
     const data = await this.request<SingaPayPaymentLink>(
-      `/api/v1.0/payment-link-manage/${this.creds.accountId}`,
+      `/api/v1.0/payment-link-manage/${input.accountId ?? this.creds.accountId}`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -233,12 +245,12 @@ export class SingaPayClient implements PaymentProviderClient {
     };
   }
 
-  async getInvoice(externalId: string): Promise<InvoiceStatusResult> {
+  async getInvoice(externalId: string, accountId?: string): Promise<InvoiceStatusResult> {
     // List the account's payment links (newest first) and match our ref.
     // The primary status path is the webhook; this is only the reconcile
     // fallback (lost webhooks / admin sync), so page 1 is sufficient.
     const links = await this.request<SingaPayPaymentLink[]>(
-      `/api/v1.0/payment-link-manage/${this.creds.accountId}`,
+      `/api/v1.0/payment-link-manage/${accountId ?? this.creds.accountId}`,
       { method: "GET" },
     );
 
@@ -251,6 +263,29 @@ export class SingaPayClient implements PaymentProviderClient {
     if (link.is_expired) return { status: "EXPIRED" };
     return { status: "PENDING" };
   }
+
+  /** Create a managed sub-account for a merchant (starts the BOSS KYB flow). */
+  async createSubAccount(input: {
+    name: string;
+    accountType: "personal_managed" | "business_managed";
+    inviteMembers?: string[];
+  }): Promise<SingaPayAccount> {
+    return this.request<SingaPayAccount>("/api/v1.0/accounts", {
+      method: "POST",
+      body: JSON.stringify({
+        name: input.name,
+        account_type: input.accountType,
+        ...(input.inviteMembers?.length ? { invite_members: input.inviteMembers } : {}),
+      }),
+    });
+  }
+
+  /** Fetch a sub-account (KYB status, onboarding URL, legal/brand names). */
+  async getAccount(accountId: string): Promise<SingaPayAccount> {
+    return this.request<SingaPayAccount>(`/api/v1.0/accounts/${encodeURIComponent(accountId)}`, {
+      method: "GET",
+    });
+  }
 }
 
 /**
@@ -259,6 +294,30 @@ export class SingaPayClient implements PaymentProviderClient {
  */
 export class MockSingaPayProvider implements PaymentProviderClient {
   constructor(private readonly prefix = "mock") {}
+
+  async createSubAccount(input: {
+    name: string;
+    accountType: "personal_managed" | "business_managed";
+  }): Promise<SingaPayAccount> {
+    return {
+      id: `mock-acc-${Date.now()}`,
+      name: input.name,
+      status: "inactive",
+      account_type: input.accountType,
+      kyb_status: "kyb_in_review",
+      kyb_onboarding_url: `https://checkout.payments.test/kyb/${this.prefix}`,
+    };
+  }
+
+  async getAccount(accountId: string): Promise<SingaPayAccount> {
+    return {
+      id: accountId,
+      name: "Mock",
+      status: "inactive",
+      kyb_status: "kyb_in_review",
+      kyb_onboarding_url: `https://checkout.payments.test/kyb/${this.prefix}`,
+    };
+  }
 
   async createInvoice(input: CreateInvoiceInput): Promise<InvoiceResult> {
     return {
@@ -286,4 +345,18 @@ export function createSingaPayProvider(env: SingaPayEnv): PaymentProviderClient 
     });
   }
   return new MockSingaPayProvider();
+}
+
+/** Client surface for merchant KYB (real or mock — both implement it). */
+export interface SingaPayAccountsClientLike {
+  createSubAccount(input: {
+    name: string;
+    accountType: "personal_managed" | "business_managed";
+  }): Promise<SingaPayAccount>;
+  getAccount(accountId: string): Promise<SingaPayAccount>;
+}
+
+/** Create a SingaPay client for merchant KYB flows (real or mock). */
+export function createSingaPayAccountsClient(env: SingaPayEnv): SingaPayAccountsClientLike {
+  return createSingaPayProvider(env) as unknown as SingaPayAccountsClientLike;
 }

@@ -45,6 +45,11 @@ export interface StoreProps {
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
+  // SingaPay managed sub-account (merchant KYB) — funds settle to the
+  // merchant's own account; we never hold merchant money.
+  singapayAccountId: string | null;
+  /** Cached KYB status: null | "kyb_in_review" | "kyb_verified". */
+  kybStatus: string | null;
   // Enabled payment methods / couriers (null = platform defaults, all).
   enabledPaymentMethods: string[] | null;
   enabledCouriers: string[] | null;
@@ -108,6 +113,8 @@ export class Store {
       bankName: null,
       bankAccountNumber: null,
       bankAccountName: null,
+      singapayAccountId: null,
+      kybStatus: null,
       enabledPaymentMethods: null,
       enabledCouriers: null,
       trialEndsAt: null,
@@ -159,6 +166,8 @@ export class Store {
   get bankName() { return this.props.bankName; }
   get bankAccountNumber() { return this.props.bankAccountNumber; }
   get bankAccountName() { return this.props.bankAccountName; }
+  get singapayAccountId() { return this.props.singapayAccountId; }
+  get kybStatus() { return this.props.kybStatus; }
   get enabledPaymentMethods() { return this.props.enabledPaymentMethods; }
   get enabledCouriers() { return this.props.enabledCouriers; }
   get trialEndsAt() { return this.props.trialEndsAt; }
@@ -420,6 +429,13 @@ export class Store {
   /** Mark the day-10 trial reminder as sent. */
   markTrialReminderSent(): Store {
     this.props.trialReminderSentAt = new Date().toISOString();
+    return this;
+  }
+
+  /** Attach/resync the SingaPay managed sub-account + KYB status. */
+  updatePaymentProviderAccount(singapayAccountId: string, kybStatus: string): Store {
+    this.props.singapayAccountId = singapayAccountId;
+    this.props.kybStatus = kybStatus;
     return this;
   }
 

@@ -20,6 +20,8 @@ export interface CreateInvoiceInput {
   paymentMethodIds?: string[];
   /** Legacy channel shortcut (qris | bank_transfer | ewallet | credit_card). */
   channel?: string | null;
+  /** Provider account to bill under (merchant sub-account; default = platform). */
+  accountId?: string;
   successRedirectUrl?: string;
   failureRedirectUrl?: string;
 }
@@ -39,7 +41,7 @@ export interface InvoiceStatusResult {
 
 export interface PaymentProviderClient {
   createInvoice(input: CreateInvoiceInput): Promise<InvoiceResult>;
-  getInvoice(externalId: string): Promise<InvoiceStatusResult>;
+  getInvoice(externalId: string, accountId?: string): Promise<InvoiceStatusResult>;
 }
 
 export interface XenditEnv {

@@ -672,6 +672,7 @@ adminRouter.post("/payments/sync", async (c) => {
     new D1PaymentRepository(db),
     new D1OrderRepository(db),
     (providerId) => createProviderClient(c.env, providerId),
+    new D1StoreRepository(db),
   ).execute({
     storeId: storeId ? (storeId as EntityId) : undefined,
     orderId: orderId ? (orderId as EntityId) : undefined,

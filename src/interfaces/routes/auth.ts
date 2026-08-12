@@ -43,6 +43,8 @@ function serializeStoreRow(row: typeof stores.$inferSelect) {
     originLatitude: row.originLatitude,
     originLongitude: row.originLongitude,
     paymentOnline: row.paymentOnline === 1,
+    singapayAccountId: row.singapayAccountId,
+    kybStatus: row.kybStatus,
     bankName: row.bankName,
     bankAccountNumber: row.bankAccountNumber,
     bankAccountName: row.bankAccountName,

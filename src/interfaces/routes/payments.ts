@@ -131,7 +131,12 @@ paymentsRouter.get("/orders/:orderId/payments", async (c) => {
     const ageMs = Date.now() - new Date(latest.createdAt).getTime();
     if (ageMs > 10 * 60 * 1000) {
       try {
-        const status = await createProviderClient(c.env, latest.provider).getInvoice(latest.externalId);
+        // Reconcile against the store's own sub-account (merchant KYB).
+        const store = await new D1StoreRepository(db).findById(latest.storeId);
+        const status = await createProviderClient(c.env, latest.provider).getInvoice(
+          latest.externalId,
+          store?.singapayAccountId ?? undefined,
+        );
         if (status.status === "PAID") latest.markPaid(status.paidAt ?? undefined);
         else if (status.status === "EXPIRED") latest.markExpired();
         else if (status.status === "FAILED") latest.markFailed();
