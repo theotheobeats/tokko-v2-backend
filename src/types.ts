@@ -29,6 +29,11 @@ export interface Env {
   SINGAPAY_PARTNER_ID?: string;
   SINGAPAY_ACCOUNT_ID?: string;
   SINGAPAY_API_URL?: string;
+  // Optional static-IP reverse proxy (VPS) — overrides the API base so
+  // SingaPay sees the proxy's fixed egress IP.
+  SINGAPAY_PROXY_URL?: string;
+  // Optional shared secret the proxy requires (X-Proxy-Token header).
+  SINGAPAY_PROXY_TOKEN?: string;
   SINGAPAY_WEBHOOK_SECRET?: string;
   SINGAPAY_FORCE_MOCK?: string;
   // Public API origin used for payment success/failure redirects.

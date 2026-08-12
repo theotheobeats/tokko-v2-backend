@@ -177,6 +177,41 @@ describe("SingaPayClient.createInvoice", () => {
     expect(body.whitelisted_payment_method).toBeUndefined();
   });
 
+  it("routes through a VPS proxy when configured (URL + token header)", async () => {
+    const { fn, calls } = mockFetch({
+      "/access-token/b2b": {
+        status: 200,
+        success: true,
+        data: { access_token: "jwt-abc", token_type: "Bearer", expires_in: "216000" },
+      },
+      "/payment-link-manage/": {
+        status: 200,
+        success: true,
+        data: { reff_no: "tokko-proxy-1", payment_url: "https://sandbox-paymentlink.singapay.id/b2b/PLP" },
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const proxyUrl = "https://proxy.example.com/singapay";
+    const client = new SingaPayClient({
+      ...creds,
+      clientId: "SGP-CLIENT-PROXY",
+      apiUrl: proxyUrl,
+      proxyToken: "topsecret",
+    });
+    await client.createInvoice({ externalId: "tokko-proxy-1", amount: 10000, description: "x" });
+
+    const tokenCall = calls.find((c) => c.url.includes("access-token/b2b"));
+    expect(tokenCall!.url.startsWith(proxyUrl)).toBe(true);
+    const tokenHeaders = tokenCall!.init!.headers as Record<string, string>;
+    expect(tokenHeaders["X-Proxy-Token"]).toBe("topsecret");
+
+    const linkCall = calls.find((c) => c.url.includes("payment-link-manage/"));
+    expect(linkCall!.url.startsWith(proxyUrl)).toBe(true);
+    const linkHeaders = linkCall!.init!.headers as Record<string, string>;
+    expect(linkHeaders["X-Proxy-Token"]).toBe("topsecret");
+  });
+
   it("throws a clear error when the token exchange fails", async () => {
     const { fn } = mockFetch({
       "/access-token/b2b": { status: 200, success: false, error: { code: 401, message: "Unauthorized" } },

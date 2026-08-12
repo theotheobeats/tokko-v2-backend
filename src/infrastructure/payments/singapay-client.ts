@@ -18,6 +18,11 @@
  *   SINGAPAY_PARTNER_ID     (secret) — X-PARTNER-ID merchant API key
  *   SINGAPAY_ACCOUNT_ID     (var)    — account ULID used in URL paths
  *   SINGAPAY_API_URL        (var)    — API base (defaults to sandbox host)
+ *   SINGAPAY_PROXY_URL      (var)    — optional static-IP reverse proxy (VPS)
+ *                                     — overrides the API base so SingaPay sees
+ *                                     the proxy's fixed egress IP
+ *   SINGAPAY_PROXY_TOKEN    (secret) — optional shared secret the proxy
+ *                                     requires (sent as X-Proxy-Token header)
  *   SINGAPAY_WEBHOOK_SECRET (secret) — webhook signature verification (Phase 2)
  *   SINGAPAY_FORCE_MOCK     (var)    — "1" forces mock even with keys
  */
@@ -35,6 +40,10 @@ export interface SingaPayEnv {
   SINGAPAY_PARTNER_ID?: string;
   SINGAPAY_ACCOUNT_ID?: string;
   SINGAPAY_API_URL?: string;
+  /** Optional static-IP reverse proxy (VPS) — overrides the API base. */
+  SINGAPAY_PROXY_URL?: string;
+  /** Optional shared secret the proxy requires (X-Proxy-Token header). */
+  SINGAPAY_PROXY_TOKEN?: string;
   SINGAPAY_WEBHOOK_SECRET?: string;
   SINGAPAY_FORCE_MOCK?: string;
   NODE_ENV?: string;
@@ -119,6 +128,8 @@ export class SingaPayClient implements PaymentProviderClient {
       partnerId: string;
       accountId: string;
       apiUrl: string;
+      /** Shared secret for a VPS proxy (sent as X-Proxy-Token). */
+      proxyToken?: string;
     },
   ) {}
 
@@ -143,6 +154,7 @@ export class SingaPayClient implements PaymentProviderClient {
         "X-PARTNER-ID": partnerId,
         "X-CLIENT-ID": clientId,
         "X-Signature": signature,
+        ...(this.creds.proxyToken ? { "X-Proxy-Token": this.creds.proxyToken } : {}),
       },
       body: JSON.stringify({ grant_type: "client_credentials" }),
     });
@@ -169,6 +181,7 @@ export class SingaPayClient implements PaymentProviderClient {
         "Content-Type": "application/json",
         "X-PARTNER-ID": this.creds.partnerId,
         Authorization: `Bearer ${token}`,
+        ...(this.creds.proxyToken ? { "X-Proxy-Token": this.creds.proxyToken } : {}),
         ...init?.headers,
       },
     });
@@ -256,7 +269,9 @@ export function createSingaPayProvider(env: SingaPayEnv): PaymentProviderClient 
       clientSecret: env.SINGAPAY_CLIENT_SECRET,
       partnerId: env.SINGAPAY_PARTNER_ID ?? "",
       accountId: env.SINGAPAY_ACCOUNT_ID ?? "",
-      apiUrl: env.SINGAPAY_API_URL ?? DEFAULT_API_URL,
+      // Proxy URL overrides the API base so SingaPay sees the proxy's static IP.
+      apiUrl: env.SINGAPAY_PROXY_URL ?? env.SINGAPAY_API_URL ?? DEFAULT_API_URL,
+      proxyToken: env.SINGAPAY_PROXY_TOKEN,
     });
   }
   return new MockSingaPayProvider();
