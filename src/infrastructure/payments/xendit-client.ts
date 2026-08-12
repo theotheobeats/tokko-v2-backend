@@ -16,8 +16,10 @@ export interface CreateInvoiceInput {
   amount: number;
   description: string;
   customer?: { givenNames?: string; email?: string; mobileNumber?: string };
-  /** Restrict the invoice to these Xendit payment methods. */
-  paymentMethods?: string[];
+  /** Our catalog method ids enabled for this store (e.g. ["qris", "bca"]). */
+  paymentMethodIds?: string[];
+  /** Legacy channel shortcut (qris | bank_transfer | ewallet | credit_card). */
+  channel?: string | null;
   successRedirectUrl?: string;
   failureRedirectUrl?: string;
 }
@@ -45,6 +47,38 @@ export interface XenditEnv {
   XENDIT_WEBHOOK_TOKEN?: string;
   XENDIT_FORCE_MOCK?: string;
   NODE_ENV?: string;
+}
+
+/** Xendit invoice payment_methods codes per catalog id. */
+const XENDIT_METHOD_CODES: Record<string, string[]> = {
+  qris: ["QRIS"],
+  bca: ["BANK_BCA"],
+  mandiri: ["BANK_MANDIRI"],
+  bni: ["BANK_BNI"],
+  bri: ["BANK_BRI"],
+  ovo: ["EWALLET_OVO"],
+  gopay: ["EWALLET_GOPAY"],
+  dana: ["EWALLET_DANA"],
+  shopeepay: ["EWALLET_SHOPEEPAY"],
+  credit_card: ["CREDIT_CARD"],
+};
+
+/** Legacy channel shortcut → Xendit codes. */
+const XENDIT_CHANNEL_CODES: Record<string, string[]> = {
+  qris: ["QRIS"],
+  bank_transfer: ["BANK_TRANSFER"],
+  ewallet: ["EWALLET"],
+  credit_card: ["CREDIT_CARD"],
+};
+
+/** Catalog ids / channel → Xendit payment_methods codes (unknowns dropped). */
+function resolveXenditMethodCodes(input: CreateInvoiceInput): string[] | undefined {
+  if (input.paymentMethodIds?.length) {
+    const codes = input.paymentMethodIds.flatMap((id) => XENDIT_METHOD_CODES[id] ?? []);
+    return codes.length ? codes : undefined;
+  }
+  if (input.channel) return XENDIT_CHANNEL_CODES[input.channel];
+  return undefined;
 }
 
 const XENDIT_API = "https://api.xendit.co";
@@ -92,8 +126,8 @@ export class XenditClient implements PaymentProviderClient {
               },
             }
           : {}),
-        ...(input.paymentMethods?.length
-          ? { payment_methods: input.paymentMethods }
+        ...(resolveXenditMethodCodes(input)?.length
+          ? { payment_methods: resolveXenditMethodCodes(input) }
           : {}),
         ...(input.successRedirectUrl ? { success_redirect_url: input.successRedirectUrl } : {}),
         ...(input.failureRedirectUrl ? { failure_redirect_url: input.failureRedirectUrl } : {}),

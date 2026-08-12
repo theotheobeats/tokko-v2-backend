@@ -11,7 +11,6 @@ import type { PaymentProvider as PaymentProviderType } from "../../domain/paymen
 import type { PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
 import type { PaymentProviderClient } from "../../infrastructure/payments/xendit-client";
-import { xenditMethodsFor } from "./payment-method-catalog";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -60,17 +59,6 @@ export class WebhookAmountMismatchError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Channel → Xendit payment_methods mapping
-// ---------------------------------------------------------------------------
-
-const CHANNEL_METHODS: Record<string, string[]> = {
-  qris: ["QRIS"],
-  bank_transfer: ["BANK_TRANSFER"],
-  ewallet: ["EWALLET"],
-  credit_card: ["CREDIT_CARD"],
-};
-
-// ---------------------------------------------------------------------------
 // CreatePayment
 // ---------------------------------------------------------------------------
 
@@ -117,11 +105,10 @@ export class CreatePayment {
           mobileNumber: input.customerPhone?.trim() || undefined,
           email: input.customerEmail?.trim() || undefined,
         },
-        paymentMethods: input.paymentMethodIds?.length
-          ? xenditMethodsFor(input.paymentMethodIds)
-          : input.channel
-            ? CHANNEL_METHODS[input.channel]
-            : undefined,
+        // Catalog ids + channel are provider-resolved inside each client
+        // (Xendit payment_methods codes ≠ SingaPay whitelist codes).
+        paymentMethodIds: input.paymentMethodIds,
+        channel: input.channel ?? null,
         successRedirectUrl: input.successRedirectUrl,
         failureRedirectUrl: input.failureRedirectUrl,
       });

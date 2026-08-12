@@ -126,6 +126,57 @@ describe("SingaPayClient.createInvoice", () => {
     expect(tokenCalls).toHaveLength(1); // second call reused the cached token
   });
 
+  it("maps catalog method ids to SingaPay whitelist codes", async () => {
+    const { fn, calls } = mockFetch({
+      "/access-token/b2b": {
+        status: 200,
+        success: true,
+        data: { access_token: "jwt-abc", token_type: "Bearer", expires_in: "216000" },
+      },
+      "/payment-link-manage/": {
+        status: 200,
+        success: true,
+        data: { reff_no: "tokko-test-m", payment_url: "https://sandbox-paymentlink.singapay.id/b2b/PLM" },
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const client = new SingaPayClient({ ...creds, clientId: "SGP-CLIENT-MAP" });
+    await client.createInvoice({
+      externalId: "tokko-test-m",
+      amount: 50000,
+      description: "x",
+      paymentMethodIds: ["qris", "bri", "unknown-id"],
+    });
+
+    const linkCall = calls.find((c) => c.url.includes("payment-link-manage/"));
+    const body = JSON.parse(String(linkCall!.init!.body));
+    expect(body.whitelisted_payment_method).toEqual(["QRIS", "VA_BRI"]); // unknown dropped
+  });
+
+  it("omits the whitelist when no catalog ids are given (all methods)", async () => {
+    const { fn, calls } = mockFetch({
+      "/access-token/b2b": {
+        status: 200,
+        success: true,
+        data: { access_token: "jwt-abc", token_type: "Bearer", expires_in: "216000" },
+      },
+      "/payment-link-manage/": {
+        status: 200,
+        success: true,
+        data: { reff_no: "tokko-test-n", payment_url: "https://sandbox-paymentlink.singapay.id/b2b/PLN" },
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    const client = new SingaPayClient({ ...creds, clientId: "SGP-CLIENT-NO-WL" });
+    await client.createInvoice({ externalId: "tokko-test-n", amount: 50000, description: "x" });
+
+    const linkCall = calls.find((c) => c.url.includes("payment-link-manage/"));
+    const body = JSON.parse(String(linkCall!.init!.body));
+    expect(body.whitelisted_payment_method).toBeUndefined();
+  });
+
   it("throws a clear error when the token exchange fails", async () => {
     const { fn } = mockFetch({
       "/access-token/b2b": { status: 200, success: false, error: { code: 401, message: "Unauthorized" } },

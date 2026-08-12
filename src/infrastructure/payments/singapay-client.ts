@@ -65,6 +65,33 @@ export function useRealSingaPay(env: SingaPayEnv): boolean {
   return !!env.SINGAPAY_CLIENT_ID && !!env.SINGAPAY_CLIENT_SECRET;
 }
 
+/**
+ * Best-effort SingaPay payment-link codes per catalog id. The authoritative
+ * list is account-specific — GET /api/v1.0/payment-link-manage/payment-methods
+ * returns the account's `available_codes`; keep this map in sync when the
+ * account catalog changes. Unknown ids are dropped; if nothing maps, the
+ * whitelist is omitted (all active methods allowed).
+ */
+const SINGAPAY_METHOD_CODES: Record<string, string[]> = {
+  qris: ["QRIS"],
+  bca: ["VA_BCA"],
+  mandiri: ["VA_MANDIRI"],
+  bni: ["VA_BNI"],
+  bri: ["VA_BRI"],
+  ovo: ["OVO"],
+  gopay: ["GOPAY"],
+  dana: ["DANA"],
+  shopeepay: ["SHOPEEPAY"],
+  credit_card: ["CARD"],
+};
+
+/** Catalog ids → SingaPay codes; undefined = no whitelist (all methods). */
+function resolveSingaPayMethodCodes(input: CreateInvoiceInput): string[] | undefined {
+  if (!input.paymentMethodIds?.length) return undefined; // allow all active
+  const codes = input.paymentMethodIds.flatMap((id) => SINGAPAY_METHOD_CODES[id] ?? []);
+  return codes.length ? codes : undefined;
+}
+
 /** Module-level access-token cache (per isolate), keyed by client id. */
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
@@ -170,6 +197,9 @@ export class SingaPayClient implements PaymentProviderClient {
           expired_at: expiredAt,
           total_amount: input.amount,
           items: [{ name: label, quantity: 1, unit_price: input.amount }],
+          ...(resolveSingaPayMethodCodes(input)?.length
+            ? { whitelisted_payment_method: resolveSingaPayMethodCodes(input) }
+            : {}),
           ...(input.successRedirectUrl ? { success_redirect_url: input.successRedirectUrl } : {}),
           ...(input.failureRedirectUrl ? { expired_redirect_url: input.failureRedirectUrl } : {}),
         }),
