@@ -59,19 +59,18 @@ export interface SingaPayEnv {
 /** Sandbox API host (production base is configured via SINGAPAY_API_URL). */
 const DEFAULT_API_URL = "https://sandbox-payment-b2b.singapay.id";
 
-/** Host that actually serves the sandbox merchant KYB self-onboarding form. */
-const DEFAULT_KYB_URL_BASE = "https://sandbox-paymentlink.singapay.id";
-
 /**
  * SingaPay builds kyb_onboarding_url from the caller's Host header — through
  * a proxy (or any foreign Host) the link would point at the wrong origin.
- * Rebuild it on the configured KYB base so merchants reach the real form.
+ * Rebuild it on the API host's origin: that is where the real
+ * "Business Verification" form lives (the payment-link host serves an SPA
+ * that 404s the KYB route client-side).
  */
 function normalizeKybUrl(url: string | null | undefined, kybBase: string | undefined): string | null {
   if (!url) return null;
   try {
     const u = new URL(url);
-    const base = new URL(kybBase ?? DEFAULT_KYB_URL_BASE);
+    const base = new URL(kybBase ?? DEFAULT_API_URL);
     u.protocol = base.protocol;
     u.host = base.host;
     return u.toString();
@@ -412,7 +411,9 @@ export function createSingaPayProvider(env: SingaPayEnv): PaymentProviderClient 
       // Proxy URL overrides the API base so SingaPay sees the proxy's static IP.
       apiUrl: env.SINGAPAY_PROXY_URL ?? env.SINGAPAY_API_URL ?? DEFAULT_API_URL,
       proxyToken: env.SINGAPAY_PROXY_TOKEN,
-      kybUrlBase: env.SINGAPAY_KYB_URL_BASE,
+      // KYB links are served by the API host itself ("Business Verification") —
+      // never the proxy (it only forwards /singapay/*) or a separate link host.
+      kybUrlBase: env.SINGAPAY_KYB_URL_BASE ?? new URL(env.SINGAPAY_API_URL ?? DEFAULT_API_URL).origin,
     });
   }
   return new MockSingaPayProvider();

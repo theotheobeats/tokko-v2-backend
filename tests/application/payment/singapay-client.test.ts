@@ -291,8 +291,8 @@ describe("SingaPayClient.createInvoice", () => {
 
     const client = new SingaPayClient({ ...creds, clientId: "SGP-CLIENT-KYB" });
     const created = await client.createSubAccount({ name: "Anna Bakery", accountType: "personal_managed" });
-    // host is normalized onto the default KYB base (the provider echoes the caller's Host)
-    expect(created.kyb_onboarding_url).toBe("https://sandbox-paymentlink.singapay.id/anna-bakery");
+    // host is normalized onto the default API origin (the real KYB form host)
+    expect(created.kyb_onboarding_url).toBe("https://sandbox-payment-b2b.singapay.id/anna-bakery");
     const fetched = await client.getAccount(created.id);
     expect(fetched.kyb_status).toBe("kyb_in_review");
 
@@ -304,7 +304,7 @@ describe("SingaPayClient.createInvoice", () => {
     });
   });
 
-  it("normalizes kyb_onboarding_url onto the KYB base (proxy host echo fix)", async () => {
+  it("normalizes kyb_onboarding_url onto the API host (proxy host echo fix)", async () => {
     const { fn } = mockFetch({
       "/access-token/b2b": {
         status: 200,
@@ -329,10 +329,10 @@ describe("SingaPayClient.createInvoice", () => {
     const client = new SingaPayClient({
       ...creds,
       clientId: "SGP-CLIENT-KYBNORM",
-      kybUrlBase: "https://sandbox-paymentlink.singapay.id",
+      kybUrlBase: "https://sandbox-payment-b2b.singapay.id",
     });
     const acc = await client.createSubAccount({ name: "Anna Bakery", accountType: "personal_managed" });
-    expect(acc.kyb_onboarding_url).toBe("https://sandbox-paymentlink.singapay.id/kyb/abc123");
+    expect(acc.kyb_onboarding_url).toBe("https://sandbox-payment-b2b.singapay.id/kyb/abc123");
   });
 
   it("throws a clear error when the token exchange fails", async () => {
