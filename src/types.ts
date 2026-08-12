@@ -39,6 +39,9 @@ export interface Env {
   SINGAPAY_PROXY_TOKEN?: string;
   SINGAPAY_WEBHOOK_SECRET?: string;
   SINGAPAY_FORCE_MOCK?: string;
+  // Platform settlement account number (commission sweep beneficiary for
+  // merchant payouts — funds move from the merchant's sub-account to ours).
+  SINGAPAY_SETTLEMENT_ACCOUNT_NUMBER?: string;
   // Public API origin used for payment success/failure redirects.
   API_PUBLIC_URL?: string;
 

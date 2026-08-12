@@ -38,6 +38,7 @@ import type {
   PaymentProviderClient,
 } from "./xendit-client";
 import { encodeSingaPayRef } from "./singapay-ref";
+import { sortRecursive, sha256Hex } from "./singapay-webhook";
 
 export interface SingaPayEnv {
   SINGAPAY_CLIENT_ID?: string;
@@ -106,6 +107,33 @@ export interface SingaPayAccount {
   kyb_onboarding_url?: string | null;
   legal_name?: string | null;
   brand_name?: string | null;
+}
+
+/** Sub-account balance (MoneyAmount values are decimal strings). */
+export interface SingaPayBalance {
+  available: number;
+  balance: number;
+  pending: number;
+  held: number;
+}
+
+/** Result of a v2 disbursement (money-out) transfer. */
+export interface SingaPayDisbursement {
+  transactionId: string;
+  referenceNumber: string;
+  status: string;
+  netAmount: number;
+  fee: number;
+  failedReason: string | null;
+}
+
+interface SingaPayDisbursementData {
+  transaction_id: string;
+  reference_number: string;
+  transaction_status?: { code?: string };
+  net_amount?: { value?: string | number };
+  fee?: { value?: string | number };
+  failed_reason?: string | null;
 }
 
 /** Live payment-methods catalog entry (SingaPay does not publish fee rates via API). */
@@ -199,7 +227,7 @@ export class SingaPayClient implements PaymentProviderClient {
     const cached = tokenCache.get(clientId);
     if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
 
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const date = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, ""); // Asia/Jakarta
     const signature = await hmacSha512Hex(clientSecret, `${clientId}_${clientSecret}_${date}`);
 
     const res = await fetch(`${apiUrl}/api/v1.1/access-token/b2b`, {
@@ -344,6 +372,127 @@ export class SingaPayClient implements PaymentProviderClient {
       { method: "GET" },
     );
   }
+
+  /**
+   * Signed money-out request (Request Signature scheme): HMAC-SHA512 of
+   * `POST:{endpoint}:{accessToken}:{sha256(sortedBody)}:{timestampSeconds}`.
+   * Handles the v2 envelope (`response_code: "SP000"`).
+   */
+  private async requestSigned<T>(path: string, body: unknown): Promise<T> {
+    const token = await this.accessToken();
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const hashedBody = await sha256Hex(JSON.stringify(sortRecursive(body)));
+    const stringToSign = `POST:${path}:${token}:${hashedBody}:${timestamp}`;
+    const signature = await hmacSha512Hex(this.creds.clientSecret, stringToSign);
+
+    const res = await fetch(`${this.creds.apiUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-PARTNER-ID": this.creds.partnerId,
+        Authorization: `Bearer ${token}`,
+        "X-Timestamp": timestamp,
+        "X-Signature": signature,
+        ...(this.creds.proxyToken ? { "X-Proxy-Token": this.creds.proxyToken } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json().catch(() => null)) as {
+      success?: boolean;
+      response_code?: string;
+      data?: T;
+    } | null;
+    if (!res.ok || data?.success === false || (data?.response_code && data.response_code !== "SP000")) {
+      throw new Error(`SingaPay ${res.status}: ${JSON.stringify(data ?? "no response").slice(0, 300)}`);
+    }
+    return (data?.data ?? data) as T;
+  }
+
+  /** Sub-account balance (merchant money held by SingaPay, not by us). */
+  async checkBalance(accountId: string): Promise<SingaPayBalance> {
+    const data = await this.request<Record<string, { value?: string | number }>>(
+      `/api/v1.0/balance-inquiry/${encodeURIComponent(accountId)}`,
+      { method: "GET" },
+    );
+    const n = (v: { value?: string | number } | undefined) => Number(v?.value ?? 0);
+    return {
+      available: n(data.available_balance),
+      balance: n(data.balance),
+      pending: n(data.pending_balance),
+      held: n(data.held_balance),
+    };
+  }
+
+  /** Quote the disbursement fee before paying out. */
+  async checkFee(input: {
+    accountId: string;
+    bankSwiftCode: string;
+    amount: number;
+  }): Promise<unknown> {
+    return this.request(`/api/v1.0/disbursement/${encodeURIComponent(input.accountId)}/check-fee`, {
+      method: "POST",
+      body: JSON.stringify({ bank_swift_code: input.bankSwiftCode, amount: input.amount }),
+    });
+  }
+
+  /** Validate a beneficiary bank account before paying out. */
+  async checkBeneficiary(input: { bankSwiftCode: string; bankAccountNumber: string }): Promise<unknown> {
+    return this.request("/api/v1.0/disbursement/check-beneficiary", {
+      method: "POST",
+      body: JSON.stringify({
+        bank_swift_code: input.bankSwiftCode,
+        bank_account_number: input.bankAccountNumber,
+      }),
+    });
+  }
+
+  /** Pay out from a merchant sub-account to their bank (signed money-out). */
+  async disburse(input: {
+    accountId: string;
+    referenceNumber: string;
+    bankCode: string;
+    bankAccountNumber: string;
+    amount: number;
+    notes?: string;
+  }): Promise<SingaPayDisbursement> {
+    const data = await this.requestSigned<SingaPayDisbursementData>(
+      "/api/v2.0/disbursement/transfer",
+      {
+        account_id: input.accountId,
+        reference_number: input.referenceNumber,
+        bank_code: input.bankCode,
+        bank_account_number: input.bankAccountNumber,
+        amount: input.amount,
+        ...(input.notes ? { notes: input.notes } : {}),
+      },
+    );
+    return {
+      transactionId: data.transaction_id,
+      referenceNumber: data.reference_number,
+      status: data.transaction_status?.code ?? "PENDING",
+      netAmount: Number(data.net_amount?.value ?? input.amount),
+      fee: Number(data.fee?.value ?? 0),
+      failedReason: data.failed_reason ?? null,
+    };
+  }
+
+  /** Commission sweep: merchant sub-account → our platform account. */
+  async accountTransfer(input: {
+    accountId: string;
+    amount: number;
+    beneficiaryAccountNumber: string;
+    merchantRefNo?: string;
+  }): Promise<{ transactionId: string; status: string }> {
+    const data = await this.requestSigned<{ transaction_id: string; status: string }>(
+      `/api/v1.0/account-transfer/${encodeURIComponent(input.accountId)}/transfer`,
+      {
+        amount: input.amount,
+        beneficiary_account_number: input.beneficiaryAccountNumber,
+        ...(input.merchantRefNo ? { merchant_ref_no: input.merchantRefNo } : {}),
+      },
+    );
+    return { transactionId: data.transaction_id, status: data.status };
+  }
 }
 
 /**
@@ -388,6 +537,39 @@ export class MockSingaPayProvider implements PaymentProviderClient {
     };
   }
 
+  async checkBalance(): Promise<SingaPayBalance> {
+    return { available: 1_250_000, balance: 1_250_000, pending: 0, held: 0 };
+  }
+
+  async checkFee(): Promise<unknown> {
+    return { transfer_fee: 4000 };
+  }
+
+  async checkBeneficiary(): Promise<unknown> {
+    return { valid: true };
+  }
+
+  async disburse(input: {
+    accountId: string;
+    referenceNumber: string;
+    bankCode: string;
+    bankAccountNumber: string;
+    amount: number;
+  }): Promise<SingaPayDisbursement> {
+    return {
+      transactionId: `mock-dsb-${Date.now()}`,
+      referenceNumber: input.referenceNumber,
+      status: "SUCCESS",
+      netAmount: input.amount,
+      fee: 0,
+      failedReason: null,
+    };
+  }
+
+  async accountTransfer(input: { amount: number }): Promise<{ transactionId: string; status: string }> {
+    return { transactionId: `mock-at-${Date.now()}`, status: "success" };
+  }
+
   async createInvoice(input: CreateInvoiceInput): Promise<InvoiceResult> {
     return {
       externalId: input.externalId,
@@ -419,7 +601,7 @@ export function createSingaPayProvider(env: SingaPayEnv): PaymentProviderClient 
   return new MockSingaPayProvider();
 }
 
-/** Client surface for merchant KYB (real or mock — both implement it). */
+/** Client surface for merchant KYB + payouts (real or mock — both implement it). */
 export interface SingaPayAccountsClientLike {
   createSubAccount(input: {
     name: string;
@@ -427,6 +609,23 @@ export interface SingaPayAccountsClientLike {
   }): Promise<SingaPayAccount>;
   getAccount(accountId: string): Promise<SingaPayAccount>;
   listPaymentMethods(): Promise<SingaPayPaymentMethodCatalog>;
+  checkBalance(accountId: string): Promise<SingaPayBalance>;
+  checkFee(input: { accountId: string; bankSwiftCode: string; amount: number }): Promise<unknown>;
+  checkBeneficiary(input: { bankSwiftCode: string; bankAccountNumber: string }): Promise<unknown>;
+  disburse(input: {
+    accountId: string;
+    referenceNumber: string;
+    bankCode: string;
+    bankAccountNumber: string;
+    amount: number;
+    notes?: string;
+  }): Promise<SingaPayDisbursement>;
+  accountTransfer(input: {
+    accountId: string;
+    amount: number;
+    beneficiaryAccountNumber: string;
+    merchantRefNo?: string;
+  }): Promise<{ transactionId: string; status: string }>;
 }
 
 /** Create a SingaPay client for merchant KYB flows (real or mock). */

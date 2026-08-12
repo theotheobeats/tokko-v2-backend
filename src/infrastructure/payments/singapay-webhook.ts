@@ -59,6 +59,8 @@ async function sha256Hex(data: string): Promise<string> {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+export { sha256Hex };
+
 /** Recursively sort object keys alphabetically (arrays keep their order). */
 function sortRecursive(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortRecursive);
@@ -70,6 +72,8 @@ function sortRecursive(value: unknown): unknown {
   }
   return value;
 }
+
+export { sortRecursive };
 
 export async function verifySingaPayWebhookSignature(params: {
   rawBody: string;

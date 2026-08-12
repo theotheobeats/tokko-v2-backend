@@ -15,3 +15,4 @@ export { sections } from "./sections";
 export { orders } from "./orders";
 export { regions } from "./regions";
 export { appSettings } from "./app-settings";
+export { payouts } from "./payouts";

@@ -725,4 +725,85 @@ adminRouter.patch("/payments/provider", zValidator("json", providerSwitchSchema)
   return c.json({ provider });
 });
 
+// ---------------------------------------------------------------------------
+// Merchant payouts (SingaPay) — sweep commission + disburse to merchant bank
+// ---------------------------------------------------------------------------
+
+import { GetPayoutSummary, RunPayout, PayoutStoreNotFoundError, PayoutKYBNotVerifiedError, PayoutNoBankError, PayoutBankUnsupportedError, PayoutInsufficientBalanceError, PayoutProviderError } from "../../application/admin/admin-payouts";
+import { D1PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
+import { createSingaPayAccountsClient } from "../../infrastructure/payments/singapay-client";
+
+// GET /api/admin/payouts/summary?storeId=
+adminRouter.get("/payouts/summary", async (c) => {
+  const storeId = c.req.query("storeId");
+  if (!storeId) return c.json({ error: { code: "VALIDATION", message: "storeId diperlukan." } }, 400);
+  const db = createDb(c.env.DB);
+  const result = await new GetPayoutSummary(
+    new D1StoreRepository(db),
+    new D1CommissionLedger(db),
+    createSingaPayAccountsClient(c.env),
+  ).execute(storeId as EntityId);
+  if (!result.ok) return c.json({ error: result.error }, result.error instanceof PayoutStoreNotFoundError ? 404 : 502);
+  return c.json({ summary: result.value });
+});
+
+// POST /api/admin/payouts  { storeId }
+adminRouter.post("/payouts", zValidator("json", z.object({ storeId: z.string() })), async (c) => {
+  const adminId = c.get("adminId");
+  const { storeId } = c.req.valid("json");
+  const db = createDb(c.env.DB);
+  const settlementAccount = c.env.SINGAPAY_SETTLEMENT_ACCOUNT_NUMBER ?? "";
+  if (!settlementAccount) {
+    return c.json({ error: { code: "SETTLEMENT_NOT_CONFIGURED", message: "Akun settlement platform belum dikonfigurasi." } }, 503);
+  }
+
+  const result = await new RunPayout(
+    new D1StoreRepository(db),
+    new D1CommissionLedger(db),
+    new D1PayoutRepository(db),
+    createSingaPayAccountsClient(c.env),
+    settlementAccount,
+  ).execute(storeId as EntityId);
+
+  if (!result.ok) {
+    const status = result.error instanceof PayoutStoreNotFoundError ? 404
+      : result.error instanceof PayoutKYBNotVerifiedError ? 403
+      : result.error instanceof PayoutNoBankError || result.error instanceof PayoutBankUnsupportedError ? 400
+      : result.error instanceof PayoutInsufficientBalanceError ? 400
+      : result.error instanceof PayoutProviderError ? 502
+      : 400;
+    return c.json({ error: result.error }, status);
+  }
+
+  await writeAdminLog(db, {
+    adminId,
+    action: "payout.run",
+    targetType: "store",
+    targetId: storeId,
+    detail: {
+      amount: result.value.payout.amount,
+      commission: result.value.payout.commission,
+      payoutRef: result.value.payout.payoutRef,
+      sweepRef: result.value.payout.sweepRef,
+      status: result.value.payout.status,
+    },
+  });
+
+  return c.json({ payout: result.value.payout, disbursement: result.value.disbursement }, 201);
+});
+
+// GET /api/admin/payouts?storeId=&limit=&offset=
+adminRouter.get("/payouts", async (c) => {
+  const db = createDb(c.env.DB);
+  const storeId = c.req.query("storeId");
+  const limit = parseInt(c.req.query("limit") ?? "50");
+  const offset = parseInt(c.req.query("offset") ?? "0");
+  const res = await new D1PayoutRepository(db).list({
+    storeId: storeId ? (storeId as EntityId) : undefined,
+    limit,
+    offset,
+  });
+  return c.json(res);
+});
+
 export { adminRouter };
