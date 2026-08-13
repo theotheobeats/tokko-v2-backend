@@ -312,7 +312,10 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
     const disb = normalizeSingaPayDisbursementWebhook(payload as SingaPayDisbursementWebhookPayload);
     if (disb) {
       const db = createDb(env.DB);
-      const disbResult = await new HandleDisbursementWebhook(new D1PayoutRepository(db)).execute(disb);
+      const disbResult = await new HandleDisbursementWebhook(
+        new D1PayoutRepository(db),
+        new D1PayoutRequestRepository(db),
+      ).execute(disb);
       if (!disbResult.ok) return c.json({ error: { code: "PAYOUT_NOT_FOUND" } }, 404);
       return c.json({ handled: disbResult.value.handled });
     }
@@ -431,7 +434,10 @@ paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
   }
 
   const db = createDb(env.DB);
-  const result = await new HandleDisbursementWebhook(new D1PayoutRepository(db)).execute(normalized);
+  const result = await new HandleDisbursementWebhook(
+    new D1PayoutRepository(db),
+    new D1PayoutRequestRepository(db),
+  ).execute(normalized);
   if (!result.ok) {
     // Unknown payout ref — 404 so SingaPay retries (covers the race where
     // the notification lands before the payout row is committed).

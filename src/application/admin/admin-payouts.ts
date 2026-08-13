@@ -15,6 +15,7 @@ import { ok, err, type EntityId } from "../../domain/shared/types";
 import type { StoreRepository } from "../store/store-repo";
 import type { CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
 import type { PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
+import type { PayoutRequestRepository } from "../../infrastructure/repos/d1-payout-request-repo";
 import type { SingaPayAccountsClientLike, SingaPayBalance } from "../../infrastructure/payments/singapay-client";
 import type { NormalizedSingaPayDisbursementWebhook } from "../../infrastructure/payments/singapay-webhook";
 import { EMPTY_TEST_ACCESS, isTestEmail, type TestAccess } from "../payout/test-access";
@@ -324,7 +325,11 @@ export class RunPayout {
  * a settled payout is terminal; repeated/late notifications are no-ops.
  */
 export class HandleDisbursementWebhook {
-  constructor(private readonly payoutRepo: PayoutRepository) {}
+  constructor(
+    private readonly payoutRepo: PayoutRepository,
+    /** Optional: sync the linked payout request when the money-out fails. */
+    private readonly requestRepo?: PayoutRequestRepository,
+  ) {}
 
   async execute(
     input: NormalizedSingaPayDisbursementWebhook,
@@ -340,6 +345,20 @@ export class HandleDisbursementWebhook {
       providerTransactionId: input.transactionId,
       failedReason: input.failedReason,
     });
+
+    // Rejected money-out → park the linked request back to approved (retryable)
+    // so it is never left marked "paid" when the money did not move.
+    if (input.status === "failed" && this.requestRepo) {
+      const linked = await this.requestRepo.findByPayoutId(payout.id);
+      if (linked && linked.status === "paid") {
+        const reason = input.failedReason ?? "Pencairan ditolak penyedia pembayaran.";
+        await this.requestRepo.update(linked.id, {
+          status: "approved",
+          decisionNote: reason,
+        });
+      }
+    }
+
     return ok({ handled: true });
   }
 }

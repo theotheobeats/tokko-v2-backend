@@ -25,6 +25,8 @@ export interface PayoutRequestRepository {
   findById(id: string): Promise<PayoutRequestRecord | null>;
   /** Open request for a store (pending or approved) — one at a time. */
   findOpenByStoreId(storeId: EntityId): Promise<PayoutRequestRecord | null>;
+  /** Find the request that produced this payout (webhook sync on failure). */
+  findByPayoutId(payoutId: string): Promise<PayoutRequestRecord | null>;
   list(filters?: {
     storeId?: EntityId;
     status?: PayoutRequestStatus;
@@ -79,6 +81,11 @@ export class D1PayoutRequestRepository implements PayoutRequestRepository {
       )
       .orderBy(desc(payoutRequests.createdAt))
       .get();
+    return row ? this._toRecord(row) : null;
+  }
+
+  async findByPayoutId(payoutId: string): Promise<PayoutRequestRecord | null> {
+    const row = await this.db.select().from(payoutRequests).where(eq(payoutRequests.payoutId, payoutId)).get();
     return row ? this._toRecord(row) : null;
   }
 
