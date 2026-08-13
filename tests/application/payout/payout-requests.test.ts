@@ -446,4 +446,35 @@ describe("ReviewPayoutRequest", () => {
       expect.objectContaining({ status: "approved", decisionNote: expect.any(String) }),
     );
   });
+
+  it("skips the commission sweep when nothing is owed (amount 0 rejected by SingaPay)", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id, amount: 1_250_000, commission: 0, balanceBefore: 1_250_000 };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+    const payoutRepo = mockPayoutRepo();
+    const accounts = mockAccounts({ available: 1_250_000, balance: 1_250_000, pending: 0, held: 0 });
+
+    const result = await new ReviewPayoutRequest(
+      requestRepo,
+      mockStoreRepo(store),
+      mockLedger(0), // commission owed = 0
+      payoutRepo,
+      accounts,
+      "settlement-acc",
+    ).execute(request.id, { action: "approve", adminId: "admin-1" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.executed).toBe(true);
+    expect(result.value.request.status).toBe("paid");
+    // No sweep with amount 0 — the full available goes to the bank.
+    expect(accounts.accountTransfer).not.toHaveBeenCalled();
+    expect(accounts.disburse).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 1_250_000 }),
+    );
+    expect(payoutRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ commission: 0, sweepRef: null }),
+    );
+  });
 });

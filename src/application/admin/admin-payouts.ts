@@ -237,13 +237,17 @@ export class RunPayout {
     const ref = `payout-${store.id.slice(0, 8)}-${Date.now()}`;
 
     try {
-      // 1. Sweep platform commission → our settlement account.
-      const sweep = await this.accounts.accountTransfer({
-        accountId,
-        amount: commission,
-        beneficiaryAccountNumber: this.settlementAccountNumber,
-        merchantRefNo: `${ref}-commission`,
-      });
+      // 1. Sweep platform commission → our settlement account. Skipped when
+      //    nothing is owed — SingaPay's account-transfer rejects amount 0.
+      const sweep =
+        commission > 0
+          ? await this.accounts.accountTransfer({
+              accountId,
+              amount: commission,
+              beneficiaryAccountNumber: this.settlementAccountNumber,
+              merchantRefNo: `${ref}-commission`,
+            })
+          : null;
 
       // 2. Disburse the remainder → merchant bank.
       const disb = await this.accounts.disburse({
@@ -260,7 +264,7 @@ export class RunPayout {
         amount: payoutAmount,
         commission,
         balanceBefore: balance.available,
-        sweepRef: sweep.transactionId,
+        sweepRef: sweep?.transactionId ?? null,
         payoutRef: disb.referenceNumber,
         providerTransactionId: disb.transactionId,
         status: disb.status === "FAILED" ? "failed" : "submitted",
