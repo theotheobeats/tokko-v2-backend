@@ -303,7 +303,29 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
   }
 
   const normalized = normalizeSingaPayWebhook(payload);
+
+  // Shared-endpoint resilience (docs: "Shared Webhook Endpoints" — events are
+  // routed by payload shape when multiple notif_urls point at one URL). If the
+  // disbursement/settlement URLs were configured to hit this path, dispatch by
+  // shape so money-out events are never swallowed by the payment-link handler.
   if (!normalized) {
+    const disb = normalizeSingaPayDisbursementWebhook(payload as SingaPayDisbursementWebhookPayload);
+    if (disb) {
+      const db = createDb(env.DB);
+      const disbResult = await new HandleDisbursementWebhook(new D1PayoutRepository(db)).execute(disb);
+      if (!disbResult.ok) return c.json({ error: { code: "PAYOUT_NOT_FOUND" } }, 404);
+      return c.json({ handled: disbResult.value.handled });
+    }
+    const settlement = normalizeSingaPaySettlementWebhook(payload as SingaPaySettlementWebhookPayload);
+    if (settlement) {
+      const db = createDb(env.DB);
+      const settResult = await new HandleSettlementWebhook(
+        new D1SettlementRepository(db),
+        new D1StoreRepository(db),
+      ).execute(settlement);
+      if (!settResult.ok) return c.json({ error: { code: "UNKNOWN" } }, 400);
+      return c.json({ handled: settResult.value.handled });
+    }
     return c.json({ handled: false });
   }
 
