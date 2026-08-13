@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
+import { createAuth } from "../../lib/auth";
 import type { Env } from "../../types";
 import { requireUser } from "../middleware/auth";
 import { createDb } from "../../infrastructure/db/drizzle";
@@ -59,7 +60,7 @@ import {
   PayoutRequestNotReviewableError,
 } from "../../application/payout/payout-requests";
 import { GetEarningsDashboard, EarningsStoreNotFoundError } from "../../application/payout/earnings";
-import { resolveTestAccess } from "../../application/payout/test-access";
+import { resolveTestAccess, isTestEmail } from "../../application/payout/test-access";
 
 /**
  * Payment routes (mounted under /api):
@@ -98,7 +99,13 @@ paymentsRouter.post("/orders/:orderId/payment", zValidator("json", createPayment
   if (!order) return c.json({ error: { code: "ORDER_NOT_FOUND", message: "Pesanan tidak ditemukan." } }, 404);
   const store = await new D1StoreRepository(db).findById(order.storeId);
   if (!store) return c.json({ error: { code: "STORE_NOT_FOUND" } }, 404);
-  const canOnline = await new PlanService(new D1SubscriptionRepository(db)).canUseOnlineCheckout(store);
+  // Test-owner bypass (KYB_TEST_EMAILS): the whitelisted owner may pay their
+  // own store online without a Pro/Commerce plan (staging checkout testing).
+  const session = await createAuth(c.env).api.getSession({ headers: c.req.raw.headers }).catch(() => null);
+  const isTestOwner =
+    !!session && session.user.id === store.ownerId && isTestEmail(session.user.email, resolveTestAccess(c.env));
+  const canOnline =
+    isTestOwner || (await new PlanService(new D1SubscriptionRepository(db)).canUseOnlineCheckout(store));
   if (!canOnline) {
     return c.json({
       error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Pro dan Commerce." },

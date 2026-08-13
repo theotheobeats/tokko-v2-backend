@@ -23,6 +23,7 @@ import { COURIER_CATALOG, DEFAULT_COURIERS } from "../../application/shipping/co
 import { PlanService, type PlanView } from "../../application/plan/plan-service";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
+import { isTestEmail, resolveTestAccess } from "../../application/payout/test-access";
 import { activatePendingPlan } from "../../application/plan/pending-plan";
 import { createProviderClient, resolveActivePaymentProvider, providerIsReal } from "../../infrastructure/payments/registry";
 import { createSingaPayAccountsClient, SINGAPAY_METHOD_CODES } from "../../infrastructure/payments/singapay-client";
@@ -295,6 +296,13 @@ storesRouter.get("/by-subdomain", async (c) => {
 
   const plan = await planService(db).viewOf(store);
   const base = storeJSON(store, plan);
+  // Test-owner bypass (KYB_TEST_EMAILS): the whitelisted owner sees online
+  // checkout on their own storefront even without KYB/plan — staging testing
+  // needs the full payment → settlement flow to work end-to-end.
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers }).catch(() => null);
+  const isTestOwner =
+    !!session && session.user.id === store.ownerId && isTestEmail(session.user.email, resolveTestAccess(c.env));
   // Online checkout must ALSO pass merchant KYB (SingaPay managed sub-account)
   // — otherwise the storefront falls back to manual transfer via WhatsApp.
   const settings = new D1AppSettingsRepository(db);
@@ -304,7 +312,11 @@ storesRouter.get("/by-subdomain", async (c) => {
   // (the merchant toggle stays on their settings, but it doesn't surface).
   // KYB fields are owner/admin-only — never expose them on the public storefront.
   const { singapayAccountId: _sa, kybStatus: _kb, ...publicBase } = base;
-  const storePayload = { ...publicBase, paymentOnline: base.paymentOnline && plan.onlineCheckout && kybOk, paused };
+  const storePayload = {
+    ...publicBase,
+    paymentOnline: isTestOwner ? true : base.paymentOnline && plan.onlineCheckout && kybOk,
+    paused,
+  };
 
   return c.json({
     store: storePayload,
@@ -374,9 +386,13 @@ storesRouter.patch("/:id", zValidator("json", z.object({
 
   // Gate: online checkout (Xendit) is available on Pro & Commerce.
   if (body.paymentOnline === true && !(await planService(db).canUseOnlineCheckout(store))) {
-    return c.json({
-      error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Pro dan Commerce.", field: "paymentOnline" },
-    }, 403);
+    // Test-owner bypass (KYB_TEST_EMAILS) — the whitelisted owner may enable it.
+    const isTestOwner = isTestEmail(session.user.email, resolveTestAccess(c.env));
+    if (!isTestOwner) {
+      return c.json({
+        error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Pro dan Commerce.", field: "paymentOnline" },
+      }, 403);
+    }
   }
 
   // Enforce e-payment once merchant KYB is approved (SingaPay) — online
