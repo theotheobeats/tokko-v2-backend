@@ -21,7 +21,7 @@ import type { PayoutRepository, PayoutRecord } from "../../infrastructure/repos/
 import type { PayoutRequestRepository, PayoutRequestRecord } from "../../infrastructure/repos/d1-payout-request-repo";
 import type { SettlementRepository, SettlementRecord } from "../../infrastructure/repos/d1-settlement-repo";
 import type { SingaPayAccountsClientLike, SingaPayBalance } from "../../infrastructure/payments/singapay-client";
-import { bankCodeFor, bankNameFor } from "../admin/admin-payouts";
+import { bankCodeFor, bankNameFor, quoteDisbursementFee } from "../admin/admin-payouts";
 import { EMPTY_TEST_ACCESS, isTestEmail, type TestAccess } from "./test-access";
 import type { Order } from "../../domain/order/order";
 
@@ -215,6 +215,13 @@ export class GetEarningsDashboard {
     const accountNumber = store.payoutBankAccountNumber ?? store.bankAccountNumber;
     const accountName = store.payoutBankAccountName ?? store.bankAccountName;
 
+    // Disbursement debits amount + fee — show the net ready amount so the
+    // merchant requests what can actually be paid out (else SP003).
+    const fee = accountId
+      ? await quoteDisbursementFee(this.accounts, accountId, bankCode ?? "", Math.max(0, balance.available - commissionOwed))
+      : 0;
+    const readyToPayout = Math.max(0, balance.available - commissionOwed - fee);
+
     return ok({
       summary: {
         storeId: store.id,
@@ -229,7 +236,7 @@ export class GetEarningsDashboard {
       },
       balance,
       commissionOwed,
-      readyToPayout: Math.max(0, balance.available - commissionOwed),
+      readyToPayout,
       earnings,
       clearing: { pending: balance.pending, settlements },
       transactions,

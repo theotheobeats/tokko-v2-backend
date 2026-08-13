@@ -41,7 +41,7 @@ export class PayoutBankUnsupportedError extends Error {
 }
 export class PayoutInsufficientBalanceError extends Error {
   code = "PAYOUT_INSUFFICIENT_BALANCE";
-  constructor() { super("Saldo tidak cukup untuk komisi + pencairan."); }
+  constructor(message = "Saldo tidak cukup untuk komisi + pencairan.") { super(message); }
 }
 export class PayoutNotFoundError extends Error {
   code = "PAYOUT_NOT_FOUND";
@@ -52,6 +52,9 @@ export class PayoutProviderError extends Error {
   code = "PAYOUT_PROVIDER_ERROR";
   constructor(message: string) { super(message); }
 }
+
+/** SingaPay's minimum disbursement amount (docs: Send Money → Bank Coverage). */
+const MIN_PAYOUT_AMOUNT = 10_000;
 
 /** National bank codes accepted by the SingaPay v2 disbursement. */
 const ID_BANK_CODES: Record<string, string> = {
@@ -111,6 +114,28 @@ const BANK_SWIFT: Record<string, string> = {
 /** SWIFT for a national code; null for digital banks (no SWIFT). */
 export function swiftCodeFor(bankCode: string | null | undefined): string | null {
   return bankCode ? (BANK_SWIFT[bankCode] ?? null) : null;
+}
+
+/**
+ * Quote the disbursement transfer fee (SingaPay check-fee). The disbursement
+ * debits `amount + fee` from the account — paying out the full available
+ * balance without deducting the fee fails with SP003 (Insufficient Balance).
+ * Returns 0 when the fee cannot be quoted (no SWIFT code / quote error).
+ */
+export async function quoteDisbursementFee(
+  accounts: SingaPayAccountsClientLike,
+  accountId: string,
+  bankCode: string,
+  grossAmount: number,
+): Promise<number> {
+  const swift = swiftCodeFor(bankCode);
+  if (!swift) return 0;
+  try {
+    const quote = await accounts.checkFee({ accountId, bankSwiftCode: swift, amount: grossAmount });
+    return Math.round(Number(quote?.transfer_fee ?? 0));
+  } catch {
+    return 0;
+  }
 }
 
 export interface PayoutSummaryView {
@@ -231,8 +256,17 @@ export class RunPayout {
     }
 
     const commission = await this.ledger.sumByStoreId(store.id);
-    const payoutAmount = balance.available - commission;
-    if (payoutAmount <= 0) return err(new PayoutInsufficientBalanceError());
+    // Gross the merchant wants (before the bank transfer fee).
+    const grossTarget = balance.available - commission;
+    if (grossTarget <= 0) return err(new PayoutInsufficientBalanceError());
+
+    // SingaPay debits amount + fee — quote the fee so the payout never exceeds
+    // the available balance (SP003). Net = what the merchant actually receives.
+    const fee = await quoteDisbursementFee(this.accounts, accountId, bankCode, grossTarget);
+    const payoutAmount = grossTarget - fee;
+    if (payoutAmount < MIN_PAYOUT_AMOUNT) {
+      return err(new PayoutInsufficientBalanceError("Saldo tidak cukup untuk pencairan (termasuk biaya transfer)."));
+    }
 
     const ref = `payout-${store.id.slice(0, 8)}-${Date.now()}`;
 

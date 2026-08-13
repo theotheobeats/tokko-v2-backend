@@ -477,4 +477,32 @@ describe("ReviewPayoutRequest", () => {
       expect.objectContaining({ commission: 0, sweepRef: null }),
     );
   });
+
+  it("deducts the quoted transfer fee from the disbursement (gross = net + fee)", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id, amount: 1_196_000, commission: 50_000, balanceBefore: 1_250_000 };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+    const payoutRepo = mockPayoutRepo();
+    const accounts = mockAccounts({ available: 1_250_000, balance: 1_250_000, pending: 0, held: 0 });
+    accounts.checkFee = vi.fn().mockResolvedValue({ transfer_fee: 4000 });
+
+    const result = await new ReviewPayoutRequest(
+      requestRepo,
+      mockStoreRepo(store),
+      mockLedger(50_000),
+      payoutRepo,
+      accounts,
+      "settlement-acc",
+    ).execute(request.id, { action: "approve", adminId: "admin-1" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.executed).toBe(true);
+    // available − commission − fee = 1_250_000 − 50_000 − 4_000
+    expect(accounts.disburse).toHaveBeenCalledWith(expect.objectContaining({ amount: 1_196_000 }));
+    expect(payoutRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 1_196_000, commission: 50_000 }),
+    );
+  });
 });

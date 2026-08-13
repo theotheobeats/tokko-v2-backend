@@ -805,6 +805,7 @@ adminRouter.post("/payouts", zValidator("json", z.object({ storeId: z.string() }
       commission: result.value.payout.commission,
       payoutRef: result.value.payout.payoutRef,
       sweepRef: result.value.payout.sweepRef,
+      fee: result.value.disbursement.fee,
       status: result.value.payout.status,
     },
   });
@@ -920,6 +921,7 @@ adminRouter.post(
           commission: value.payout.commission,
           payoutRef: value.payout.payoutRef,
           sweepRef: value.payout.sweepRef,
+          fee: value.disbursement?.fee ?? 0,
           status: value.payout.status,
         },
       });
@@ -933,6 +935,7 @@ adminRouter.post(
           commission: value.payout.commission,
           payoutRef: value.payout.payoutRef,
           sweepRef: value.payout.sweepRef,
+          fee: value.disbursement?.fee ?? 0,
           status: value.payout.status,
           source: "payout_request",
         },

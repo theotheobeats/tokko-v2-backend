@@ -127,6 +127,13 @@ export interface SingaPayDisbursement {
   failedReason: string | null;
 }
 
+/** Fee quote from GET disbursement check-fee (amounts are decimal strings). */
+export interface SingaPayFeeQuote {
+  transfer_fee?: string | number;
+  gross_amount?: string | number;
+  net_amount?: string | number;
+}
+
 interface SingaPayDisbursementData {
   transaction_id: string;
   reference_number: string;
@@ -428,8 +435,8 @@ export class SingaPayClient implements PaymentProviderClient {
     accountId: string;
     bankSwiftCode: string;
     amount: number;
-  }): Promise<unknown> {
-    return this.request(`/api/v1.0/disbursement/${encodeURIComponent(input.accountId)}/check-fee`, {
+  }): Promise<SingaPayFeeQuote> {
+    return this.request<SingaPayFeeQuote>(`/api/v1.0/disbursement/${encodeURIComponent(input.accountId)}/check-fee`, {
       method: "POST",
       body: JSON.stringify({ bank_swift_code: input.bankSwiftCode, amount: input.amount }),
     });
@@ -559,7 +566,7 @@ export class MockSingaPayProvider implements PaymentProviderClient {
     return { available: 1_250_000, balance: 1_250_000, pending: 0, held: 0 };
   }
 
-  async checkFee(): Promise<unknown> {
+  async checkFee(): Promise<SingaPayFeeQuote> {
     return { transfer_fee: 4000 };
   }
 
@@ -644,7 +651,7 @@ export interface SingaPayAccountsClientLike {
   getAccount(accountId: string): Promise<SingaPayAccount>;
   listPaymentMethods(): Promise<SingaPayPaymentMethodCatalog>;
   checkBalance(accountId: string): Promise<SingaPayBalance>;
-  checkFee(input: { accountId: string; bankSwiftCode: string; amount: number }): Promise<unknown>;
+  checkFee(input: { accountId: string; bankSwiftCode: string; amount: number }): Promise<SingaPayFeeQuote>;
   checkBeneficiary(input: { bankSwiftCode: string; bankAccountNumber: string }): Promise<unknown>;
   disburse(input: {
     accountId: string;

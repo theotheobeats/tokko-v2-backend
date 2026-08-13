@@ -30,6 +30,7 @@ import {
   PayoutProviderError,
   bankCodeFor,
   isSupportedBankCode,
+  quoteDisbursementFee,
   RunPayout,
   type PayoutResult,
 } from "../admin/admin-payouts";
@@ -121,10 +122,16 @@ export class CreatePayoutRequest {
     }
 
     const commission = await this.ledger.sumByStoreId(store.id);
-    const readyToPayout = balance.available - commission;
+    // Disbursement debits amount + transfer fee — the ready amount is net of
+    // the quoted fee (otherwise the payout would fail with SP003).
+    const grossTarget = balance.available - commission;
+    const fee = await quoteDisbursementFee(this.accounts, accountId, bankCode, grossTarget);
+    const readyToPayout = grossTarget - fee;
     const amount = input.amount ?? readyToPayout;
 
-    if (readyToPayout <= 0) return err(new PayoutInsufficientBalanceError());
+    if (readyToPayout < MIN_PAYOUT_AMOUNT) {
+      return err(new PayoutInsufficientBalanceError("Saldo tidak cukup untuk pencairan (termasuk biaya transfer)."));
+    }
     if (amount < MIN_PAYOUT_AMOUNT) {
       return err(new PayoutRequestInvalidAmountError(`Jumlah pencairan minimal Rp ${MIN_PAYOUT_AMOUNT.toLocaleString("id-ID")}.`));
     }
