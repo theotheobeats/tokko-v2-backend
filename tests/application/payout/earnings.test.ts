@@ -259,14 +259,15 @@ describe("GetEarningsDashboard", () => {
   });
 
   it("falls back to master account balance + settlements for whitelisted test users", async () => {
-    // Store has no sub-account and no kyb status.
+    // Store HAS a sub-account but it is pre-KYB (kyb_in_review, no money) —
+    // whitelisted users must read the master account instead.
     const store = Store.create({
       ownerId,
       name: "Anna Bakery",
       businessType: BusinessType.Food,
       aestheticPreference: Aesthetic.Warm,
       whatsappNumber: "628123456789",
-    });
+    }).updatePaymentProviderAccount("01KZT9ZAWR132QREKQWAV844QE", "kyb_in_review");
     const orderRepo: OrderRepository = {
       findById: vi.fn(),
       findByStoreId: vi.fn().mockResolvedValue([]),

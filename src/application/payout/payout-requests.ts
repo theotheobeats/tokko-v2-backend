@@ -100,7 +100,11 @@ export class CreatePayoutRequest {
     if (!store) return err(new PayoutStoreNotFoundError());
 
     const isTest = isTestEmail(ownerEmail, this.testAccess);
-    const accountId = store.singapayAccountId ?? (isTest ? this.testAccess.masterAccountId : null);
+    // Test users run against the master account (their sub-account is pre-KYB
+    // and holds no money); real merchants use their own sub-account.
+    const accountId = isTest
+      ? this.testAccess.masterAccountId ?? store.singapayAccountId
+      : store.singapayAccountId;
     if (!accountId) return err(new PayoutNoAccountError());
     if (store.kybStatus !== "kyb_verified" && !isTest) return err(new PayoutKYBNotVerifiedError());
 

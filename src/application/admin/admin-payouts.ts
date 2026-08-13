@@ -140,8 +140,12 @@ export class GetPayoutSummary {
 
     const isTest = isTestEmail(ownerEmail, this.testAccess);
     const effectiveKyb = store.kybStatus === "kyb_verified" || isTest ? "kyb_verified" : store.kybStatus;
-    // Test stores without a sub-account read the master account (balance + settlements).
-    const accountId = store.singapayAccountId ?? (isTest ? this.testAccess.masterAccountId : null);
+    // Test users ALWAYS read the master account — their own sub-account is
+    // pre-KYB (kyb_in_review, zero balance) while the test money lands in the
+    // master. Real merchants always use their own sub-account.
+    const accountId = isTest
+      ? this.testAccess.masterAccountId ?? store.singapayAccountId
+      : store.singapayAccountId;
 
     let balance: SingaPayBalance = { available: 0, balance: 0, pending: 0, held: 0 };
     if (accountId) {
@@ -206,7 +210,11 @@ export class RunPayout {
     if (!store) return err(new PayoutStoreNotFoundError());
 
     const isTest = isTestEmail(ownerEmail, this.testAccess);
-    const accountId = store.singapayAccountId ?? (isTest ? this.testAccess.masterAccountId : null);
+    // Test users run against the master account (their sub-account is pre-KYB
+    // and holds no money); real merchants use their own sub-account.
+    const accountId = isTest
+      ? this.testAccess.masterAccountId ?? store.singapayAccountId
+      : store.singapayAccountId;
     if (!accountId) return err(new PayoutNoAccountError());
     if (store.kybStatus !== "kyb_verified" && !isTest) return err(new PayoutKYBNotVerifiedError());
     // Prefer the dedicated payout bank; fall back to the manual-transfer bank.

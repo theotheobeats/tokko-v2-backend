@@ -113,8 +113,12 @@ export class GetEarningsDashboard {
 
     const isTest = isTestEmail(ownerEmail, this.testAccess);
     const effectiveKyb = store.kybStatus === "kyb_verified" || isTest ? "kyb_verified" : store.kybStatus;
-    // Test stores without a sub-account read the master account (balance + settlements).
-    const accountId = store.singapayAccountId ?? (isTest ? this.testAccess.masterAccountId : null);
+    // Test users ALWAYS read the master account (their own sub-account is
+    // pre-KYB with zero balance; test money settles into the master). Real
+    // merchants use their own sub-account.
+    const accountId = isTest
+      ? this.testAccess.masterAccountId ?? store.singapayAccountId
+      : store.singapayAccountId;
 
     // Live SingaPay balance (funds live in the merchant's own sub-account).
     let balance: SingaPayBalance = { available: 0, balance: 0, pending: 0, held: 0 };
