@@ -299,7 +299,9 @@ export class SingaPayClient implements PaymentProviderClient {
           reff_no: reffNo,
           title: label,
           required_customer_detail: true,
-          customer_pays_fee: false,
+          // Processing fee is paid by the CUSTOMER (added on top of the amount
+          // charged) — the merchant receives the full order amount.
+          customer_pays_fee: true,
           max_usage: 1, // single successful payment per link
           expired_at: expiredAt,
           total_amount: input.amount,

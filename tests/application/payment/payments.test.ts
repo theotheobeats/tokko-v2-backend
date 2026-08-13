@@ -178,6 +178,42 @@ describe("HandleXenditWebhook", () => {
     void payment;
   });
 
+  it("should mark the payment paid when the amount includes the customer-paid fee", async () => {
+    // customer_pays_fee: the webhook amount = order amount + processing fee.
+    const order = makeOrder();
+    const paymentRepo = mockPaymentRepo();
+    const orderRepo = mockOrderRepo({ findById: vi.fn().mockResolvedValue(order) });
+    const created = await new CreatePayment(orderRepo, paymentRepo, mockProvider()).execute({ orderId: order.id });
+    const paymentDomain = (created as { ok: true; value: import("../../../src/domain/payment/payment").Payment }).value;
+    paymentRepo.findByExternalId = vi.fn().mockResolvedValue(paymentDomain);
+
+    const result = await new HandleXenditWebhook(paymentRepo, orderRepo).execute({
+      ...paidPayload,
+      amount: 85000 + 2125, // order + 2,5% fee
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.handled).toBe(true);
+    expect(paymentDomain.status).toBe("paid");
+    expect(order.paymentConfirmed).toBe(true);
+  });
+
+  it("should reject a forged amount below the invoiced amount", async () => {
+    const order = makeOrder();
+    const paymentRepo = mockPaymentRepo();
+    const orderRepo = mockOrderRepo({ findById: vi.fn().mockResolvedValue(order) });
+    const created = await new CreatePayment(orderRepo, paymentRepo, mockProvider()).execute({ orderId: order.id });
+    const paymentDomain = (created as { ok: true; value: import("../../../src/domain/payment/payment").Payment }).value;
+    paymentRepo.findByExternalId = vi.fn().mockResolvedValue(paymentDomain);
+
+    const result = await new HandleXenditWebhook(paymentRepo, orderRepo).execute({
+      ...paidPayload,
+      amount: 84000, // below the 85000 base
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBeInstanceOf(WebhookAmountMismatchError);
+  });
+
   it("should be idempotent for already-paid payments", async () => {
     const order = makeOrder();
     const paymentRepo = mockPaymentRepo();
