@@ -732,6 +732,14 @@ adminRouter.patch("/payments/provider", zValidator("json", providerSwitchSchema)
 import { GetPayoutSummary, RunPayout, PayoutStoreNotFoundError, PayoutKYBNotVerifiedError, PayoutNoBankError, PayoutBankUnsupportedError, PayoutInsufficientBalanceError, PayoutProviderError } from "../../application/admin/admin-payouts";
 import { D1PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
 import { createSingaPayAccountsClient } from "../../infrastructure/payments/singapay-client";
+import { D1PayoutRequestRepository } from "../../infrastructure/repos/d1-payout-request-repo";
+import { D1SettlementRepository } from "../../infrastructure/repos/d1-settlement-repo";
+import {
+  ListPayoutRequests,
+  ReviewPayoutRequest,
+  PayoutRequestNotFoundError,
+  PayoutRequestNotReviewableError,
+} from "../../application/payout/payout-requests";
 
 // GET /api/admin/payouts/summary?storeId=
 adminRouter.get("/payouts/summary", async (c) => {
@@ -804,6 +812,143 @@ adminRouter.get("/payouts", async (c) => {
     offset,
   });
   return c.json(res);
+});
+
+// ---------------------------------------------------------------------------
+// Payout requests — merchant-requested pencairan, admin-approved.
+//   GET  /api/admin/payout-requests?status=&limit=&offset=
+//   POST /api/admin/payout-requests/:id/review  { action: approve|reject, note? }
+// ---------------------------------------------------------------------------
+adminRouter.get("/payout-requests", async (c) => {
+  const db = createDb(c.env.DB);
+  const status = c.req.query("status");
+  const limit = parseInt(c.req.query("limit") ?? "50");
+  const offset = parseInt(c.req.query("offset") ?? "0");
+
+  const res = await new ListPayoutRequests(new D1PayoutRequestRepository(db)).execute({
+    status: (status as "pending" | "approved" | "paid" | "rejected" | "cancelled") || undefined,
+    limit,
+    offset,
+  });
+
+  // Enrich with store name/subdomain for the review queue.
+  const storeRepo = new D1StoreRepository(db);
+  const stores = await Promise.all(
+    res.requests.map(async (r) => {
+      const s = await storeRepo.findById(r.storeId as EntityId);
+      return s ? { storeId: s.id, storeName: s.name, subdomain: s.subdomain } : null;
+    }),
+  );
+
+  return c.json({
+    requests: res.requests.map((r, i) => ({ ...r, store: stores[i] })),
+    total: res.total,
+  });
+});
+
+adminRouter.post(
+  "/payout-requests/:id/review",
+  zValidator("json", z.object({ action: z.enum(["approve", "reject"]), note: z.string().max(500).optional() })),
+  async (c) => {
+    const adminId = c.get("adminId");
+    const requestId = c.req.param("id");
+    const body = c.req.valid("json");
+    const db = createDb(c.env.DB);
+    const settlementAccount = c.env.SINGAPAY_SETTLEMENT_ACCOUNT_NUMBER ?? "";
+    if (!settlementAccount) {
+      return c.json({ error: { code: "SETTLEMENT_NOT_CONFIGURED", message: "Akun settlement platform belum dikonfigurasi." } }, 503);
+    }
+
+    const result = await new ReviewPayoutRequest(
+      new D1PayoutRequestRepository(db),
+      new D1StoreRepository(db),
+      new D1CommissionLedger(db),
+      new D1PayoutRepository(db),
+      createSingaPayAccountsClient(c.env),
+      settlementAccount,
+    ).execute(requestId, { action: body.action, note: body.note, adminId });
+
+    if (!result.ok) {
+      const status =
+        result.error instanceof PayoutRequestNotFoundError ? 404
+        : result.error instanceof PayoutRequestNotReviewableError ? 409
+        : 400;
+      return c.json({ error: result.error }, status);
+    }
+
+    const value = result.value;
+    if (value.decision === "rejected") {
+      await writeAdminLog(db, {
+        adminId,
+        action: "payout.request.reject",
+        targetType: "store",
+        targetId: value.request.storeId,
+        detail: { requestId: value.request.id, amount: value.request.amount, note: body.note ?? null },
+      });
+      return c.json({ decision: "rejected", request: value.request });
+    }
+
+    if (value.executed && value.payout) {
+      await writeAdminLog(db, {
+        adminId,
+        action: "payout.request.approve",
+        targetType: "store",
+        targetId: value.request.storeId,
+        detail: {
+          requestId: value.request.id,
+          amount: value.payout.amount,
+          commission: value.payout.commission,
+          payoutRef: value.payout.payoutRef,
+          sweepRef: value.payout.sweepRef,
+          status: value.payout.status,
+        },
+      });
+      await writeAdminLog(db, {
+        adminId,
+        action: "payout.run",
+        targetType: "store",
+        targetId: value.request.storeId,
+        detail: {
+          amount: value.payout.amount,
+          commission: value.payout.commission,
+          payoutRef: value.payout.payoutRef,
+          sweepRef: value.payout.sweepRef,
+          status: value.payout.status,
+          source: "payout_request",
+        },
+      });
+      return c.json({
+        decision: "approved",
+        executed: true,
+        request: value.request,
+        payout: value.payout,
+        disbursement: value.disbursement,
+      }, 201);
+    }
+
+    // Approved but execution failed — request kept `approved` for retry.
+    await writeAdminLog(db, {
+      adminId,
+      action: "payout.request.approve_failed",
+      targetType: "store",
+      targetId: value.request.storeId,
+      detail: { requestId: value.request.id, amount: value.request.amount, error: value.error ?? null },
+    });
+    return c.json({
+      decision: "approved",
+      executed: false,
+      error: value.error ?? "Eksekusi pencairan gagal.",
+      request: value.request,
+    }, 502);
+  },
+);
+
+// GET /api/admin/settlements?limit= — recent clearing batches (all stores).
+adminRouter.get("/settlements", async (c) => {
+  const db = createDb(c.env.DB);
+  const limit = parseInt(c.req.query("limit") ?? "30");
+  const settlements = await new D1SettlementRepository(db).listRecent(limit);
+  return c.json({ settlements });
 });
 
 export { adminRouter };

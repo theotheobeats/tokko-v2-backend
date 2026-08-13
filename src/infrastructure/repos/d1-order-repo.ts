@@ -13,7 +13,7 @@ import { generateOrderCode } from "../../domain/order/rules";
 
 export interface OrderRepository {
   findById(id: EntityId): Promise<Order | null>;
-  findByStoreId(storeId: EntityId, filters?: { status?: OrderStatus; since?: string; limit?: number; offset?: number }): Promise<Order[]>;
+  findByStoreId(storeId: EntityId, filters?: { status?: OrderStatus; since?: string; paidOnly?: boolean; limit?: number; offset?: number }): Promise<Order[]>;
   countByStoreId(storeId: EntityId, filters?: { status?: OrderStatus; since?: string }): Promise<{ all: number; pending: number; contacted: number; completed: number }>;
   save(order: Order): Promise<void>;
   /** Admin: list orders across all stores. */
@@ -42,11 +42,12 @@ export class D1OrderRepository implements OrderRepository {
 
   async findByStoreId(
     storeId: EntityId,
-    filters?: { status?: OrderStatus; since?: string; limit?: number; offset?: number }
+    filters?: { status?: OrderStatus; since?: string; paidOnly?: boolean; limit?: number; offset?: number }
   ): Promise<Order[]> {
     const conditions = [eq(orders.storeId, storeId as string)];
     if (filters?.status) conditions.push(eq(orders.status, filters.status));
     if (filters?.since) conditions.push(sql`${orders.createdAt} >= ${filters.since}`);
+    if (filters?.paidOnly) conditions.push(eq(orders.paymentConfirmed, 1));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
 
     const rows = await this.db

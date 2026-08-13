@@ -1,0 +1,398 @@
+import { describe, it, expect, vi } from "vitest";
+import {
+  CreatePayoutRequest,
+  CancelPayoutRequest,
+  ReviewPayoutRequest,
+  PayoutRequestExistsError,
+  PayoutRequestInvalidAmountError,
+  PayoutRequestNotOwnedError,
+  PayoutRequestNotReviewableError,
+  PayoutInsufficientBalanceError,
+  PayoutKYBNotVerifiedError,
+  PayoutNoBankError,
+} from "../../../src/application/payout/payout-requests";
+import { Store } from "../../../src/domain/store/store";
+import { BusinessType, Aesthetic } from "../../../src/domain/store/types";
+import { createEntityId } from "../../../src/domain/shared/types";
+import type { StoreRepository } from "../../../src/application/store/store-repo";
+import type { CommissionLedger } from "../../../src/infrastructure/repos/d1-commission-ledger";
+import type { PayoutRequestRepository, PayoutRequestRecord } from "../../../src/infrastructure/repos/d1-payout-request-repo";
+import type { PayoutRepository, PayoutRecord } from "../../../src/infrastructure/repos/d1-payout-repo";
+import type { SingaPayAccountsClientLike } from "../../../src/infrastructure/payments/singapay-client";
+
+const ownerId = createEntityId();
+
+function makeStore() {
+  return Store.create({
+    ownerId,
+    name: "Anna Bakery",
+    businessType: BusinessType.Food,
+    aestheticPreference: Aesthetic.Warm,
+    whatsappNumber: "628123456789",
+  })
+    .updatePaymentProviderAccount("acc-anna-bakery", "kyb_verified")
+    .setPayoutBank({ code: "014", accountNumber: "1234567890", accountName: "Anna" });
+}
+
+function mockStoreRepo(store?: Store | null): StoreRepository {
+  return {
+    findById: vi.fn().mockResolvedValue(store ?? null),
+    findBySubdomain: vi.fn().mockResolvedValue(null),
+    findByOwnerId: vi.fn().mockResolvedValue(null),
+    findBySingapayAccountId: vi.fn().mockResolvedValue(null),
+    save: vi.fn().mockResolvedValue(undefined),
+    countProducts: vi.fn().mockResolvedValue(0),
+    listAll: vi.fn().mockResolvedValue({ stores: [], total: 0 }),
+    countAll: vi.fn().mockResolvedValue({ total: 0, published: 0, draft: 0, suspended: 0 }),
+    delete: vi.fn().mockResolvedValue(undefined),
+    listByTrialSet: vi.fn().mockResolvedValue([]),
+    listPausedBefore: vi.fn().mockResolvedValue([]),
+  };
+}
+
+function mockLedger(sum = 0): CommissionLedger {
+  return {
+    record: vi.fn().mockResolvedValue(undefined),
+    sumByStoreId: vi.fn().mockResolvedValue(sum),
+    listByStoreId: vi.fn().mockResolvedValue([]),
+  };
+}
+
+function mockAccounts(balance = { available: 1_250_000, balance: 1_250_000, pending: 0, held: 0 }): SingaPayAccountsClientLike {
+  return {
+    createSubAccount: vi.fn(),
+    getAccount: vi.fn(),
+    listPaymentMethods: vi.fn(),
+    checkBalance: vi.fn().mockResolvedValue(balance),
+    checkFee: vi.fn(),
+    checkBeneficiary: vi.fn(),
+    disburse: vi.fn().mockResolvedValue({
+      transactionId: "mock-dsb",
+      referenceNumber: "payout-ref",
+      status: "SUCCESS",
+      netAmount: 1_000_000,
+      fee: 0,
+      failedReason: null,
+    }),
+    accountTransfer: vi.fn().mockResolvedValue({ transactionId: "mock-at", status: "success" }),
+  };
+}
+
+function mockRequestRepo(open?: PayoutRequestRecord | null): PayoutRequestRepository {
+  return {
+    create: vi.fn().mockImplementation(async (input) => ({
+      ...input,
+      id: "req-1",
+      createdAt: new Date().toISOString(),
+    })),
+    findById: vi.fn().mockResolvedValue(null),
+    findOpenByStoreId: vi.fn().mockResolvedValue(open ?? null),
+    list: vi.fn().mockResolvedValue({ requests: [], total: 0 }),
+    update: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function mockPayoutRepo(): PayoutRepository {
+  return {
+    create: vi.fn().mockImplementation(async (input): Promise<PayoutRecord> => ({
+      ...input,
+      id: "payout-1",
+      createdAt: new Date().toISOString(),
+    })),
+    list: vi.fn().mockResolvedValue({ payouts: [], total: 0 }),
+    findByRef: vi.fn().mockResolvedValue(null),
+    updateStatus: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+describe("CreatePayoutRequest", () => {
+  it("creates a pending request for the ready amount by default", async () => {
+    const store = makeStore();
+    const storeRepo = mockStoreRepo(store);
+    const requestRepo = mockRequestRepo();
+    const accounts = mockAccounts();
+
+    const result = await new CreatePayoutRequest(storeRepo, mockLedger(50_000), requestRepo, accounts).execute(
+      store.id,
+      {},
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.request.status).toBe("pending");
+    expect(result.value.request.amount).toBe(1_200_000); // 1_250_000 - 50_000
+    expect(result.value.request.commission).toBe(50_000);
+    expect(result.value.readyToPayout).toBe(1_200_000);
+  });
+
+  it("honors an explicit amount within the ready balance", async () => {
+    const store = makeStore();
+    const storeRepo = mockStoreRepo(store);
+    const requestRepo = mockRequestRepo();
+
+    const result = await new CreatePayoutRequest(storeRepo, mockLedger(50_000), requestRepo, mockAccounts()).execute(
+      store.id,
+      { amount: 500_000, note: "butuh modal" },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.request.amount).toBe(500_000);
+    expect(result.value.request.note).toBe("butuh modal");
+  });
+
+  it("rejects an amount above the ready balance", async () => {
+    const store = makeStore();
+    const result = await new CreatePayoutRequest(
+      mockStoreRepo(store),
+      mockLedger(0),
+      mockRequestRepo(),
+      mockAccounts({ available: 100_000, balance: 100_000, pending: 0, held: 0 }),
+    ).execute(store.id, { amount: 200_000 });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutRequestInvalidAmountError);
+  });
+
+  it("rejects when there is no ready balance", async () => {
+    const store = makeStore();
+    const result = await new CreatePayoutRequest(
+      mockStoreRepo(store),
+      mockLedger(0),
+      mockRequestRepo(),
+      mockAccounts({ available: 0, balance: 0, pending: 0, held: 0 }),
+    ).execute(store.id, {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutInsufficientBalanceError);
+  });
+
+  it("rejects when KYB is not verified", async () => {
+    const store = Store.create({
+      ownerId,
+      name: "Anna Bakery",
+      businessType: BusinessType.Food,
+      aestheticPreference: Aesthetic.Warm,
+      whatsappNumber: "628123456789",
+    }).updatePaymentProviderAccount("acc-anna", "kyb_in_review");
+
+    const result = await new CreatePayoutRequest(mockStoreRepo(store), mockLedger(0), mockRequestRepo(), mockAccounts()).execute(
+      store.id,
+      {},
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutKYBNotVerifiedError);
+  });
+
+  it("rejects when the payout bank is missing", async () => {
+    const store = makeStore().setPayoutBank({ code: "014", accountNumber: "", accountName: null });
+    const result = await new CreatePayoutRequest(mockStoreRepo(store), mockLedger(0), mockRequestRepo(), mockAccounts()).execute(
+      store.id,
+      {},
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutNoBankError);
+  });
+
+  it("rejects when another request is already open", async () => {
+    const store = makeStore();
+    const open: PayoutRequestRecord = {
+      id: "req-open",
+      storeId: store.id,
+      amount: 100_000,
+      commission: 0,
+      balanceBefore: 100_000,
+      status: "pending",
+      note: null,
+      payoutId: null,
+      reviewedBy: null,
+      reviewedAt: null,
+      decisionNote: null,
+      createdAt: new Date().toISOString(),
+    };
+    const result = await new CreatePayoutRequest(
+      mockStoreRepo(store),
+      mockLedger(0),
+      mockRequestRepo(open),
+      mockAccounts(),
+    ).execute(store.id, {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutRequestExistsError);
+  });
+});
+
+describe("CancelPayoutRequest", () => {
+  const base: PayoutRequestRecord = {
+    id: "req-1",
+    storeId: "",
+    amount: 100_000,
+    commission: 0,
+    balanceBefore: 100_000,
+    status: "pending",
+    note: null,
+    payoutId: null,
+    reviewedBy: null,
+    reviewedAt: null,
+    decisionNote: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  it("cancels an own pending request", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+    const storeRepo = mockStoreRepo(store);
+
+    const result = await new CancelPayoutRequest(requestRepo, storeRepo).execute(request.id, ownerId);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.request.status).toBe("cancelled");
+    expect(requestRepo.update).toHaveBeenCalledWith(request.id, { status: "cancelled" });
+  });
+
+  it("forbids cancelling another store's request", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+    const otherStore = Store.create({
+      ownerId: createEntityId(),
+      name: "Other",
+      businessType: BusinessType.Food,
+      aestheticPreference: Aesthetic.Warm,
+      whatsappNumber: "628123456789",
+    });
+    const storeRepo = mockStoreRepo(otherStore);
+
+    const result = await new CancelPayoutRequest(requestRepo, storeRepo).execute(request.id, ownerId);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutRequestNotOwnedError);
+  });
+
+  it("forbids cancelling a reviewed request", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id, status: "rejected" as const };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+
+    const result = await new CancelPayoutRequest(requestRepo, mockStoreRepo(store)).execute(request.id, ownerId);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutRequestNotReviewableError);
+  });
+});
+
+describe("ReviewPayoutRequest", () => {
+  const base: PayoutRequestRecord = {
+    id: "req-1",
+    storeId: "",
+    amount: 1_200_000,
+    commission: 50_000,
+    balanceBefore: 1_250_000,
+    status: "pending",
+    note: null,
+    payoutId: null,
+    reviewedBy: null,
+    reviewedAt: null,
+    decisionNote: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  it("rejects a pending request", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+
+    const result = await new ReviewPayoutRequest(
+      requestRepo,
+      mockStoreRepo(store),
+      mockLedger(),
+      mockPayoutRepo(),
+      mockAccounts(),
+      "settlement-acc",
+    ).execute(request.id, { action: "reject", note: "cek dulu", adminId: "admin-1" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.decision).toBe("rejected");
+    expect(result.value.request.status).toBe("rejected");
+    expect(result.value.request.decisionNote).toBe("cek dulu");
+  });
+
+  it("approves and executes the payout (sweep + disburse)", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+    const payoutRepo = mockPayoutRepo();
+    const accounts = mockAccounts();
+
+    const result = await new ReviewPayoutRequest(
+      requestRepo,
+      mockStoreRepo(store),
+      mockLedger(50_000),
+      payoutRepo,
+      accounts,
+      "settlement-acc",
+    ).execute(request.id, { action: "approve", adminId: "admin-1" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.decision).toBe("approved");
+    expect(result.value.executed).toBe(true);
+    expect(result.value.request.status).toBe("paid");
+    expect(result.value.request.payoutId).toBe("payout-1");
+    expect(accounts.accountTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 50_000, beneficiaryAccountNumber: "settlement-acc" }),
+    );
+    expect(accounts.disburse).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 1_200_000, bankAccountNumber: "1234567890" }),
+    );
+    expect(payoutRepo.create).toHaveBeenCalled();
+    expect(requestRepo.update).toHaveBeenCalledWith(
+      request.id,
+      expect.objectContaining({ status: "paid", payoutId: "payout-1" }),
+    );
+  });
+
+  it("keeps the request approved (retryable) when execution fails", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+    const accounts = mockAccounts({ available: 10_000, balance: 10_000, pending: 0, held: 0 }); // below commission
+
+    const result = await new ReviewPayoutRequest(
+      requestRepo,
+      mockStoreRepo(store),
+      mockLedger(50_000),
+      mockPayoutRepo(),
+      accounts,
+      "settlement-acc",
+    ).execute(request.id, { action: "approve", adminId: "admin-1" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.executed).toBe(false);
+    expect(result.value.error).toBeTruthy();
+    expect(result.value.request.status).toBe("approved");
+    expect(requestRepo.update).toHaveBeenCalledWith(
+      request.id,
+      expect.objectContaining({ status: "approved", decisionNote: expect.any(String) }),
+    );
+  });
+});

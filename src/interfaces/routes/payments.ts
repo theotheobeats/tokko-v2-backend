@@ -16,8 +16,10 @@ import {
   verifySingaPayWebhookSignature,
   normalizeSingaPayWebhook,
   normalizeSingaPayDisbursementWebhook,
+  normalizeSingaPaySettlementWebhook,
   type SingaPayWebhookPayload,
   type SingaPayDisbursementWebhookPayload,
+  type SingaPaySettlementWebhookPayload,
 } from "../../infrastructure/payments/singapay-webhook";
 import { SUBSCRIPTION_EXTERNAL_ID_PREFIX, PENDING_PLAN_EXTERNAL_ID_PREFIX } from "../../domain/plan/pricing";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
@@ -38,6 +40,25 @@ import { PaymentChannel } from "../../domain/payment/types";
 import { D1PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
 import { GetPayoutSummary, HandleDisbursementWebhook, PayoutStoreNotFoundError } from "../../application/admin/admin-payouts";
 import { createSingaPayAccountsClient } from "../../infrastructure/payments/singapay-client";
+import { D1SettlementRepository } from "../../infrastructure/repos/d1-settlement-repo";
+import { D1PayoutRequestRepository } from "../../infrastructure/repos/d1-payout-request-repo";
+import { HandleSettlementWebhook } from "../../application/payout/settlement-webhook";
+import {
+  CreatePayoutRequest,
+  CancelPayoutRequest,
+  ListPayoutRequests,
+  PayoutStoreNotFoundError as PayoutRequestStoreNotFoundError,
+  PayoutNoAccountError as PayoutRequestNoAccountError,
+  PayoutKYBNotVerifiedError as PayoutRequestKYBNotVerifiedError,
+  PayoutNoBankError as PayoutRequestNoBankError,
+  PayoutInsufficientBalanceError as PayoutRequestInsufficientBalanceError,
+  PayoutRequestExistsError,
+  PayoutRequestInvalidAmountError,
+  PayoutRequestNotFoundError,
+  PayoutRequestNotOwnedError,
+  PayoutRequestNotReviewableError,
+} from "../../application/payout/payout-requests";
+import { GetEarningsDashboard, EarningsStoreNotFoundError } from "../../application/payout/earnings";
 
 /**
  * Payment routes (mounted under /api):
@@ -391,6 +412,61 @@ paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/webhooks/singapay/settlement (SingaPay server → verified)
+//
+// Clearing process: a settlement batch completed (pending_balance →
+// available_balance) or a settled transaction was refunded. Register this path
+// as the `settlement_notif_url`; the signature endpoint string MUST match the
+// configured path exactly. Batches are recorded idempotently per reference_no.
+// ---------------------------------------------------------------------------
+paymentsRouter.post("/webhooks/singapay/settlement", async (c) => {
+  const env = c.env as Env;
+  const secret = env.SINGAPAY_WEBHOOK_SECRET;
+  if (!secret) {
+    return c.json({ error: { code: "WEBHOOK_UNAVAILABLE", message: "Webhook SingaPay belum dikonfigurasi." } }, 503);
+  }
+
+  const rawBody = await c.req.text();
+  const headerObj: Record<string, string> = {};
+  c.req.raw.headers.forEach((value, key) => {
+    headerObj[key] = value;
+  });
+  const valid = await verifySingaPayWebhookSignature({
+    rawBody,
+    headers: headerObj,
+    clientSecret: secret,
+    endpoint: "/api/webhooks/singapay/settlement",
+  });
+  if (!valid) {
+    return c.json({ error: { code: "WEBHOOK_UNAUTHORIZED" } }, 401);
+  }
+
+  let payload: SingaPaySettlementWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody) as SingaPaySettlementWebhookPayload;
+  } catch {
+    return c.json({ error: { code: "VALIDATION", message: "Payload JSON tidak valid." } }, 400);
+  }
+
+  const normalized = normalizeSingaPaySettlementWebhook(payload);
+  if (!normalized) {
+    // Unknown event or missing reference — acknowledge so SingaPay stops retrying.
+    return c.json({ handled: false });
+  }
+
+  const db = createDb(env.DB);
+  const result = await new HandleSettlementWebhook(
+    new D1SettlementRepository(db),
+    new D1StoreRepository(db),
+  ).execute(normalized);
+  if (!result.ok) {
+    return c.json({ error: { code: "UNKNOWN" } }, 400);
+  }
+
+  return c.json({ handled: result.value.handled });
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/stores/:storeId/payouts (auth, owner)
 //
 // Merchant-facing saldo + payout history (orange #8 — UU model: merchants
@@ -427,6 +503,135 @@ paymentsRouter.get("/stores/:storeId/payouts", async (c) => {
     payouts: history.payouts,
     total: history.total,
   });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/stores/:storeId/earnings (auth, owner)
+//
+// Merchant earnings dashboard: live balance + ready-to-payout, period earnings
+// from paid orders, clearing (pending balance + settlement batches) and the
+// merged transaction log. Data source = our own orders/payments + live
+// SingaPay balance (no provider statement polling).
+// ---------------------------------------------------------------------------
+paymentsRouter.get("/stores/:storeId/earnings", async (c) => {
+  const session = await requireUser(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("storeId") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "STORE_NOT_FOUND" } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN" } }, 403);
+  }
+
+  const result = await new GetEarningsDashboard(
+    storeRepo,
+    new D1CommissionLedger(db),
+    createSingaPayAccountsClient(c.env),
+    new D1OrderRepository(db),
+    new D1PayoutRepository(db),
+    new D1PayoutRequestRepository(db),
+    new D1SettlementRepository(db),
+  ).execute(storeId);
+
+  if (!result.ok) {
+    return c.json(
+      { error: result.error },
+      result.error instanceof EarningsStoreNotFoundError ? 404 : 502,
+    );
+  }
+  return c.json(result.value);
+});
+
+// ---------------------------------------------------------------------------
+// Payout requests (auth, owner) — merchant requests a pencairan; admin reviews.
+//   POST /api/stores/:storeId/payout-requests        { amount?, note? }
+//   GET  /api/stores/:storeId/payout-requests?status=
+//   POST /api/stores/:storeId/payout-requests/:id/cancel
+// ---------------------------------------------------------------------------
+paymentsRouter.post(
+  "/stores/:storeId/payout-requests",
+  zValidator("json", z.object({ amount: z.number().int().positive().optional(), note: z.string().max(500).optional() })),
+  async (c) => {
+    const session = await requireUser(c);
+    if (session instanceof Response) return session;
+
+    const storeId = c.req.param("storeId") as EntityId;
+    const body = c.req.valid("json");
+    const db = createDb(c.env.DB);
+    const storeRepo = new D1StoreRepository(db);
+    const store = await storeRepo.findById(storeId);
+    if (!store) return c.json({ error: { code: "STORE_NOT_FOUND" } }, 404);
+    if (store.ownerId !== session.user.id) {
+      return c.json({ error: { code: "FORBIDDEN" } }, 403);
+    }
+
+    const result = await new CreatePayoutRequest(
+      storeRepo,
+      new D1CommissionLedger(db),
+      new D1PayoutRequestRepository(db),
+      createSingaPayAccountsClient(c.env),
+    ).execute(storeId, body);
+
+    if (!result.ok) {
+      const status =
+        result.error instanceof PayoutRequestStoreNotFoundError ? 404
+        : result.error instanceof PayoutRequestKYBNotVerifiedError ? 403
+        : result.error instanceof PayoutRequestNoAccountError ? 400
+        : result.error instanceof PayoutRequestNoBankError ? 400
+        : result.error instanceof PayoutRequestInsufficientBalanceError ? 400
+        : result.error instanceof PayoutRequestInvalidAmountError ? 400
+        : result.error instanceof PayoutRequestExistsError ? 409
+        : 400;
+      return c.json({ error: result.error }, status);
+    }
+
+    return c.json({ request: result.value.request, readyToPayout: result.value.readyToPayout }, 201);
+  },
+);
+
+paymentsRouter.get("/stores/:storeId/payout-requests", async (c) => {
+  const session = await requireUser(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("storeId") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "STORE_NOT_FOUND" } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN" } }, 403);
+  }
+
+  const res = await new ListPayoutRequests(new D1PayoutRequestRepository(db)).execute({
+    storeId,
+    limit: 50,
+  });
+  return c.json(res);
+});
+
+paymentsRouter.post("/stores/:storeId/payout-requests/:requestId/cancel", async (c) => {
+  const session = await requireUser(c);
+  if (session instanceof Response) return session;
+
+  const requestId = c.req.param("requestId");
+  const db = createDb(c.env.DB);
+  const result = await new CancelPayoutRequest(
+    new D1PayoutRequestRepository(db),
+    new D1StoreRepository(db),
+  ).execute(requestId, session.user.id as EntityId);
+
+  if (!result.ok) {
+    const status =
+      result.error instanceof PayoutRequestNotFoundError ? 404
+      : result.error instanceof PayoutRequestNotOwnedError ? 403
+      : result.error instanceof PayoutRequestNotReviewableError ? 409
+      : 400;
+    return c.json({ error: result.error }, status);
+  }
+  return c.json({ request: result.value.request });
 });
 
 // ---------------------------------------------------------------------------

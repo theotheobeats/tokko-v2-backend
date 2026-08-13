@@ -77,6 +77,68 @@ export interface NormalizedSingaPayDisbursementWebhook {
   failedReason: string | null;
 }
 
+/**
+ * SingaPay settlement notification (clearing process), per their docs
+ * (/api-reference/webhooks/settlement). Fires when a settlement batch moves
+ * funds between pending_balance, available_balance and the bank account.
+ */
+export interface SingaPaySettlementWebhookPayload {
+  event?: string;
+  data?: {
+    settlement?: {
+      reference_no?: string;
+      title?: string | null;
+      settlement_type?: string | null;
+      settlement_method?: string | null;
+      start_date?: string | null;
+      end_date?: string | null;
+      amount?: number;
+      total_admin_fee?: number;
+      total_vendor_fee?: number;
+      total_our_margin?: number;
+      settlement_fee?: number;
+      total_to_transfer?: number;
+      total_refunded?: number;
+      status?: string | null;
+      approved_by?: string | null;
+      approved_at?: string | null;
+      /** Defensive: not in the documented payload, but some batches may carry it. */
+      account_id?: string | number | null;
+    };
+    total_transactions?: number;
+    refund?: {
+      account_id?: string | number | null;
+      net_amount?: { value?: string | number; currency?: string };
+    };
+  };
+}
+
+/** Internal settlement-webhook shape — feeds the clearing-history use case. */
+export interface NormalizedSingaPaySettlementWebhook {
+  event: "settlement.completed" | "settlement.refunded" | "settlement.refund_cancelled";
+  settlement: {
+    referenceNo: string;
+    batchTitle: string | null;
+    settlementType: string | null;
+    method: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    amount: number;
+    totalAdminFee: number;
+    totalVendorFee: number;
+    totalOurMargin: number;
+    settlementFee: number;
+    totalToTransfer: number;
+    totalRefunded: number;
+    totalTransactions: number;
+    status: string;
+    approvedBy: string | null;
+    approvedAt: string | null;
+    accountId: string | null;
+  };
+  refund: { accountId: string | null; netAmount: number } | null;
+}
+
 const TIMESTAMP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes — replay protection
 
 async function sha256Hex(data: string): Promise<string> {
@@ -188,5 +250,55 @@ export function normalizeSingaPayDisbursementWebhook(
     transactionId: data?.transaction_id ?? null,
     status: isFailed ? "failed" : isSuccess ? "settled" : "submitted",
     failedReason: data?.failed_reason ?? null,
+  };
+}
+
+const SETTLEMENT_EVENTS = new Set(["settlement.completed", "settlement.refunded", "settlement.refund_cancelled"]);
+
+/** Map a SingaPay settlement notification to the internal shape (clearing). */
+export function normalizeSingaPaySettlementWebhook(
+  payload: SingaPaySettlementWebhookPayload,
+): NormalizedSingaPaySettlementWebhook | null {
+  const event = payload?.event;
+  if (!event || !SETTLEMENT_EVENTS.has(event)) return null;
+
+  const s = payload?.data?.settlement;
+  const referenceNo = s?.reference_no;
+  if (!referenceNo) return null;
+
+  const n = (v: number | undefined) => Number(v ?? 0);
+  const accountIdRaw = s?.account_id ?? payload?.data?.refund?.account_id ?? null;
+
+  return {
+    event: event as NormalizedSingaPaySettlementWebhook["event"],
+    settlement: {
+      referenceNo,
+      batchTitle: s?.title ?? null,
+      settlementType: s?.settlement_type ?? null,
+      method: s?.settlement_method ?? null,
+      startDate: s?.start_date ?? null,
+      endDate: s?.end_date ?? null,
+      amount: n(s?.amount),
+      totalAdminFee: n(s?.total_admin_fee),
+      totalVendorFee: n(s?.total_vendor_fee),
+      totalOurMargin: n(s?.total_our_margin),
+      settlementFee: n(s?.settlement_fee),
+      totalToTransfer: n(s?.total_to_transfer),
+      totalRefunded: n(s?.total_refunded),
+      totalTransactions: n(payload?.data?.total_transactions),
+      status: s?.status ?? "completed",
+      approvedBy: s?.approved_by ?? null,
+      approvedAt: s?.approved_at ?? null,
+      accountId: accountIdRaw !== null && accountIdRaw !== undefined ? String(accountIdRaw) : null,
+    },
+    refund: payload?.data?.refund
+      ? {
+          accountId:
+            payload.data.refund.account_id !== null && payload.data.refund.account_id !== undefined
+              ? String(payload.data.refund.account_id)
+              : null,
+          netAmount: n(payload.data.refund.net_amount?.value as number | undefined),
+        }
+      : null,
   };
 }

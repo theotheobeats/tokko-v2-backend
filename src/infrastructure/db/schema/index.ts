@@ -16,3 +16,5 @@ export { orders } from "./orders";
 export { regions } from "./regions";
 export { appSettings } from "./app-settings";
 export { payouts } from "./payouts";
+export { settlements } from "./settlements";
+export { payoutRequests } from "./payout-requests";

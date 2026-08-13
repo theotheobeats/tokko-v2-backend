@@ -21,6 +21,8 @@ export interface StoreRepository {
   findById(id: EntityId): Promise<Store | null>;
   findBySubdomain(subdomain: string): Promise<Store | null>;
   findByOwnerId(ownerId: EntityId): Promise<Store | null>;
+  /** Settlement webhook attribution: find the store owning this SingaPay sub-account. */
+  findBySingapayAccountId(accountId: string): Promise<Store | null>;
   save(store: Store): Promise<void>;
   delete(id: EntityId): Promise<void>;
   countProducts(storeId: EntityId): Promise<number>;
