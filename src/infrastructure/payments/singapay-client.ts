@@ -476,7 +476,9 @@ export class SingaPayClient implements PaymentProviderClient {
     return {
       transactionId: data.transaction_id,
       referenceNumber: data.reference_number,
-      status: data.transaction_status?.code ?? "PENDING",
+      // Normalize sync-failed transfers (code "06" per docs) so callers can
+      // mark the payout failed immediately instead of waiting on a webhook.
+      status: data.transaction_status?.code === "06" ? "FAILED" : data.transaction_status?.code ?? "PENDING",
       netAmount: Number(data.net_amount?.value ?? input.amount),
       fee: Number(data.fee?.value ?? 0),
       failedReason: data.failed_reason ?? null,
