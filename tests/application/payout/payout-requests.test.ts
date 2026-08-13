@@ -505,4 +505,40 @@ describe("ReviewPayoutRequest", () => {
       expect.objectContaining({ amount: 1_196_000, commission: 50_000 }),
     );
   });
+
+  it("never marks the request paid when the disbursement was rejected", async () => {
+    const store = makeStore();
+    const request = { ...base, storeId: store.id, amount: 1_200_000, commission: 50_000, balanceBefore: 1_250_000 };
+    const requestRepo = mockRequestRepo();
+    requestRepo.findById = vi.fn().mockResolvedValue(request);
+    const accounts = mockAccounts({ available: 1_250_000, balance: 1_250_000, pending: 0, held: 0 });
+    accounts.disburse = vi.fn().mockResolvedValue({
+      transactionId: "mock-dsb-failed",
+      referenceNumber: "payout-ref",
+      status: "FAILED",
+      netAmount: 1_200_000,
+      fee: 0,
+      failedReason: "ACCOUNT_VALIDATION_ERROR: ACCOUNT INQUIRY FAILED (403)",
+    });
+
+    const result = await new ReviewPayoutRequest(
+      requestRepo,
+      mockStoreRepo(store),
+      mockLedger(50_000),
+      mockPayoutRepo(),
+      accounts,
+      "settlement-acc",
+    ).execute(request.id, { action: "approve", adminId: "admin-1" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.executed).toBe(false);
+    expect(result.value.error).toContain("ACCOUNT_VALIDATION_ERROR");
+    // Request parks back to approved (retryable) — never paid.
+    expect(result.value.request.status).toBe("approved");
+    expect(requestRepo.update).toHaveBeenCalledWith(
+      request.id,
+      expect.objectContaining({ status: "approved", decisionNote: expect.stringContaining("ACCOUNT_VALIDATION_ERROR") }),
+    );
+  });
 });

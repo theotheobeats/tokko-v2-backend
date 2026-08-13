@@ -270,6 +270,35 @@ export class ReviewPayoutRequest {
       });
     }
 
+    // Money did NOT move — SingaPay rejected the disbursement (synchronously,
+    // e.g. ACCOUNT_VALIDATION_ERROR). Never mark the request paid: park it
+    // back to approved (retryable) with the rejection reason; the failed
+    // payout row stays in history for audit.
+    if (result.value.payout.status === "failed") {
+      const message = result.value.payout.failedReason ?? "Pencairan ditolak penyedia pembayaran.";
+      await this.requestRepo.update(request.id, {
+        status: "approved",
+        payoutId: result.value.payout.id,
+        reviewedBy: input.adminId,
+        reviewedAt: now,
+        decisionNote: message,
+      });
+      return ok({
+        decision: "approved",
+        executed: false,
+        error: message,
+        payout: result.value.payout,
+        request: {
+          ...request,
+          status: "approved",
+          payoutId: result.value.payout.id,
+          reviewedBy: input.adminId,
+          reviewedAt: now,
+          decisionNote: message,
+        },
+      });
+    }
+
     await this.requestRepo.update(request.id, {
       status: "paid",
       payoutId: result.value.payout.id,
