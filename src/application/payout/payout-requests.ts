@@ -36,6 +36,8 @@ import {
 } from "../admin/admin-payouts";
 
 import { EMPTY_TEST_ACCESS, isTestEmail, type TestAccess } from "./test-access";
+import { resolveTier, tierConfigFor } from "../../domain/plan/types";
+import type { SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 
 // Re-exported so routes map them to HTTP codes without touching admin-payouts.
 export {
@@ -69,6 +71,11 @@ export class PayoutRequestNotReviewableError extends Error {
   constructor() { super("Permintaan pencairan sudah diproses."); }
 }
 
+export class PayoutTierRequiredError extends Error {
+  code = "PAYOUT_TIER_REQUIRED";
+  constructor() { super("Pencairan dana tersedia di paket Pro & Commerce."); }
+}
+
 /** SingaPay's minimum disbursement amount (docs: Send Money → Bank Coverage). */
 const MIN_PAYOUT_AMOUNT = 10_000;
 
@@ -85,6 +92,8 @@ export class CreatePayoutRequest {
     private readonly accounts: SingaPayAccountsClientLike,
     /** Test access (KYB bypass + master-account balance fallback). */
     private readonly testAccess: TestAccess = EMPTY_TEST_ACCESS,
+    /** Tier gate: payouts are Pro & Commerce (trial blocked). Optional for tests. */
+    private readonly subscriptionRepo?: SubscriptionRepository,
   ) {}
 
   async execute(
@@ -101,6 +110,15 @@ export class CreatePayoutRequest {
     if (!store) return err(new PayoutStoreNotFoundError());
 
     const isTest = isTestEmail(ownerEmail, this.testAccess);
+
+    // Payouts are a Pro/Commerce feature — trial stores are blocked unless
+    // the caller is a whitelisted test user (staging testing).
+    if (this.subscriptionRepo && !isTest) {
+      const sub = await this.subscriptionRepo.findActiveByStoreId(store.id);
+      if (!tierConfigFor(resolveTier(store, sub)).payouts) {
+        return err(new PayoutTierRequiredError());
+      }
+    }
     // Test users run against the master account (their sub-account is pre-KYB
     // and holds no money); real merchants use their own sub-account.
     const accountId = isTest

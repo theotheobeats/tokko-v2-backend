@@ -11,7 +11,13 @@ import {
 import type { PaymentRepository } from "../../../src/infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../../src/infrastructure/repos/d1-order-repo";
 import type { PaymentProviderClient } from "../../../src/infrastructure/payments/xendit-client";
+import type { StoreRepository } from "../../../src/application/store/store-repo";
+import type { CommissionLedger } from "../../../src/infrastructure/repos/d1-commission-ledger";
+import type { SubscriptionRepository } from "../../../src/infrastructure/repos/d1-subscription-repo";
 import { Order } from "../../../src/domain/order/order";
+import { Store } from "../../../src/domain/store/store";
+import { BusinessType, Aesthetic } from "../../../src/domain/store/types";
+import { Subscription } from "../../../src/domain/plan/subscription";
 import { createEntityId } from "../../../src/domain/shared/types";
 
 const storeId = createEntityId();
@@ -235,5 +241,48 @@ describe("HandleXenditWebhook", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBeInstanceOf(WebhookAmountMismatchError);
+  });
+
+  it("accrues flat 2,5% royalty on paid tiers but nothing on trial", async () => {
+    // Fresh order+payment+repos per run (the paid webhook is idempotent).
+    const runWebhook = async (sub: unknown | null) => {
+      const order = makeOrder();
+      const paymentRepo = mockPaymentRepo();
+      const orderRepo = mockOrderRepo({ findById: vi.fn().mockResolvedValue(order) });
+      const created = await new CreatePayment(orderRepo, paymentRepo, mockProvider()).execute({ orderId: order.id });
+      const paymentDomain = (created as { ok: true; value: import("../../../src/domain/payment/payment").Payment }).value;
+      paymentRepo.findByExternalId = vi.fn().mockResolvedValue(paymentDomain);
+
+      const store = Store.create({
+        ownerId: createEntityId(),
+        name: "Cake Shop",
+        businessType: BusinessType.Food,
+        aestheticPreference: Aesthetic.Warm,
+        whatsappNumber: "628123456789",
+      });
+      const storeRepo = { findById: vi.fn().mockResolvedValue(store) } as unknown as StoreRepository;
+      const ledger = {
+        record: vi.fn().mockResolvedValue(undefined),
+        sumByStoreId: vi.fn().mockResolvedValue(0),
+        listByStoreId: vi.fn().mockResolvedValue([]),
+      } as unknown as CommissionLedger;
+      const subscriptionRepo = { findActiveByStoreId: vi.fn().mockResolvedValue(sub) } as unknown as SubscriptionRepository;
+
+      await new HandleXenditWebhook(paymentRepo, orderRepo, { storeRepo, ledger, subscriptionRepo }).execute(paidPayload);
+      return ledger;
+    };
+
+    const pro = Subscription.create({
+      id: createEntityId(),
+      storeId: createEntityId(),
+      plan: "pro",
+      currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    });
+
+    const proLedger = await runWebhook(pro);
+    expect(proLedger.record).toHaveBeenCalledWith(expect.objectContaining({ rate: 2.5, fee: 2125 })); // 85000 × 2,5%
+
+    const trialLedger = await runWebhook(null);
+    expect(trialLedger.record).not.toHaveBeenCalled(); // trial is royalty-free
   });
 });

@@ -55,6 +55,7 @@ import {
   PayoutInsufficientBalanceError as PayoutRequestInsufficientBalanceError,
   PayoutRequestExistsError,
   PayoutRequestInvalidAmountError,
+  PayoutTierRequiredError,
   PayoutRequestNotFoundError,
   PayoutRequestNotOwnedError,
   PayoutRequestNotReviewableError,
@@ -251,6 +252,7 @@ paymentsRouter.post("/webhooks/xendit", async (c) => {
     {
       storeRepo: new D1StoreRepository(db),
       ledger: new D1CommissionLedger(db),
+      subscriptionRepo: new D1SubscriptionRepository(db),
     },
   );
   const result = await useCase.execute(payload);
@@ -378,6 +380,7 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
     {
       storeRepo: new D1StoreRepository(db),
       ledger: new D1CommissionLedger(db),
+      subscriptionRepo: new D1SubscriptionRepository(db),
     },
   );
   const result = await useCase.execute(normalized);
@@ -612,6 +615,7 @@ paymentsRouter.post(
       new D1PayoutRequestRepository(db),
       createSingaPayAccountsClient(c.env),
       resolveTestAccess(c.env),
+      new D1SubscriptionRepository(db),
     ).execute(storeId, body, session.user.email);
 
     if (!result.ok) {
@@ -623,6 +627,7 @@ paymentsRouter.post(
         : result.error instanceof PayoutRequestInsufficientBalanceError ? 400
         : result.error instanceof PayoutRequestInvalidAmountError ? 400
         : result.error instanceof PayoutRequestExistsError ? 409
+        : result.error instanceof PayoutTierRequiredError ? 403
         : 400;
       return c.json({ error: result.error }, status);
     }

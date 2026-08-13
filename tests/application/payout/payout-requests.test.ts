@@ -7,6 +7,7 @@ import {
   PayoutRequestInvalidAmountError,
   PayoutRequestNotOwnedError,
   PayoutRequestNotReviewableError,
+  PayoutTierRequiredError,
   PayoutInsufficientBalanceError,
   PayoutKYBNotVerifiedError,
   PayoutNoAccountError,
@@ -14,7 +15,9 @@ import {
 } from "../../../src/application/payout/payout-requests";
 import { Store } from "../../../src/domain/store/store";
 import { BusinessType, Aesthetic } from "../../../src/domain/store/types";
+import { Subscription } from "../../../src/domain/plan/subscription";
 import { createEntityId } from "../../../src/domain/shared/types";
+import { EMPTY_TEST_ACCESS } from "../../../src/application/payout/test-access";
 import type { StoreRepository } from "../../../src/application/store/store-repo";
 import type { CommissionLedger } from "../../../src/infrastructure/repos/d1-commission-ledger";
 import type { PayoutRequestRepository, PayoutRequestRecord } from "../../../src/infrastructure/repos/d1-payout-request-repo";
@@ -254,6 +257,50 @@ describe("CreatePayoutRequest", () => {
     if (!result.ok) return;
     expect(accounts.checkBalance).toHaveBeenCalledWith("master-acc");
     expect(result.value.request.amount).toBe(900_000);
+  });
+
+  it("blocks trial stores from requesting payouts (Pro/Commerce feature)", async () => {
+    const store = makeStore();
+    const requestRepo = mockRequestRepo();
+    const subscriptionRepo = { findActiveByStoreId: vi.fn().mockResolvedValue(null) }; // trial
+
+    const result = await new CreatePayoutRequest(
+      mockStoreRepo(store),
+      mockLedger(0),
+      requestRepo,
+      mockAccounts(),
+      EMPTY_TEST_ACCESS,
+      subscriptionRepo as never,
+    ).execute(store.id, {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutTierRequiredError);
+  });
+
+  it("allows pro stores to request payouts", async () => {
+    const store = makeStore();
+    const subscriptionRepo = {
+      findActiveByStoreId: vi.fn().mockResolvedValue(
+        Subscription.create({
+          id: createEntityId(),
+          storeId: createEntityId(),
+          plan: "pro",
+          currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        }),
+      ),
+    };
+
+    const result = await new CreatePayoutRequest(
+      mockStoreRepo(store),
+      mockLedger(50_000),
+      mockRequestRepo(),
+      mockAccounts(),
+      EMPTY_TEST_ACCESS,
+      subscriptionRepo as never,
+    ).execute(store.id, {});
+
+    expect(result.ok).toBe(true);
   });
 
   it("still blocks non-whitelisted users whose store has no sub-account", async () => {

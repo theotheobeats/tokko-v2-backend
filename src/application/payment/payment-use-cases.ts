@@ -5,6 +5,7 @@
 import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
+import { resolveTier, tierConfigFor } from "../../domain/plan/types";
 import { Payment } from "../../domain/payment/payment";
 import type { PaymentStatus } from "../../domain/payment/types";
 import type { PaymentProvider as PaymentProviderType } from "../../domain/payment/types";
@@ -152,10 +153,13 @@ export class HandleXenditWebhook {
   constructor(
     private readonly paymentRepo: PaymentRepository,
     private readonly orderRepo: OrderRepository,
-    /** Commission-path merchants: record an accrual entry when an order is paid. */
+    /** Royalty accrual per paid order. Tier-driven: pro/commerce = flat 2,5%,
+     * trial = none. `subscriptionRepo` is optional for legacy/test call sites;
+     * without it the store-level commissionRate is used as before. */
     private readonly commission?: {
       storeRepo: import("../store/store-repo").StoreRepository;
       ledger: import("../../infrastructure/repos/d1-commission-ledger").CommissionLedger;
+      subscriptionRepo?: import("../../infrastructure/repos/d1-subscription-repo").SubscriptionRepository;
     },
   ) {}
 
@@ -203,12 +207,26 @@ export class HandleXenditWebhook {
         await this.orderRepo.save(order);
       }
 
-      // Commission path (selective): accrual entry per paid order.
+      // Royalty (2,5% flat on Pro & Commerce; trial is royalty-free).
       if (this.commission) {
         try {
           const store = await this.commission.storeRepo.findById(payment.storeId);
-          if (store?.commissionRate) {
-            const rate = store.commissionRate;
+          if (!store) return ok({ handled: true });
+
+          let rate = 0;
+          if (this.commission.subscriptionRepo) {
+            const sub = await this.commission.subscriptionRepo.findActiveByStoreId(store.id);
+            const tier = resolveTier(store, sub);
+            // Trial/none → no royalty, period. Paid tiers → flat 2,5% (admin
+            // may override per store via the store-level commissionRate).
+            const tierRate = tierConfigFor(tier).commissionRate;
+            rate = tierRate !== null ? (store.commissionRate ?? tierRate) : 0;
+          } else {
+            // Legacy path (no tier lookup wired): store-level rate only.
+            rate = store.commissionRate ?? 0;
+          }
+
+          if (rate > 0) {
             await this.commission.ledger.record({
               storeId: store.id,
               orderId: order?.id ?? payment.orderId,
