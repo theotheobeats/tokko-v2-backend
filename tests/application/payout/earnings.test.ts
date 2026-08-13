@@ -257,4 +257,102 @@ describe("GetEarningsDashboard", () => {
     expect(result.value.earnings.total.gross).toBe(0);
     expect(result.value.transactions).toHaveLength(0);
   });
+
+  it("falls back to master account balance + settlements for whitelisted test users", async () => {
+    // Store has no sub-account and no kyb status.
+    const store = Store.create({
+      ownerId,
+      name: "Anna Bakery",
+      businessType: BusinessType.Food,
+      aestheticPreference: Aesthetic.Warm,
+      whatsappNumber: "628123456789",
+    });
+    const orderRepo: OrderRepository = {
+      findById: vi.fn(),
+      findByStoreId: vi.fn().mockResolvedValue([]),
+      countByStoreId: vi.fn(),
+      save: vi.fn(),
+      listAll: vi.fn(),
+      countAll: vi.fn(),
+      sumTotalAll: vi.fn(),
+      since: vi.fn(),
+      deleteByStoreId: vi.fn(),
+    };
+    const ledger: CommissionLedger = {
+      record: vi.fn(),
+      sumByStoreId: vi.fn().mockResolvedValue(50_000),
+      listByStoreId: vi.fn().mockResolvedValue([]),
+    };
+    const empty = {
+      create: vi.fn(),
+      findById: vi.fn(),
+      findOpenByStoreId: vi.fn(),
+      list: vi.fn().mockResolvedValue({ requests: [], total: 0 }),
+      update: vi.fn(),
+    } as unknown as PayoutRequestRepository;
+    const emptyPayouts = {
+      create: vi.fn(),
+      list: vi.fn().mockResolvedValue({ payouts: [], total: 0 }),
+      findByRef: vi.fn(),
+      updateStatus: vi.fn(),
+    } as unknown as PayoutRepository;
+    const settlementRepo = {
+      upsert: vi.fn(),
+      findByReferenceNo: vi.fn(),
+      findByStoreId: vi.fn().mockResolvedValue([]),
+      listRecent: vi.fn().mockResolvedValue([
+        {
+          id: "sett-1",
+          storeId: null,
+          accountId: null,
+          referenceNo: "SETTLEMENT-1-ABC",
+          batchTitle: "Settlement Master",
+          settlementType: "ALL",
+          method: "balance",
+          startDate: null,
+          endDate: null,
+          amount: 1_000_000,
+          totalAdminFee: 0,
+          totalVendorFee: 0,
+          totalOurMargin: 0,
+          settlementFee: 0,
+          totalToTransfer: 1_000_000,
+          totalRefunded: 0,
+          totalTransactions: 5,
+          status: "completed",
+          approvedBy: "SYSTEM",
+          approvedAt: "2026-08-13 10:00:00",
+          createdAt: "2026-08-13 10:00:00",
+        },
+      ]),
+    } as unknown as SettlementRepository;
+
+    const access = { emails: ["asakvsa.idn@gmail.com"], masterAccountId: "master-acc" };
+    const accounts = mockAccounts({ available: 1_250_000, balance: 1_250_000, pending: 200_000, held: 0 });
+
+    const result = await new GetEarningsDashboard(
+      mockStoreRepo(store),
+      ledger,
+      accounts,
+      orderRepo,
+      emptyPayouts,
+      empty,
+      settlementRepo,
+      access,
+    ).execute(store.id, "asakvsa.idn@gmail.com");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const v = result.value;
+    expect(v.summary.kybStatus).toBe("kyb_verified"); // effective — unlocks the payout request UI
+    expect(v.summary.subAccountId).toBe("master-acc");
+    expect(accounts.checkBalance).toHaveBeenCalledWith("master-acc");
+    expect(v.balance.available).toBe(1_250_000);
+    expect(v.readyToPayout).toBe(1_200_000); // 1_250_000 - 50_000 commission
+    expect(v.clearing.pending).toBe(200_000);
+    // Settlement fallback: master batches (storeId NULL) shown instead of per-store.
+    expect(settlementRepo.listRecent).toHaveBeenCalled();
+    expect(settlementRepo.findByStoreId).not.toHaveBeenCalled();
+    expect(v.clearing.settlements).toHaveLength(1);
+  });
 });

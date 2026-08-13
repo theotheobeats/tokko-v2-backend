@@ -59,6 +59,7 @@ import {
   PayoutRequestNotReviewableError,
 } from "../../application/payout/payout-requests";
 import { GetEarningsDashboard, EarningsStoreNotFoundError } from "../../application/payout/earnings";
+import { resolveTestAccess } from "../../application/payout/test-access";
 
 /**
  * Payment routes (mounted under /api):
@@ -489,7 +490,8 @@ paymentsRouter.get("/stores/:storeId/payouts", async (c) => {
     storeRepo,
     new D1CommissionLedger(db),
     createSingaPayAccountsClient(c.env),
-  ).execute(storeId);
+    resolveTestAccess(c.env),
+  ).execute(storeId, session.user.email);
   if (!summaryResult.ok) {
     return c.json(
       { error: summaryResult.error },
@@ -534,7 +536,8 @@ paymentsRouter.get("/stores/:storeId/earnings", async (c) => {
     new D1PayoutRepository(db),
     new D1PayoutRequestRepository(db),
     new D1SettlementRepository(db),
-  ).execute(storeId);
+    resolveTestAccess(c.env),
+  ).execute(storeId, session.user.email);
 
   if (!result.ok) {
     return c.json(
@@ -573,7 +576,8 @@ paymentsRouter.post(
       new D1CommissionLedger(db),
       new D1PayoutRequestRepository(db),
       createSingaPayAccountsClient(c.env),
-    ).execute(storeId, body);
+      resolveTestAccess(c.env),
+    ).execute(storeId, body, session.user.email);
 
     if (!result.ok) {
       const status =

@@ -17,6 +17,7 @@ import type { CommissionLedger } from "../../infrastructure/repos/d1-commission-
 import type { PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
 import type { SingaPayAccountsClientLike, SingaPayBalance } from "../../infrastructure/payments/singapay-client";
 import type { NormalizedSingaPayDisbursementWebhook } from "../../infrastructure/payments/singapay-webhook";
+import { EMPTY_TEST_ACCESS, isTestEmail, type TestAccess } from "../payout/test-access";
 
 export class PayoutStoreNotFoundError extends Error {
   code = "STORE_NOT_FOUND";
@@ -129,16 +130,23 @@ export class GetPayoutSummary {
     private readonly storeRepo: StoreRepository,
     private readonly ledger: CommissionLedger,
     private readonly accounts: SingaPayAccountsClientLike,
+    /** Test access (KYB bypass + master-account balance fallback). */
+    private readonly testAccess: TestAccess = EMPTY_TEST_ACCESS,
   ) {}
 
-  async execute(storeId: EntityId): Promise<Result<PayoutSummaryView, PayoutStoreNotFoundError | PayoutProviderError>> {
+  async execute(storeId: EntityId, ownerEmail?: string): Promise<Result<PayoutSummaryView, PayoutStoreNotFoundError | PayoutProviderError>> {
     const store = await this.storeRepo.findById(storeId);
     if (!store) return err(new PayoutStoreNotFoundError());
 
+    const isTest = isTestEmail(ownerEmail, this.testAccess);
+    const effectiveKyb = store.kybStatus === "kyb_verified" || isTest ? "kyb_verified" : store.kybStatus;
+    // Test stores without a sub-account read the master account (balance + settlements).
+    const accountId = store.singapayAccountId ?? (isTest ? this.testAccess.masterAccountId : null);
+
     let balance: SingaPayBalance = { available: 0, balance: 0, pending: 0, held: 0 };
-    if (store.singapayAccountId) {
+    if (accountId) {
       try {
-        balance = await this.accounts.checkBalance(store.singapayAccountId);
+        balance = await this.accounts.checkBalance(accountId);
       } catch (e) {
         return err(new PayoutProviderError(e instanceof Error ? e.message : "Gagal membaca saldo."));
       }
@@ -154,8 +162,8 @@ export class GetPayoutSummary {
       storeId: store.id,
       storeName: store.name,
       subdomain: store.subdomain,
-      subAccountId: store.singapayAccountId,
-      kybStatus: store.kybStatus,
+      subAccountId: accountId,
+      kybStatus: effectiveKyb,
       balance,
       commissionOwed,
       payoutBank: accountNumber
@@ -189,13 +197,18 @@ export class RunPayout {
     private readonly accounts: SingaPayAccountsClientLike,
     /** Our platform settlement account number (commission sweep beneficiary). */
     private readonly settlementAccountNumber: string,
+    /** Test access (KYB bypass + master-account fallback). */
+    private readonly testAccess: TestAccess = EMPTY_TEST_ACCESS,
   ) {}
 
-  async execute(storeId: EntityId): Promise<Result<PayoutResult, Error>> {
+  async execute(storeId: EntityId, ownerEmail?: string): Promise<Result<PayoutResult, Error>> {
     const store = await this.storeRepo.findById(storeId);
     if (!store) return err(new PayoutStoreNotFoundError());
-    if (!store.singapayAccountId) return err(new PayoutNoAccountError());
-    if (store.kybStatus !== "kyb_verified") return err(new PayoutKYBNotVerifiedError());
+
+    const isTest = isTestEmail(ownerEmail, this.testAccess);
+    const accountId = store.singapayAccountId ?? (isTest ? this.testAccess.masterAccountId : null);
+    if (!accountId) return err(new PayoutNoAccountError());
+    if (store.kybStatus !== "kyb_verified" && !isTest) return err(new PayoutKYBNotVerifiedError());
     // Prefer the dedicated payout bank; fall back to the manual-transfer bank.
     const bankCode = store.payoutBankCode ?? bankCodeFor(store.bankName) ?? "";
     const bankAccountNumber = store.payoutBankAccountNumber ?? store.bankAccountNumber ?? "";
@@ -204,7 +217,7 @@ export class RunPayout {
 
     let balance: SingaPayBalance;
     try {
-      balance = await this.accounts.checkBalance(store.singapayAccountId);
+      balance = await this.accounts.checkBalance(accountId);
     } catch (e) {
       return err(new PayoutProviderError(e instanceof Error ? e.message : "Gagal membaca saldo."));
     }
@@ -218,7 +231,7 @@ export class RunPayout {
     try {
       // 1. Sweep platform commission → our settlement account.
       const sweep = await this.accounts.accountTransfer({
-        accountId: store.singapayAccountId,
+        accountId,
         amount: commission,
         beneficiaryAccountNumber: this.settlementAccountNumber,
         merchantRefNo: `${ref}-commission`,
@@ -226,7 +239,7 @@ export class RunPayout {
 
       // 2. Disburse the remainder → merchant bank.
       const disb = await this.accounts.disburse({
-        accountId: store.singapayAccountId,
+        accountId,
         referenceNumber: ref,
         bankCode,
         bankAccountNumber,

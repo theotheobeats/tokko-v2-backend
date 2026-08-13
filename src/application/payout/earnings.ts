@@ -22,6 +22,7 @@ import type { PayoutRequestRepository, PayoutRequestRecord } from "../../infrast
 import type { SettlementRepository, SettlementRecord } from "../../infrastructure/repos/d1-settlement-repo";
 import type { SingaPayAccountsClientLike, SingaPayBalance } from "../../infrastructure/payments/singapay-client";
 import { bankCodeFor, bankNameFor } from "../admin/admin-payouts";
+import { EMPTY_TEST_ACCESS, isTestEmail, type TestAccess } from "./test-access";
 import type { Order } from "../../domain/order/order";
 
 export class EarningsStoreNotFoundError extends Error {
@@ -99,19 +100,27 @@ export class GetEarningsDashboard {
     private readonly payoutRepo: PayoutRepository,
     private readonly requestRepo: PayoutRequestRepository,
     private readonly settlementRepo: SettlementRepository,
+    /** Test access (KYB bypass + master-account balance/settlement fallback). */
+    private readonly testAccess: TestAccess = EMPTY_TEST_ACCESS,
   ) {}
 
   async execute(
     storeId: EntityId,
+    ownerEmail?: string,
   ): Promise<Result<EarningsDashboardView, EarningsStoreNotFoundError | EarningsProviderError>> {
     const store = await this.storeRepo.findById(storeId);
     if (!store) return err(new EarningsStoreNotFoundError());
 
+    const isTest = isTestEmail(ownerEmail, this.testAccess);
+    const effectiveKyb = store.kybStatus === "kyb_verified" || isTest ? "kyb_verified" : store.kybStatus;
+    // Test stores without a sub-account read the master account (balance + settlements).
+    const accountId = store.singapayAccountId ?? (isTest ? this.testAccess.masterAccountId : null);
+
     // Live SingaPay balance (funds live in the merchant's own sub-account).
     let balance: SingaPayBalance = { available: 0, balance: 0, pending: 0, held: 0 };
-    if (store.singapayAccountId) {
+    if (accountId) {
       try {
-        balance = await this.accounts.checkBalance(store.singapayAccountId);
+        balance = await this.accounts.checkBalance(accountId);
       } catch (e) {
         return err(new EarningsProviderError(e instanceof Error ? e.message : "Gagal membaca saldo."));
       }
@@ -124,7 +133,10 @@ export class GetEarningsDashboard {
         this.orderRepo.findByStoreId(store.id, { paidOnly: true, limit: 10_000 }),
         this.payoutRepo.list({ storeId, limit: 20 }),
         this.requestRepo.list({ storeId, limit: 20 }),
-        this.settlementRepo.findByStoreId(store.id, 20),
+        // Test stores without their own sub-account see the platform's clearing batches.
+        accountId === this.testAccess.masterAccountId && accountId !== store.singapayAccountId
+          ? this.settlementRepo.listRecent(20)
+          : this.settlementRepo.findByStoreId(store.id, 20),
       ]);
 
     const commissionByOrder = new Map<string, number>();
@@ -204,8 +216,8 @@ export class GetEarningsDashboard {
         storeId: store.id,
         storeName: store.name,
         subdomain: store.subdomain,
-        subAccountId: store.singapayAccountId,
-        kybStatus: store.kybStatus,
+        subAccountId: accountId,
+        kybStatus: effectiveKyb,
         payoutBank: accountNumber
           ? { name: bankNameFor(bankCode) ?? store.bankName, accountNumber, holder: accountName }
           : null,

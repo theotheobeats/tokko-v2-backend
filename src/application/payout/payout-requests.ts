@@ -34,6 +34,8 @@ import {
   type PayoutResult,
 } from "../admin/admin-payouts";
 
+import { EMPTY_TEST_ACCESS, isTestEmail, type TestAccess } from "./test-access";
+
 // Re-exported so routes map them to HTTP codes without touching admin-payouts.
 export {
   PayoutStoreNotFoundError,
@@ -80,11 +82,14 @@ export class CreatePayoutRequest {
     private readonly ledger: CommissionLedger,
     private readonly requestRepo: PayoutRequestRepository,
     private readonly accounts: SingaPayAccountsClientLike,
+    /** Test access (KYB bypass + master-account balance fallback). */
+    private readonly testAccess: TestAccess = EMPTY_TEST_ACCESS,
   ) {}
 
   async execute(
     storeId: EntityId,
     input: CreatePayoutRequestInput,
+    ownerEmail?: string,
   ): Promise<
     Result<
       { request: PayoutRequestRecord; readyToPayout: number },
@@ -93,8 +98,11 @@ export class CreatePayoutRequest {
   > {
     const store = await this.storeRepo.findById(storeId);
     if (!store) return err(new PayoutStoreNotFoundError());
-    if (!store.singapayAccountId) return err(new PayoutNoAccountError());
-    if (store.kybStatus !== "kyb_verified") return err(new PayoutKYBNotVerifiedError());
+
+    const isTest = isTestEmail(ownerEmail, this.testAccess);
+    const accountId = store.singapayAccountId ?? (isTest ? this.testAccess.masterAccountId : null);
+    if (!accountId) return err(new PayoutNoAccountError());
+    if (store.kybStatus !== "kyb_verified" && !isTest) return err(new PayoutKYBNotVerifiedError());
 
     const bankCode = store.payoutBankCode ?? bankCodeFor(store.bankName) ?? "";
     const bankAccountNumber = store.payoutBankAccountNumber ?? store.bankAccountNumber ?? "";
@@ -103,7 +111,7 @@ export class CreatePayoutRequest {
 
     let balance: SingaPayBalance;
     try {
-      balance = await this.accounts.checkBalance(store.singapayAccountId);
+      balance = await this.accounts.checkBalance(accountId);
     } catch (e) {
       return err(new PayoutProviderError(e instanceof Error ? e.message : "Gagal membaca saldo."));
     }
@@ -193,11 +201,14 @@ export class ReviewPayoutRequest {
     private readonly payoutRepo: PayoutRepository,
     private readonly accounts: SingaPayAccountsClientLike,
     private readonly settlementAccountNumber: string,
+    /** Test access (KYB bypass + master-account fallback). */
+    private readonly testAccess: TestAccess = EMPTY_TEST_ACCESS,
   ) {}
 
   async execute(
     requestId: string,
     input: { action: "approve" | "reject"; note?: string; adminId: string },
+    ownerEmail?: string,
   ): Promise<Result<ReviewPayoutRequestResult, Error>> {
     const request = await this.requestRepo.findById(requestId);
     if (!request) return err(new PayoutRequestNotFoundError());
@@ -228,7 +239,8 @@ export class ReviewPayoutRequest {
       this.payoutRepo,
       this.accounts,
       this.settlementAccountNumber,
-    ).execute(request.storeId as EntityId);
+      this.testAccess,
+    ).execute(request.storeId as EntityId, ownerEmail);
 
     if (!result.ok) {
       // Keep the request approved (retryable) and surface the failure reason.

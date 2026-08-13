@@ -58,6 +58,14 @@ import { resolveTier } from "../../domain/plan/types";
  * Mounted at /api/admin (see src/index.ts).
  */
 
+/** Resolve a store owner's login email (for KYB-test whitelist checks). */
+async function storeOwnerEmail(db: DbClient, storeId: EntityId): Promise<string | undefined> {
+  const store = await new D1StoreRepository(db).findById(storeId);
+  if (!store) return undefined;
+  const owner = await new D1AdminUserRepository(db).findById(store.ownerId);
+  return owner?.email ?? undefined;
+}
+
 const adminRouter = new Hono<{ Bindings: Env; Variables: { adminId: string } }>();
 
 // Guard every route in this router.
@@ -740,6 +748,8 @@ import {
   PayoutRequestNotFoundError,
   PayoutRequestNotReviewableError,
 } from "../../application/payout/payout-requests";
+import { resolveTestAccess } from "../../application/payout/test-access";
+import type { DbClient } from "../../infrastructure/db/drizzle";
 
 // GET /api/admin/payouts/summary?storeId=
 adminRouter.get("/payouts/summary", async (c) => {
@@ -750,7 +760,8 @@ adminRouter.get("/payouts/summary", async (c) => {
     new D1StoreRepository(db),
     new D1CommissionLedger(db),
     createSingaPayAccountsClient(c.env),
-  ).execute(storeId as EntityId);
+    resolveTestAccess(c.env),
+  ).execute(storeId as EntityId, await storeOwnerEmail(db, storeId as EntityId));
   if (!result.ok) return c.json({ error: result.error }, result.error instanceof PayoutStoreNotFoundError ? 404 : 502);
   return c.json({ summary: result.value });
 });
@@ -771,7 +782,8 @@ adminRouter.post("/payouts", zValidator("json", z.object({ storeId: z.string() }
     new D1PayoutRepository(db),
     createSingaPayAccountsClient(c.env),
     settlementAccount,
-  ).execute(storeId as EntityId);
+    resolveTestAccess(c.env),
+  ).execute(storeId as EntityId, await storeOwnerEmail(db, storeId as EntityId));
 
   if (!result.ok) {
     const status = result.error instanceof PayoutStoreNotFoundError ? 404
@@ -866,7 +878,15 @@ adminRouter.post(
       new D1PayoutRepository(db),
       createSingaPayAccountsClient(c.env),
       settlementAccount,
-    ).execute(requestId, { action: body.action, note: body.note, adminId });
+      resolveTestAccess(c.env),
+    ).execute(
+      requestId,
+      { action: body.action, note: body.note, adminId },
+      // KYB-test whitelist: resolve the requesting store's owner email.
+      await new D1PayoutRequestRepository(db).findById(requestId).then(async (r) =>
+        r ? storeOwnerEmail(db, r.storeId as EntityId) : undefined,
+      ),
+    );
 
     if (!result.ok) {
       const status =

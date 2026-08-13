@@ -9,6 +9,7 @@ import {
   PayoutRequestNotReviewableError,
   PayoutInsufficientBalanceError,
   PayoutKYBNotVerifiedError,
+  PayoutNoAccountError,
   PayoutNoBankError,
 } from "../../../src/application/payout/payout-requests";
 import { Store } from "../../../src/domain/store/store";
@@ -226,6 +227,56 @@ describe("CreatePayoutRequest", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toBeInstanceOf(PayoutRequestExistsError);
+  });
+
+  it("bypasses KYB and falls back to the master account for whitelisted emails", async () => {
+    // Store has NO sub-account and NO kyb status — only a payout bank.
+    const store = Store.create({
+      ownerId,
+      name: "Anna Bakery",
+      businessType: BusinessType.Food,
+      aestheticPreference: Aesthetic.Warm,
+      whatsappNumber: "628123456789",
+    }).setPayoutBank({ code: "014", accountNumber: "1234567890", accountName: "Anna" });
+
+    const accounts = mockAccounts({ available: 900_000, balance: 900_000, pending: 100_000, held: 0 });
+    const access = { emails: ["asakvsa.idn@gmail.com"], masterAccountId: "master-acc" };
+
+    const result = await new CreatePayoutRequest(
+      mockStoreRepo(store),
+      mockLedger(0),
+      mockRequestRepo(),
+      accounts,
+      access,
+    ).execute(store.id, {}, "asakvsa.idn@gmail.com");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(accounts.checkBalance).toHaveBeenCalledWith("master-acc");
+    expect(result.value.request.amount).toBe(900_000);
+  });
+
+  it("still blocks non-whitelisted users whose store has no sub-account", async () => {
+    const store = Store.create({
+      ownerId,
+      name: "Anna Bakery",
+      businessType: BusinessType.Food,
+      aestheticPreference: Aesthetic.Warm,
+      whatsappNumber: "628123456789",
+    }).setPayoutBank({ code: "014", accountNumber: "1234567890", accountName: "Anna" });
+
+    const access = { emails: ["someone-else@gmail.com"], masterAccountId: "master-acc" };
+    const result = await new CreatePayoutRequest(
+      mockStoreRepo(store),
+      mockLedger(0),
+      mockRequestRepo(),
+      mockAccounts(),
+      access,
+    ).execute(store.id, {}, "asakvsa.idn@gmail.com");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(PayoutNoAccountError);
   });
 });
 

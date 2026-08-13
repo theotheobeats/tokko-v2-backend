@@ -39,6 +39,8 @@ export interface Env {
   SINGAPAY_PROXY_TOKEN?: string;
   SINGAPAY_WEBHOOK_SECRET?: string;
   SINGAPAY_FORCE_MOCK?: string;
+  /** Comma-separated login emails that bypass KYB and may fall back to the master account (staging test access). */
+  KYB_TEST_EMAILS?: string;
   // Platform settlement account number (commission sweep beneficiary for
   // merchant payouts — funds move from the merchant's sub-account to ours).
   SINGAPAY_SETTLEMENT_ACCOUNT_NUMBER?: string;
