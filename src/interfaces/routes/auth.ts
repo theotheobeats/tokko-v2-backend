@@ -61,6 +61,7 @@ function serializeUser(u: {
   id: string;
   name: string;
   email: string;
+  emailVerified?: boolean;
   role?: string | null;
   banned?: boolean | null;
   image?: string | null;
@@ -69,6 +70,7 @@ function serializeUser(u: {
     id: u.id,
     name: u.name,
     email: u.email,
+    emailVerified: u.emailVerified ?? false,
     role: u.role ?? "user",
     banned: u.banned ?? false,
   };
