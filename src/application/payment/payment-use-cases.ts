@@ -171,10 +171,8 @@ export class HandleXenditWebhook {
     const payment = await this.paymentRepo.findByExternalId(payload.external_id);
     if (!payment) return err(new PaymentNotFoundError());
 
-    // Amount must be at least the invoiced amount. SingaPay adds the payment
-    // method fee ON TOP of the charged amount (customer_pays_fee: true), so the
-    // webhook amount = base + fee ≥ base — a lower amount is a forgery.
-    if (payload.amount !== undefined && Number(payload.amount) < payment.amount) {
+    // Amount must match the created payment (webhook forgery guard).
+    if (payload.amount !== undefined && Number(payload.amount) !== payment.amount) {
       return err(new WebhookAmountMismatchError());
     }
 

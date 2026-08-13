@@ -63,9 +63,7 @@ export class HandlePendingPlanPayment {
     if (payload.status !== "PAID") return ok({ handled: false });
 
     const expected = priceFor(parsed.plan, parsed.cycle);
-    // customer_pays_fee adds the processing fee on top of the charged amount
-    // — accept base + fee (a lower amount is a forgery).
-    if (payload.amount !== undefined && Number(payload.amount) < expected) {
+    if (payload.amount !== undefined && Number(payload.amount) !== expected) {
       return err(new PendingPlanAmountMismatchError());
     }
 
