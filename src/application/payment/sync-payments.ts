@@ -1,9 +1,9 @@
 /**
  * SyncPendingPayments — admin on-demand reconciliation. For every pending
- * payment (optionally scoped to a store/order), asks the provider for the real
+ * payment (optionally scoped to a store/order), asks Xendit for the real
  * invoice status and updates the DB + confirms the order when newly paid.
  *
- * This is the manual fallback for the (rare) case where provider webhooks are
+ * This is the manual fallback for the (rare) case where Xendit webhooks are
  * permanently lost — the same logic the polling endpoint uses lazily.
  */
 
@@ -12,7 +12,9 @@ import type { Result } from "../../domain/shared/types";
 import { ok } from "../../domain/shared/types";
 import type { PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
-import type { PaymentProviderClient } from "../../infrastructure/payments/payment-provider-client";
+import type { PaymentProviderClient } from "../../infrastructure/payments/xendit-client";
+import type { PaymentProvider as PaymentProviderType } from "../../domain/payment/types";
+import type { StoreRepository } from "../store/store-repo";
 
 export interface SyncPaymentsInput {
   storeId?: EntityId;
@@ -29,7 +31,10 @@ export class SyncPendingPayments {
   constructor(
     private readonly paymentRepo: PaymentRepository,
     private readonly orderRepo: OrderRepository,
-    private readonly provider: PaymentProviderClient,
+    /** Client per provider — each payment is checked against its own provider. */
+    private readonly clientFor: (provider: PaymentProviderType) => PaymentProviderClient,
+    /** Resolves each payment's merchant sub-account (SingaPay KYB). */
+    private readonly storeRepo: StoreRepository,
   ) {}
 
   async execute(input: SyncPaymentsInput = {}): Promise<Result<SyncPaymentsResult, never>> {
@@ -44,7 +49,12 @@ export class SyncPendingPayments {
     let paid = 0;
     for (const payment of targets) {
       try {
-        const status = await this.provider.getInvoice(payment.externalId);
+        const store = await this.storeRepo.findById(payment.storeId);
+        const provider = this.clientFor(payment.provider);
+        const status = await provider.getInvoice(
+          payment.externalId,
+          store?.singapayAccountId ?? undefined,
+        );
         if (status.status === "PAID") payment.markPaid(status.paidAt ?? undefined);
         else if (status.status === "EXPIRED") payment.markExpired();
         else if (status.status === "FAILED") payment.markFailed();

@@ -88,13 +88,19 @@ describe("tierConfigFor", () => {
     expect(tierConfigFor(Tier.Pro).aiDescriptionLimit).toBeNull();
   });
 
-  it("online checkout is available on every tier; payouts are commerce-only", () => {
-    expect(tierConfigFor(Tier.Trial).onlineCheckout).toBe(true);
+  it("online checkout + payouts: pro/commerce only; trial is WhatsApp-only", () => {
+    expect(tierConfigFor(Tier.Trial).onlineCheckout).toBe(false);
     expect(tierConfigFor(Tier.Pro).onlineCheckout).toBe(true);
     expect(tierConfigFor(Tier.Commerce).onlineCheckout).toBe(true);
     expect(tierConfigFor(Tier.Trial).payouts).toBe(false);
-    expect(tierConfigFor(Tier.Pro).payouts).toBe(false);
+    expect(tierConfigFor(Tier.Pro).payouts).toBe(true); // pencairan = Pro feature
     expect(tierConfigFor(Tier.Commerce).payouts).toBe(true);
+  });
+
+  it("flat 2,5% royalty on paid plans only; trial is royalty-free", () => {
+    expect(tierConfigFor(Tier.Trial).commissionRate).toBeNull();
+    expect(tierConfigFor(Tier.Pro).commissionRate).toBe(2.5);
+    expect(tierConfigFor(Tier.Commerce).commissionRate).toBe(2.5);
   });
 
   it("the Tokko watermark is removed from pro and commerce", () => {

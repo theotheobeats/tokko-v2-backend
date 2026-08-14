@@ -20,6 +20,8 @@ export interface CommissionEntry {
 export interface CommissionLedger {
   record(entry: Omit<CommissionEntry, "id" | "createdAt">): Promise<void>;
   sumByStoreId(storeId: EntityId): Promise<number>;
+  /** All accrual entries for a store (for the earnings transaction log). */
+  listByStoreId(storeId: EntityId): Promise<CommissionEntry[]>;
 }
 
 export class D1CommissionLedger implements CommissionLedger {
@@ -43,5 +45,22 @@ export class D1CommissionLedger implements CommissionLedger {
       .where(eq(commissionEntries.storeId, storeId as string))
       .get();
     return Number(row?.total ?? 0);
+  }
+
+  async listByStoreId(storeId: EntityId): Promise<CommissionEntry[]> {
+    const rows = await this.db
+      .select()
+      .from(commissionEntries)
+      .where(eq(commissionEntries.storeId, storeId as string))
+      .all();
+    return rows.map((r) => ({
+      id: r.id,
+      storeId: r.storeId,
+      orderId: r.orderId,
+      orderAmount: r.orderAmount,
+      rate: r.rate,
+      fee: r.fee,
+      createdAt: r.createdAt,
+    }));
   }
 }

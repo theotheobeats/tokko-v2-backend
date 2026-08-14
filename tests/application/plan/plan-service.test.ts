@@ -47,7 +47,7 @@ describe("PlanService", () => {
     expect(await service.tierOf(makeStore(5))).toBe(Tier.Commerce);
   });
 
-  it("online checkout is available on trial, pro and commerce", async () => {
+  it("online checkout is available on pro and commerce only (trial is WhatsApp-only)", async () => {
     const pro = Subscription.create({
       id: createEntityId(),
       storeId: createEntityId(),
@@ -57,9 +57,9 @@ describe("PlanService", () => {
     const service = new PlanService(stubRepo(pro));
     expect(await service.canUseOnlineCheckout(makeStore(null))).toBe(true);
 
-    // Trial (no subscription) also gets online checkout.
+    // Trial (no subscription) has NO online checkout.
     const trialService = new PlanService(stubRepo(null));
-    expect(await trialService.canUseOnlineCheckout(makeStore(5))).toBe(true);
+    expect(await trialService.canUseOnlineCheckout(makeStore(5))).toBe(false);
   });
 
   it("viewOf exposes watermark + limits for a trial store", async () => {
@@ -67,7 +67,9 @@ describe("PlanService", () => {
     const view = await service.viewOf(makeStore(3));
     expect(view.tier).toBe(Tier.Trial);
     expect(view.watermark).toBe(true);
-    expect(view.onlineCheckout).toBe(true);
+    expect(view.onlineCheckout).toBe(false); // trial: WhatsApp/manual only
+    expect(view.payouts).toBe(false);
+    expect(view.commissionRate).toBeNull(); // no royalty on trial
     expect(view.productLimit).toBe(50);
     expect(view.aiDescriptionLimit).toBe(10);
   });

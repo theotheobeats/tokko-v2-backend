@@ -1,0 +1,1 @@
+ALTER TABLE `session` ADD `otp_verified_at` text;

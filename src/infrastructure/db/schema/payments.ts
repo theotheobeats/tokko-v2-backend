@@ -29,6 +29,8 @@ export const payments = sqliteTable(
     status: text("status").notNull().default("pending"),
     /** Provider invoice id — unique per attempt. */
     externalId: text("external_id").notNull().unique(),
+    /** Customer email from checkout (optional) — used for the paid invoice email. */
+    customerEmail: text("customer_email"),
     /** Provider-hosted payment page URL. */
     invoiceUrl: text("invoice_url").notNull(),
     paidAt: text("paid_at"),

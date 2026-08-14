@@ -21,8 +21,21 @@ GOOGLE_CLIENT_SECRET=
 # Resend email (verification emails) — optional, skipped when absent
 RESEND_API_KEY=
 
-# Payments (hosted checkout provider) — optional; fall back to WhatsApp flow when absent.
-# Webhook URL to register: https://api.7okko.com/api/webhooks/payments
-PAYMENT_PROVIDER_SECRET_KEY=
-PAYMENT_PROVIDER_WEBHOOK_TOKEN=
-PAYMENT_PROVIDER_API_URL=https://api.xendit.co
+# Xendit payments — optional; payments fall back to WhatsApp flow when absent.
+# Webhook URL to register: https://api.7okko.com/api/webhooks/xendit
+XENDIT_SECRET_KEY=
+XENDIT_WEBHOOK_TOKEN=
+
+# SingaPay payments — primary provider (sandbox). Mock when credentials absent.
+# Webhook URL to register: http://localhost:8787/api/webhooks/singapay
+SINGAPAY_CLIENT_ID=
+SINGAPAY_CLIENT_SECRET=
+SINGAPAY_PARTNER_ID=
+SINGAPAY_ACCOUNT_ID=
+SINGAPAY_API_URL=https://sandbox-payment-b2b.singapay.id
+SINGAPAY_KYB_URL_BASE=https://sandbox-payment-b2b.singapay.id
+# Optional static-IP reverse proxy (VPS) — see docs/singapay-proxy-nginx.conf
+SINGAPAY_PROXY_URL=
+SINGAPAY_PROXY_TOKEN=
+SINGAPAY_WEBHOOK_SECRET=
+SINGAPAY_FORCE_MOCK=

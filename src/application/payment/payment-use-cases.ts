@@ -5,12 +5,13 @@
 import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
+import { resolveTier, tierConfigFor } from "../../domain/plan/types";
 import { Payment } from "../../domain/payment/payment";
 import type { PaymentStatus } from "../../domain/payment/types";
+import type { PaymentProvider as PaymentProviderType } from "../../domain/payment/types";
 import type { PaymentRepository } from "../../infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../infrastructure/repos/d1-order-repo";
-import type { PaymentProviderClient } from "../../infrastructure/payments/payment-provider-client";
-import { providerMethodsFor } from "./payment-method-catalog";
+import type { PaymentProviderClient } from "../../infrastructure/payments/xendit-client";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -59,17 +60,6 @@ export class WebhookAmountMismatchError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Channel → provider payment_methods mapping
-// ---------------------------------------------------------------------------
-
-const CHANNEL_METHODS: Record<string, string[]> = {
-  qris: ["QRIS"],
-  bank_transfer: ["BANK_TRANSFER"],
-  ewallet: ["EWALLET"],
-  credit_card: ["CREDIT_CARD"],
-};
-
-// ---------------------------------------------------------------------------
 // CreatePayment
 // ---------------------------------------------------------------------------
 
@@ -83,6 +73,10 @@ export interface CreatePaymentInput {
   customerEmail?: string;
   successRedirectUrl?: string;
   failureRedirectUrl?: string;
+  /** Which provider this payment runs on (resolved by the registry). */
+  provider?: PaymentProviderType;
+  /** Merchant's provider sub-account (KYB-verified); default = platform account. */
+  accountId?: string;
 }
 
 export class CreatePayment {
@@ -103,7 +97,8 @@ export class CreatePayment {
     const existing = await this.paymentRepo.findByOrderId(order.id);
     const pending = existing.find((p) => p.status === "pending");
     if (pending) return ok(pending);
-    const externalId = `tokko-${crypto.randomUUID()}`;
+    // 38 chars (UUID without dashes) — SingaPay caps reff_no at 40.
+    const externalId = `tokko-${crypto.randomUUID().replace(/-/g, "")}`;
     try {
       const invoice = await this.provider.createInvoice({
         externalId,
@@ -114,11 +109,11 @@ export class CreatePayment {
           mobileNumber: input.customerPhone?.trim() || undefined,
           email: input.customerEmail?.trim() || undefined,
         },
-        paymentMethods: input.paymentMethodIds?.length
-          ? providerMethodsFor(input.paymentMethodIds)
-          : input.channel
-            ? CHANNEL_METHODS[input.channel]
-            : undefined,
+        // Catalog ids + channel are provider-resolved inside each client
+        // (Xendit payment_methods codes ≠ SingaPay whitelist codes).
+        paymentMethodIds: input.paymentMethodIds,
+        channel: input.channel ?? null,
+        accountId: input.accountId,
         successRedirectUrl: input.successRedirectUrl,
         failureRedirectUrl: input.failureRedirectUrl,
       });
@@ -128,8 +123,10 @@ export class CreatePayment {
         storeId: order.storeId,
         amount: order.totalAmount,
         channel: input.channel ?? null,
+        customerEmail: input.customerEmail?.trim() || null,
         externalId: invoice.externalId,
         invoiceUrl: invoice.invoiceUrl,
+        provider: input.provider,
       });
 
       await this.paymentRepo.save(payment);
@@ -141,10 +138,10 @@ export class CreatePayment {
 }
 
 // ---------------------------------------------------------------------------
-// HandlePaymentWebhook
+// HandleXenditWebhook
 // ---------------------------------------------------------------------------
 
-export interface PaymentWebhookPayload {
+export interface XenditWebhookPayload {
   id?: string;
   external_id: string;
   status: string; // PAID | EXPIRED | FAILED | PENDING
@@ -153,22 +150,25 @@ export interface PaymentWebhookPayload {
   amount?: number;
 }
 
-export class HandlePaymentWebhook {
+export class HandleXenditWebhook {
   constructor(
     private readonly paymentRepo: PaymentRepository,
     private readonly orderRepo: OrderRepository,
-    /** Commission-path merchants: record an accrual entry when an order is paid. */
+    /** Royalty accrual per paid order. Tier-driven: pro/commerce = flat 2,5%,
+     * trial = none. `subscriptionRepo` is optional for legacy/test call sites;
+     * without it the store-level commissionRate is used as before. */
     private readonly commission?: {
       storeRepo: import("../store/store-repo").StoreRepository;
       ledger: import("../../infrastructure/repos/d1-commission-ledger").CommissionLedger;
+      subscriptionRepo?: import("../../infrastructure/repos/d1-subscription-repo").SubscriptionRepository;
     },
   ) {}
 
   /**
-   * Process a verified payment webhook. Idempotent: a payment that is already
-   * paid is a no-op (the provider can redeliver webhooks).
+   * Process a verified Xendit webhook. Idempotent: a payment that is already
+   * paid is a no-op (Xendit can redeliver webhooks).
    */
-  async execute(payload: PaymentWebhookPayload): Promise<Result<{ handled: boolean }, PaymentNotFoundError | WebhookAmountMismatchError>> {
+  async execute(payload: XenditWebhookPayload): Promise<Result<{ handled: boolean }, PaymentNotFoundError | WebhookAmountMismatchError>> {
     const payment = await this.paymentRepo.findByExternalId(payload.external_id);
     if (!payment) return err(new PaymentNotFoundError());
 
@@ -208,12 +208,26 @@ export class HandlePaymentWebhook {
         await this.orderRepo.save(order);
       }
 
-      // Commission path (selective): accrual entry per paid order.
+      // Royalty (2,5% flat on Pro & Commerce; trial is royalty-free).
       if (this.commission) {
         try {
           const store = await this.commission.storeRepo.findById(payment.storeId);
-          if (store?.commissionRate) {
-            const rate = store.commissionRate;
+          if (!store) return ok({ handled: true });
+
+          let rate = 0;
+          if (this.commission.subscriptionRepo) {
+            const sub = await this.commission.subscriptionRepo.findActiveByStoreId(store.id);
+            const tier = resolveTier(store, sub);
+            // Trial/none → no royalty, period. Paid tiers → flat 2,5% (admin
+            // may override per store via the store-level commissionRate).
+            const tierRate = tierConfigFor(tier).commissionRate;
+            rate = tierRate !== null ? (store.commissionRate ?? tierRate) : 0;
+          } else {
+            // Legacy path (no tier lookup wired): store-level rate only.
+            rate = store.commissionRate ?? 0;
+          }
+
+          if (rate > 0) {
             await this.commission.ledger.record({
               storeId: store.id,
               orderId: order?.id ?? payment.orderId,

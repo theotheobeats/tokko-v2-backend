@@ -45,6 +45,18 @@ export class D1StoreRepository implements StoreRepository {
     return this._toDomain(row);
   }
 
+  /** Settlement webhook attribution: find the store owning this SingaPay sub-account. */
+  async findBySingapayAccountId(accountId: string): Promise<Store | null> {
+    const row = await this.db
+      .select()
+      .from(stores)
+      .where(eq(stores.singapayAccountId, accountId))
+      .get();
+
+    if (!row) return null;
+    return this._toDomain(row);
+  }
+
   async save(store: Store): Promise<void> {
     const data = this._toRow(store.toJSON());
     const existing = await this.findById(store.id);
@@ -184,6 +196,11 @@ export class D1StoreRepository implements StoreRepository {
       bankName: row.bankName,
       bankAccountNumber: row.bankAccountNumber,
       bankAccountName: row.bankAccountName,
+      singapayAccountId: row.singapayAccountId,
+      kybStatus: row.kybStatus,
+      payoutBankCode: row.payoutBankCode,
+      payoutBankAccountNumber: row.payoutBankAccountNumber,
+      payoutBankAccountName: row.payoutBankAccountName,
       enabledPaymentMethods: row.enabledPaymentMethods ? (JSON.parse(row.enabledPaymentMethods) as string[]) : null,
       enabledCouriers: row.enabledCouriers ? (JSON.parse(row.enabledCouriers) as string[]) : null,
       trialEndsAt: row.trialEndsAt,
@@ -230,6 +247,11 @@ export class D1StoreRepository implements StoreRepository {
       bankName: props.bankName,
       bankAccountNumber: props.bankAccountNumber,
       bankAccountName: props.bankAccountName,
+      singapayAccountId: props.singapayAccountId,
+      kybStatus: props.kybStatus,
+      payoutBankCode: props.payoutBankCode,
+      payoutBankAccountNumber: props.payoutBankAccountNumber,
+      payoutBankAccountName: props.payoutBankAccountName,
       enabledPaymentMethods: props.enabledPaymentMethods ? JSON.stringify(props.enabledPaymentMethods) : null,
       enabledCouriers: props.enabledCouriers ? JSON.stringify(props.enabledCouriers) : null,
       trialEndsAt: props.trialEndsAt,

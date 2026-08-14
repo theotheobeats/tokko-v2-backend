@@ -1,10 +1,13 @@
 /**
  * Plan bounded context — tiers, feature matrix and pure tier resolution.
  *
- * Tier matrix (v2 — approved):
- *   trial   14 days · full Pro features · Tokko watermark · AI 1x/10x caps
- *   pro     Rp 49rb/mo (490rb/yr) · watermark removed · unlimited AI
- *   commerce Rp 99–149rb/mo · online checkout + payouts · post-PG
+ * Tier matrix (v2 — current model):
+ *   trial    14 days · NO online checkout (payments via WhatsApp/manual
+ *            transfer) · no payouts · no royalty · Tokko watermark · AI 1x/10x
+ *   pro      Rp 49rb/mo (490rb/yr) · online checkout · payouts · watermark
+ *            removed · unlimited AI · royalty 2,5%
+ *   commerce Rp 99–149rb/mo · everything in pro + 5k products + 3yr history
+ *            · royalty 2,5%
  */
 
 import type { Store } from "../store/store";
@@ -22,15 +25,20 @@ export type Plan = "pro" | "commerce";
 export type BillingCycle = "monthly" | "annual";
 export type SubscriptionStatus = "active" | "expired" | "canceled";
 
+/** Flat royalty (%) on paid plans — trial is royalty-free. */
+export const ROYALTY_RATE = 2.5;
+
 /** Feature/limit set per tier. null limit = unlimited. */
 export interface TierConfig {
   productLimit: number;
   aiStoreLimit: number | null;
   aiDescriptionLimit: number | null;
-  onlineCheckout: boolean; // hosted payment invoice
+  onlineCheckout: boolean; // hosted checkout (QRIS/VA/e-wallet/kartu)
   payouts: boolean;
   brandingRemoved: boolean; // Tokko watermark hidden
   retentionDays: number; // order history visibility window
+  /** Flat royalty % on paid plans; null = no royalty (trial/none). */
+  commissionRate: number | null;
 }
 
 export const TIER_CONFIG: Record<Exclude<Tier, "none">, TierConfig> = {
@@ -38,19 +46,21 @@ export const TIER_CONFIG: Record<Exclude<Tier, "none">, TierConfig> = {
     productLimit: 50,
     aiStoreLimit: 1,
     aiDescriptionLimit: 10,
-    onlineCheckout: true, // trial = full Pro features — checkout included
+    onlineCheckout: false, // trial = WhatsApp/manual transfer only
     payouts: false,
     brandingRemoved: false,
     retentionDays: 31,
+    commissionRate: null,
   },
   pro: {
     productLimit: 1000,
     aiStoreLimit: null,
     aiDescriptionLimit: null,
-    onlineCheckout: true, // online checkout is available on Pro & Commerce
-    payouts: false,
+    onlineCheckout: true,
+    payouts: true, // pencairan dana is a Pro feature
     brandingRemoved: true,
     retentionDays: 365,
+    commissionRate: ROYALTY_RATE,
   },
   commerce: {
     productLimit: 5000,
@@ -60,6 +70,7 @@ export const TIER_CONFIG: Record<Exclude<Tier, "none">, TierConfig> = {
     payouts: true,
     brandingRemoved: true,
     retentionDays: 1095,
+    commissionRate: ROYALTY_RATE,
   },
 };
 

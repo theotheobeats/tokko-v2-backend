@@ -69,7 +69,9 @@ export function createAuth(env: Env) {
     ...(emailConfigured
       ? {
           emailVerification: {
-            sendOnSignUp: true,
+            // OTP replaces the link email on signup (register route sends the
+            // code). The callback stays for manual resends from the account tab.
+            sendOnSignUp: false,
             sendVerificationEmail: async ({ user, url }) => {
               const verifyUrl = `${url}&callbackURL=${encodeURIComponent(dashboardUrl)}`;
               await emailer.send({

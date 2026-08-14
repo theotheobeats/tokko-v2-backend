@@ -5,7 +5,7 @@
  */
 
 import type { Store } from "../../domain/store/store";
-import { resolveTier, tierConfigFor, type Tier, type TierConfig } from "../../domain/plan/types";
+import { resolveTier, tierConfigFor, ROYALTY_RATE, type Tier, type TierConfig } from "../../domain/plan/types";
 import type { SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 
 /** Plan info attached to store payloads (owner + public storefront). */
@@ -62,7 +62,7 @@ export class PlanService {
       aiDescriptionUsed: store.aiDescriptions,
       aiDescriptionLimit: cfg.aiDescriptionLimit,
       retentionDays: cfg.retentionDays,
-      commissionRate: store.commissionRate,
+      commissionRate: tier === "pro" || tier === "commerce" ? (store.commissionRate ?? ROYALTY_RATE) : null,
       pendingPlan: sub?.pendingPlan ?? null,
       pendingCycle: sub?.pendingCycle ?? null,
       pendingStartsAt: sub?.pendingPlan ? sub.currentPeriodEnd : null,

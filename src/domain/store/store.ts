@@ -45,6 +45,15 @@ export interface StoreProps {
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
+  // SingaPay managed sub-account (merchant KYB) — funds settle to the
+  // merchant's own account; we never hold merchant money.
+  singapayAccountId: string | null;
+  /** Cached KYB status: null | "kyb_in_review" | "kyb_verified". */
+  kybStatus: string | null;
+  // Payout bank — where the merchant receives disbursements (SingaPay).
+  payoutBankCode: string | null;
+  payoutBankAccountNumber: string | null;
+  payoutBankAccountName: string | null;
   // Enabled payment methods / couriers (null = platform defaults, all).
   enabledPaymentMethods: string[] | null;
   enabledCouriers: string[] | null;
@@ -108,6 +117,11 @@ export class Store {
       bankName: null,
       bankAccountNumber: null,
       bankAccountName: null,
+      singapayAccountId: null,
+      kybStatus: null,
+      payoutBankCode: null,
+      payoutBankAccountNumber: null,
+      payoutBankAccountName: null,
       enabledPaymentMethods: null,
       enabledCouriers: null,
       trialEndsAt: null,
@@ -159,6 +173,11 @@ export class Store {
   get bankName() { return this.props.bankName; }
   get bankAccountNumber() { return this.props.bankAccountNumber; }
   get bankAccountName() { return this.props.bankAccountName; }
+  get singapayAccountId() { return this.props.singapayAccountId; }
+  get kybStatus() { return this.props.kybStatus; }
+  get payoutBankCode() { return this.props.payoutBankCode; }
+  get payoutBankAccountNumber() { return this.props.payoutBankAccountNumber; }
+  get payoutBankAccountName() { return this.props.payoutBankAccountName; }
   get enabledPaymentMethods() { return this.props.enabledPaymentMethods; }
   get enabledCouriers() { return this.props.enabledCouriers; }
   get trialEndsAt() { return this.props.trialEndsAt; }
@@ -420,6 +439,27 @@ export class Store {
   /** Mark the day-10 trial reminder as sent. */
   markTrialReminderSent(): Store {
     this.props.trialReminderSentAt = new Date().toISOString();
+    return this;
+  }
+
+  /** Attach/resync the SingaPay managed sub-account + KYB status. */
+  updatePaymentProviderAccount(singapayAccountId: string, kybStatus: string): Store {
+    this.props.singapayAccountId = singapayAccountId;
+    this.props.kybStatus = kybStatus;
+    return this;
+  }
+
+  /** Set the payout bank (disbursement destination for merchant funds). */
+  setPayoutBank(input: { code: string; accountNumber: string; accountName?: string | null }): Store {
+    this.props.payoutBankCode = input.code;
+    this.props.payoutBankAccountNumber = input.accountNumber;
+    this.props.payoutBankAccountName = input.accountName ?? null;
+    return this;
+  }
+
+  /** Force online checkout on/off (KYB verification auto-enables it). */
+  setPaymentOnline(value: boolean): Store {
+    this.props.paymentOnline = value;
     return this;
   }
 

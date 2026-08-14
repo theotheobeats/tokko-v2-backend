@@ -1,0 +1,364 @@
+/**
+ * Merchant payouts (SingaPay) — admin-driven.
+ *
+ * Money lives in the merchant's OWN SingaPay sub-account. A payout:
+ *   1. sweeps accrued platform commission → our settlement account
+ *      (account-transfer, so we never hold merchant money),
+ *   2. disburses the remaining available balance → the merchant's bank
+ *      (signed money-out with an idempotent reference_number).
+ *
+ * Both moves are recorded in the `payouts` table for history + audit.
+ */
+
+import type { Result } from "../../domain/shared/types";
+import { ok, err, type EntityId } from "../../domain/shared/types";
+import type { StoreRepository } from "../store/store-repo";
+import type { CommissionLedger } from "../../infrastructure/repos/d1-commission-ledger";
+import type { PayoutRepository } from "../../infrastructure/repos/d1-payout-repo";
+import type { PayoutRequestRepository } from "../../infrastructure/repos/d1-payout-request-repo";
+import type { SingaPayAccountsClientLike, SingaPayBalance } from "../../infrastructure/payments/singapay-client";
+import type { NormalizedSingaPayDisbursementWebhook } from "../../infrastructure/payments/singapay-webhook";
+import { EMPTY_TEST_ACCESS, isTestEmail, type TestAccess } from "../payout/test-access";
+
+export class PayoutStoreNotFoundError extends Error {
+  code = "STORE_NOT_FOUND";
+  constructor() { super("Toko tidak ditemukan"); }
+}
+export class PayoutNoAccountError extends Error {
+  code = "PAYOUT_NO_ACCOUNT";
+  constructor() { super("Merchant belum memiliki akun pembayaran SingaPay."); }
+}
+export class PayoutKYBNotVerifiedError extends Error {
+  code = "KYB_NOT_VERIFIED";
+  constructor() { super("Verifikasi merchant (KYB) belum selesai."); }
+}
+export class PayoutNoBankError extends Error {
+  code = "PAYOUT_BANK_MISSING";
+  constructor() { super("Merchant belum melengkapi rekening bank tujuan."); }
+}
+export class PayoutBankUnsupportedError extends Error {
+  code = "PAYOUT_BANK_UNSUPPORTED";
+  constructor() { super("Bank tidak didukung untuk pencairan — gunakan BCA, Mandiri, BNI, BRI, atau bank yang terdaftar."); }
+}
+export class PayoutInsufficientBalanceError extends Error {
+  code = "PAYOUT_INSUFFICIENT_BALANCE";
+  constructor(message = "Saldo tidak cukup untuk komisi + pencairan.") { super(message); }
+}
+export class PayoutNotFoundError extends Error {
+  code = "PAYOUT_NOT_FOUND";
+  constructor() { super("Pencairan tidak ditemukan."); }
+}
+
+export class PayoutProviderError extends Error {
+  code = "PAYOUT_PROVIDER_ERROR";
+  constructor(message: string) { super(message); }
+}
+
+/** SingaPay's minimum disbursement amount (docs: Send Money → Bank Coverage). */
+const MIN_PAYOUT_AMOUNT = 10_000;
+
+/** National bank codes accepted by the SingaPay v2 disbursement. */
+const ID_BANK_CODES: Record<string, string> = {
+  BCA: "014",
+  MANDIRI: "008",
+  BNI: "009",
+  BRI: "002",
+  BTN: "200",
+  PERMATA: "013",
+  "CIMB NIAGA": "022",
+  CIMB: "022",
+  DANAMON: "011",
+  MAYBANK: "016",
+  BSI: "451",
+  "BANK SYARIAH INDONESIA": "451",
+  OCBC: "028",
+  BTPN: "213",
+  "BANK JAGO": "542",
+  SEABANK: "531",
+  "JAGO": "542",
+};
+
+export function bankCodeFor(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const key = name.trim().toUpperCase().replace(/\s+/g, " ");
+  return ID_BANK_CODES[key] ?? null;
+}
+
+/** Whether a national bank code is in the supported set. */
+export function isSupportedBankCode(code: string | null | undefined): boolean {
+  return !!code && Object.values(ID_BANK_CODES).includes(code);
+}
+
+/** Bank name for a national code (reverse lookup, first match). */
+export function bankNameFor(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const entry = Object.entries(ID_BANK_CODES).find(([, c]) => c === code);
+  return entry?.[0] ?? null;
+}
+
+/** SWIFT/BIC per national code — needed by check-beneficiary (v1). */
+const BANK_SWIFT: Record<string, string> = {
+  "014": "CENAIDJA", // BCA
+  "008": "BMRIIDJA", // Mandiri
+  "009": "BNINIDJA", // BNI
+  "002": "BRINIDJA", // BRI
+  "200": "BTANIDJA", // BTN
+  "013": "BBBAIDJA", // Permata
+  "022": "BNIAIDJA", // CIMB Niaga
+  "011": "BDINIDJA", // Danamon
+  "016": "IBBEIDJA", // Maybank
+  "451": "BSMSIDJA", // BSI
+  "028": "NISPIDJA", // OCBC NISP
+  "213": "BTPSIDJA", // BTPN
+};
+
+/** SWIFT for a national code; null for digital banks (no SWIFT). */
+export function swiftCodeFor(bankCode: string | null | undefined): string | null {
+  return bankCode ? (BANK_SWIFT[bankCode] ?? null) : null;
+}
+
+/**
+ * Quote the disbursement transfer fee (SingaPay check-fee). The disbursement
+ * debits `amount + fee` from the account — paying out the full available
+ * balance without deducting the fee fails with SP003 (Insufficient Balance).
+ * Returns 0 when the fee cannot be quoted (no SWIFT code / quote error).
+ */
+export async function quoteDisbursementFee(
+  accounts: SingaPayAccountsClientLike,
+  accountId: string,
+  bankCode: string,
+  grossAmount: number,
+): Promise<number> {
+  const swift = swiftCodeFor(bankCode);
+  if (!swift) return 0;
+  try {
+    const quote = await accounts.checkFee({ accountId, bankSwiftCode: swift, amount: grossAmount });
+    return Math.round(Number(quote?.transfer_fee ?? 0));
+  } catch {
+    return 0;
+  }
+}
+
+export interface PayoutSummaryView {
+  storeId: string;
+  storeName: string;
+  subdomain: string;
+  subAccountId: string | null;
+  kybStatus: string | null;
+  balance: { available: number; balance: number; pending: number; held: number };
+  commissionOwed: number;
+  payoutBank: { name: string | null; accountNumber: string | null; holder: string | null } | null;
+  bankCode: string | null;
+}
+
+export class GetPayoutSummary {
+  constructor(
+    private readonly storeRepo: StoreRepository,
+    private readonly ledger: CommissionLedger,
+    private readonly accounts: SingaPayAccountsClientLike,
+    /** Test access (KYB bypass + master-account balance fallback). */
+    private readonly testAccess: TestAccess = EMPTY_TEST_ACCESS,
+  ) {}
+
+  async execute(storeId: EntityId, ownerEmail?: string): Promise<Result<PayoutSummaryView, PayoutStoreNotFoundError | PayoutProviderError>> {
+    const store = await this.storeRepo.findById(storeId);
+    if (!store) return err(new PayoutStoreNotFoundError());
+
+    const isTest = isTestEmail(ownerEmail, this.testAccess);
+    const effectiveKyb = store.kybStatus === "kyb_verified" || isTest ? "kyb_verified" : store.kybStatus;
+    // Test users ALWAYS read the master account — their own sub-account is
+    // pre-KYB (kyb_in_review, zero balance) while the test money lands in the
+    // master. Real merchants always use their own sub-account.
+    const accountId = isTest
+      ? this.testAccess.masterAccountId ?? store.singapayAccountId
+      : store.singapayAccountId;
+
+    let balance: SingaPayBalance = { available: 0, balance: 0, pending: 0, held: 0 };
+    if (accountId) {
+      try {
+        balance = await this.accounts.checkBalance(accountId);
+      } catch (e) {
+        return err(new PayoutProviderError(e instanceof Error ? e.message : "Gagal membaca saldo."));
+      }
+    }
+    const commissionOwed = await this.ledger.sumByStoreId(store.id);
+    // Prefer the dedicated payout bank; fall back to the manual-transfer bank.
+    const bankCode = store.payoutBankCode ?? bankCodeFor(store.bankName);
+    const accountNumber = store.payoutBankAccountNumber ?? store.bankAccountNumber;
+    const accountName = store.payoutBankAccountName ?? store.bankAccountName;
+    const bankName = bankNameFor(bankCode) ?? store.bankName;
+
+    return ok({
+      storeId: store.id,
+      storeName: store.name,
+      subdomain: store.subdomain,
+      subAccountId: accountId,
+      kybStatus: effectiveKyb,
+      balance,
+      commissionOwed,
+      payoutBank: accountNumber
+        ? { name: bankName, accountNumber, holder: accountName }
+        : null,
+      bankCode,
+    });
+  }
+}
+
+export interface PayoutResult {
+  payout: {
+    id: string;
+    amount: number;
+    commission: number;
+    balanceBefore: number;
+    sweepRef: string | null;
+    payoutRef: string | null;
+    providerTransactionId: string | null;
+    status: string;
+    failedReason: string | null;
+  };
+  disbursement: { transactionId: string; referenceNumber: string; status: string; netAmount: number; fee: number; failedReason: string | null };
+}
+
+export class RunPayout {
+  constructor(
+    private readonly storeRepo: StoreRepository,
+    private readonly ledger: CommissionLedger,
+    private readonly payoutRepo: PayoutRepository,
+    private readonly accounts: SingaPayAccountsClientLike,
+    /** Our platform settlement account number (commission sweep beneficiary). */
+    private readonly settlementAccountNumber: string,
+    /** Test access (KYB bypass + master-account fallback). */
+    private readonly testAccess: TestAccess = EMPTY_TEST_ACCESS,
+  ) {}
+
+  async execute(storeId: EntityId, ownerEmail?: string): Promise<Result<PayoutResult, Error>> {
+    const store = await this.storeRepo.findById(storeId);
+    if (!store) return err(new PayoutStoreNotFoundError());
+
+    const isTest = isTestEmail(ownerEmail, this.testAccess);
+    // Test users run against the master account (their sub-account is pre-KYB
+    // and holds no money); real merchants use their own sub-account.
+    const accountId = isTest
+      ? this.testAccess.masterAccountId ?? store.singapayAccountId
+      : store.singapayAccountId;
+    if (!accountId) return err(new PayoutNoAccountError());
+    if (store.kybStatus !== "kyb_verified" && !isTest) return err(new PayoutKYBNotVerifiedError());
+    // Prefer the dedicated payout bank; fall back to the manual-transfer bank.
+    const bankCode = store.payoutBankCode ?? bankCodeFor(store.bankName) ?? "";
+    const bankAccountNumber = store.payoutBankAccountNumber ?? store.bankAccountNumber ?? "";
+    if (!bankAccountNumber) return err(new PayoutNoBankError());
+    if (!isSupportedBankCode(bankCode)) return err(new PayoutBankUnsupportedError());
+
+    let balance: SingaPayBalance;
+    try {
+      balance = await this.accounts.checkBalance(accountId);
+    } catch (e) {
+      return err(new PayoutProviderError(e instanceof Error ? e.message : "Gagal membaca saldo."));
+    }
+
+    const commission = await this.ledger.sumByStoreId(store.id);
+    // Gross the merchant wants (before the bank transfer fee).
+    const grossTarget = balance.available - commission;
+    if (grossTarget <= 0) return err(new PayoutInsufficientBalanceError());
+
+    // SingaPay debits amount + fee — quote the fee so the payout never exceeds
+    // the available balance (SP003). Net = what the merchant actually receives.
+    const fee = await quoteDisbursementFee(this.accounts, accountId, bankCode, grossTarget);
+    const payoutAmount = grossTarget - fee;
+    if (payoutAmount < MIN_PAYOUT_AMOUNT) {
+      return err(new PayoutInsufficientBalanceError("Saldo tidak cukup untuk pencairan (termasuk biaya transfer)."));
+    }
+
+    const ref = `payout-${store.id.slice(0, 8)}-${Date.now()}`;
+
+    try {
+      // 1. Sweep platform commission → our settlement account. Skipped when
+      //    nothing is owed — SingaPay's account-transfer rejects amount 0.
+      const sweep =
+        commission > 0
+          ? await this.accounts.accountTransfer({
+              accountId,
+              amount: commission,
+              beneficiaryAccountNumber: this.settlementAccountNumber,
+              merchantRefNo: `${ref}-commission`,
+            })
+          : null;
+
+      // 2. Disburse the remainder → merchant bank.
+      const disb = await this.accounts.disburse({
+        accountId,
+        referenceNumber: ref,
+        bankCode,
+        bankAccountNumber,
+        amount: payoutAmount,
+        notes: `Pencairan Tokko — ${store.name}`,
+      });
+
+      const record = await this.payoutRepo.create({
+        storeId: store.id,
+        amount: payoutAmount,
+        commission,
+        balanceBefore: balance.available,
+        sweepRef: sweep?.transactionId ?? null,
+        payoutRef: disb.referenceNumber,
+        providerTransactionId: disb.transactionId,
+        status: disb.status === "FAILED" ? "failed" : "submitted",
+        failedReason: disb.failedReason,
+      });
+
+      return ok({
+        payout: { ...record },
+        disbursement: disb,
+      });
+    } catch (e) {
+      return err(new PayoutProviderError(e instanceof Error ? e.message : "Pencairan gagal."));
+    }
+  }
+}
+
+/**
+ * Disbursement notification (SingaPay → us, `disbursement_notif_url`).
+ *
+ * Money-out results arrive asynchronously AFTER the transfer was submitted:
+ * this use case flips the payout from `submitted` to `settled` (code "00" /
+ * SP000) or `failed` (code "06" / SP001, with failed_reason). Idempotent —
+ * a settled payout is terminal; repeated/late notifications are no-ops.
+ */
+export class HandleDisbursementWebhook {
+  constructor(
+    private readonly payoutRepo: PayoutRepository,
+    /** Optional: sync the linked payout request when the money-out fails. */
+    private readonly requestRepo?: PayoutRequestRepository,
+  ) {}
+
+  async execute(
+    input: NormalizedSingaPayDisbursementWebhook,
+  ): Promise<Result<{ handled: boolean }, PayoutNotFoundError>> {
+    const payout = await this.payoutRepo.findByRef(input.referenceNumber);
+    if (!payout) return err(new PayoutNotFoundError());
+
+    // Already terminal (settled, or failed with a recorded reason) — ignore.
+    if (payout.status !== "submitted") return ok({ handled: false });
+
+    await this.payoutRepo.updateStatus(payout.id, {
+      status: input.status === "failed" ? "failed" : "settled",
+      providerTransactionId: input.transactionId,
+      failedReason: input.failedReason,
+    });
+
+    // Rejected money-out → park the linked request back to approved (retryable)
+    // so it is never left marked "paid" when the money did not move.
+    if (input.status === "failed" && this.requestRepo) {
+      const linked = await this.requestRepo.findByPayoutId(payout.id);
+      if (linked && linked.status === "paid") {
+        const reason = input.failedReason ?? "Pencairan ditolak penyedia pembayaran.";
+        await this.requestRepo.update(linked.id, {
+          status: "approved",
+          decisionNote: reason,
+        });
+      }
+    }
+
+    return ok({ handled: true });
+  }
+}

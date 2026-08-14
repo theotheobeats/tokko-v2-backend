@@ -18,13 +18,18 @@ import { BusinessType, Aesthetic } from "../../domain/store/types";
 import type { EntityId } from "../../domain/shared/types";
 import { mockAIGenerate, generateStore } from "../../infrastructure/ai/deepseek-client";
 import { useRealAi } from "../../infrastructure/ai/ai-mode";
-import { PAYMENT_METHOD_CATALOG, DEFAULT_ENABLED_PAYMENT_METHODS } from "../../application/payment/payment-method-catalog";
+import { PAYMENT_METHOD_CATALOG, DEFAULT_ENABLED_PAYMENT_METHODS, type PaymentMethodInfo } from "../../application/payment/payment-method-catalog";
 import { COURIER_CATALOG, DEFAULT_COURIERS } from "../../application/shipping/courier-catalog";
 import { PlanService, type PlanView } from "../../application/plan/plan-service";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { D1PendingPlanRepository } from "../../infrastructure/repos/d1-pending-plan-repo";
+import { isTestEmail, resolveTestAccess } from "../../application/payout/test-access";
 import { activatePendingPlan } from "../../application/plan/pending-plan";
-import { createPaymentProvider } from "../../infrastructure/payments/payment-provider-client";
+import { createProviderClient, resolveActivePaymentProvider, providerIsReal } from "../../infrastructure/payments/registry";
+import { createSingaPayAccountsClient, SINGAPAY_METHOD_CODES } from "../../infrastructure/payments/singapay-client";
+import { StartMerchantKYB, GetMerchantKYBStatus, KYBStoreNotFoundError } from "../../application/kyb/merchant-kyb";
+import { isSupportedBankCode, swiftCodeFor } from "../../application/admin/admin-payouts";
+import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
@@ -46,6 +51,8 @@ function storeJSON(store: {
   paymentOnline: boolean; bankName: string | null;
   bankAccountNumber: string | null; bankAccountName: string | null;
   enabledPaymentMethods: string[] | null; enabledCouriers: string[] | null;
+  singapayAccountId: string | null; kybStatus: string | null;
+  payoutBankCode: string | null; payoutBankAccountNumber: string | null; payoutBankAccountName: string | null;
 }, plan?: PlanView) {
   return {
     id: store.id,
@@ -76,6 +83,13 @@ function storeJSON(store: {
     bankAccountName: store.bankAccountName,
     enabledPaymentMethods: store.enabledPaymentMethods,
     enabledCouriers: store.enabledCouriers,
+    // SingaPay managed sub-account (merchant KYB) — owner/admin only;
+    // the public storefront strips these (see by-subdomain).
+    singapayAccountId: store.singapayAccountId,
+    kybStatus: store.kybStatus,
+    payoutBankCode: store.payoutBankCode,
+    payoutBankAccountNumber: store.payoutBankAccountNumber,
+    payoutBankAccountName: store.payoutBankAccountName,
     ...(plan ? { plan } : {}),
   };
 }
@@ -282,9 +296,27 @@ storesRouter.get("/by-subdomain", async (c) => {
 
   const plan = await planService(db).viewOf(store);
   const base = storeJSON(store, plan);
+  // Test-owner bypass (KYB_TEST_EMAILS): the whitelisted owner sees online
+  // checkout on their own storefront even without KYB/plan — staging testing
+  // needs the full payment → settlement flow to work end-to-end.
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers }).catch(() => null);
+  const isTestOwner =
+    !!session && session.user.id === store.ownerId && isTestEmail(session.user.email, resolveTestAccess(c.env));
+  // Online checkout must ALSO pass merchant KYB (SingaPay managed sub-account)
+  // — otherwise the storefront falls back to manual transfer via WhatsApp.
+  const settings = new D1AppSettingsRepository(db);
+  const providerId = await resolveActivePaymentProvider((k) => settings.get(k));
+  const kybOk = providerId !== "singapay" || store.kybStatus === "kyb_verified";
   // Online checkout is available on Pro & Commerce — hide it only from trial/none storefronts
   // (the merchant toggle stays on their settings, but it doesn't surface).
-  const storePayload = { ...base, paymentOnline: base.paymentOnline && plan.onlineCheckout, paused };
+  // KYB fields are owner/admin-only — never expose them on the public storefront.
+  const { singapayAccountId: _sa, kybStatus: _kb, ...publicBase } = base;
+  const storePayload = {
+    ...publicBase,
+    paymentOnline: isTestOwner ? true : base.paymentOnline && plan.onlineCheckout && kybOk,
+    paused,
+  };
 
   return c.json({
     store: storePayload,
@@ -324,6 +356,10 @@ storesRouter.patch("/:id", zValidator("json", z.object({
   bankAccountName: z.string().nullable().optional(),
   enabledPaymentMethods: z.array(z.string()).optional(),
   enabledCouriers: z.array(z.string()).optional(),
+  // Payout bank (SingaPay disbursement destination)
+  payoutBankCode: z.string().optional(),
+  payoutBankAccountNumber: z.string().nullable().optional(),
+  payoutBankAccountName: z.string().nullable().optional(),
 })), async (c) => {
   const session = await requireAuth(c);
   if (session instanceof Response) return session;
@@ -348,11 +384,28 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     whatsappNumber: body.whatsappNumber,
   });
 
-  // Gate: online checkout is available on Pro & Commerce.
+  // Gate: online checkout (Xendit) is available on Pro & Commerce.
   if (body.paymentOnline === true && !(await planService(db).canUseOnlineCheckout(store))) {
-    return c.json({
-      error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Pro dan Commerce.", field: "paymentOnline" },
-    }, 403);
+    // Test-owner bypass (KYB_TEST_EMAILS) — the whitelisted owner may enable it.
+    const isTestOwner = isTestEmail(session.user.email, resolveTestAccess(c.env));
+    if (!isTestOwner) {
+      return c.json({
+        error: { code: "PLAN_REQUIRED", message: "Pembayaran online tersedia di paket Pro dan Commerce.", field: "paymentOnline" },
+      }, 403);
+    }
+  }
+
+  // Enforce e-payment once merchant KYB is approved (SingaPay) — online
+  // checkout is mandatory for verified merchants; WhatsApp/manual transfer is
+  // only the pre-verification fallback.
+  if (body.paymentOnline === false && store.kybStatus === "kyb_verified") {
+    const settings = new D1AppSettingsRepository(db);
+    const providerId = await resolveActivePaymentProvider((k) => settings.get(k));
+    if (providerId === "singapay") {
+      return c.json({
+        error: { code: "KYB_ENFORCED", message: "Pembayaran online wajib aktif setelah verifikasi merchant selesai.", field: "paymentOnline" },
+      }, 403);
+    }
   }
 
   if (body.heroImageUrl !== undefined) {
@@ -389,6 +442,21 @@ storesRouter.patch("/:id", zValidator("json", z.object({
     enabledCouriers: body.enabledCouriers,
   });
 
+  // Payout bank — validated against the supported bank codes.
+  if (body.payoutBankCode !== undefined || body.payoutBankAccountNumber !== undefined) {
+    const code = body.payoutBankCode ?? store.payoutBankCode ?? "";
+    if (!isSupportedBankCode(code)) {
+      return c.json({
+        error: { code: "VALIDATION", message: "Bank tujuan pencairan tidak didukung — pilih dari daftar.", field: "payoutBankCode" },
+      }, 400);
+    }
+    store.setPayoutBank({
+      code,
+      accountNumber: (body.payoutBankAccountNumber ?? store.payoutBankAccountNumber ?? "").replace(/\D/g, ""),
+      accountName: body.payoutBankAccountName ?? store.payoutBankAccountName ?? null,
+    });
+  }
+
   await storeRepo.save(store);
 
   return c.json({ store: storeJSON(store, await planService(db).viewOf(store)) });
@@ -418,26 +486,47 @@ storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionC
   const { plan, cycle } = c.req.valid("json");
   const amount = priceFor(plan, cycle);
 
-  // Real payments required — no mock invoices for subscriptions.
-  const provider = createPaymentProvider(c.env);
-  const { useRealPayments } = await import("../../infrastructure/payments/payment-provider-client");
-  if (!useRealPayments(c.env)) {
+  // Route through the active provider (admin switch); real payments only —
+  // no mock invoices for subscriptions.
+  const providerId = await resolveActivePaymentProvider((k) => new D1AppSettingsRepository(db).get(k));
+  if (!providerIsReal(c.env, providerId)) {
     return c.json({
       error: { code: "PAYMENT_UNAVAILABLE", message: "Pembayaran langganan belum tersedia saat ini." },
     }, 502);
   }
+  const provider = createProviderClient(c.env, providerId);
 
   const externalId = subscriptionExternalId(store.id, plan, cycle, `${Date.now()}`);
   const label = plan === "pro" ? "Pro" : "Commerce";
   const cycleLabel = cycle === "annual" ? "tahunan" : "bulanan";
-  const invoice = await provider.createInvoice({
-    externalId,
-    amount,
-    description: `Langganan Tokko ${label} (${cycleLabel})`,
-    customer: { givenNames: store.name, email: session.user.email },
-    successRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
-    failureRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
-  });
+  let invoice;
+  try {
+    invoice = await provider.createInvoice({
+      externalId,
+      amount,
+      description: `Langganan Tokko ${label} (${cycleLabel})`,
+      customer: { givenNames: store.name, email: session.user.email },
+      successRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
+      failureRedirectUrl: `${c.env.FRONTEND_URL ?? "https://7okko.com"}/dashboard/settings`,
+    });
+  } catch (e) {
+    return c.json({
+      error: { code: "PAYMENT_PROVIDER_ERROR", message: e instanceof Error ? e.message : "Gagal membuat pembayaran." },
+    }, 502);
+  }
+
+  // #10: email the invoice + payment link to the merchant (best-effort).
+  try {
+    const { notifyPlanInvoice } = await import("../../application/order/notify-payment");
+    await notifyPlanInvoice({
+      env: c.env,
+      email: session.user.email,
+      plan,
+      cycle,
+      amount,
+      invoiceUrl: invoice.invoiceUrl,
+    });
+  } catch { /* non-blocking */ }
 
   return c.json({
     invoiceUrl: invoice.invoiceUrl,
@@ -446,6 +535,89 @@ storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionC
     cycle,
     amount,
   }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Merchant KYB (SingaPay managed sub-account) — owner only
+// ---------------------------------------------------------------------------
+
+// POST /api/stores/:id/kyb — start/resume the KYB flow (creates the
+// managed sub-account on first call, returns the self-onboarding link).
+storesRouter.post("/:id/kyb", async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const result = await new StartMerchantKYB(storeRepo, createSingaPayAccountsClient(c.env)).execute(storeId);
+  if (!result.ok) {
+    if (result.error instanceof KYBStoreNotFoundError) return c.json({ error: result.error }, 404);
+    return c.json({ error: result.error }, 502);
+  }
+  return c.json({ kyb: result.value });
+});
+
+// GET /api/stores/:id/kyb — current KYB status (live from the provider).
+storesRouter.get("/:id/kyb", async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const result = await new GetMerchantKYBStatus(storeRepo, createSingaPayAccountsClient(c.env)).execute(storeId);
+  if (!result.ok) {
+    if (result.error instanceof KYBStoreNotFoundError) return c.json({ error: result.error }, 404);
+    return c.json({ error: result.error }, 502);
+  }
+  return c.json({ kyb: result.value });
+});
+
+// POST /api/stores/:id/payout-bank/check — validate the payout bank account
+// via SingaPay's check-beneficiary (best-effort; digital banks have no SWIFT).
+storesRouter.post("/:id/payout-bank/check", zValidator("json", z.object({
+  bankCode: z.string(),
+  accountNumber: z.string(),
+})), async (c) => {
+  const session = await requireAuth(c);
+  if (session instanceof Response) return session;
+
+  const storeId = c.req.param("id") as EntityId;
+  const db = createDb(c.env.DB);
+  const storeRepo = new D1StoreRepository(db);
+  const store = await storeRepo.findById(storeId);
+  if (!store) return c.json({ error: { code: "NOT_FOUND", message: "Toko tidak ditemukan." } }, 404);
+  if (store.ownerId !== session.user.id) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya pemilik toko." } }, 403);
+  }
+
+  const { bankCode, accountNumber } = c.req.valid("json");
+  if (!isSupportedBankCode(bankCode)) {
+    return c.json({ valid: false, message: "Bank tidak didukung." });
+  }
+  const swift = swiftCodeFor(bankCode);
+  if (!swift) {
+    return c.json({ valid: null, message: "Bank digital tidak bisa dicek otomatis — akan diverifikasi saat pencairan." });
+  }
+  try {
+    await createSingaPayAccountsClient(c.env).checkBeneficiary({ bankSwiftCode: swift, bankAccountNumber: accountNumber });
+    return c.json({ valid: true, message: "Rekening valid." });
+  } catch {
+    return c.json({ valid: false, message: "Rekening tidak ditemukan di bank tersebut — periksa nomor rekening." });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -485,7 +657,10 @@ storesRouter.post("/:id/subscription/cancel", zValidator("json", z.object({ canc
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/stores/:id/payment-methods — catalog + per-store enabled flags
+// GET /api/stores/:id/payment-methods — active provider + method list
+// (SingaPay: live catalog from the API merged with our fee schedule;
+// Xendit: static catalog. SingaPay does not publish fee rates via API —
+// fees are charged per transaction, so unknown methods show no rate.)
 // ---------------------------------------------------------------------------
 storesRouter.get("/:id/payment-methods", async (c) => {
   const session = await requireAuth(c);
@@ -498,8 +673,40 @@ storesRouter.get("/:id/payment-methods", async (c) => {
   if (!store) return c.json({ error: { code: "NOT_FOUND" } }, 404);
   if (store.ownerId !== session.user.id) return c.json({ error: { code: "FORBIDDEN" } }, 403);
 
+  const settings = new D1AppSettingsRepository(db);
+  const providerId = await resolveActivePaymentProvider((k) => settings.get(k));
   const enabled = new Set(store.enabledPaymentMethods ?? DEFAULT_ENABLED_PAYMENT_METHODS);
+
+  // SingaPay: live catalog (codes/names/groups) merged with our fee schedule.
+  if (providerId === "singapay") {
+    try {
+      const live = await createSingaPayAccountsClient(c.env).listPaymentMethods();
+      const oursByCode = new Map<string, PaymentMethodInfo>();
+      for (const m of PAYMENT_METHOD_CATALOG) {
+        for (const code of SINGAPAY_METHOD_CODES[m.id] ?? []) oursByCode.set(code, m);
+      }
+      return c.json({
+        provider: providerId,
+        methods: live.payment_methods.map((pm) => {
+          const ours = oursByCode.get(pm.code);
+          return {
+            id: ours?.id ?? pm.code,
+            label: pm.name,
+            group: pm.group,
+            feePercent: ours?.feePercent ?? null,
+            feeFixed: ours?.feeFixed ?? null,
+            enabled: ours ? enabled.has(ours.id) : false,
+            providerCode: pm.code,
+          };
+        }),
+      });
+    } catch {
+      // provider unreachable — fall through to the static catalog
+    }
+  }
+
   return c.json({
+    provider: providerId,
     methods: PAYMENT_METHOD_CATALOG.map((m) => ({
       id: m.id,
       label: m.label,

@@ -4,11 +4,13 @@ import { zValidator } from "@hono/zod-validator";
 import { createAuth } from "../../lib/auth";
 import { createDb } from "../../infrastructure/db/drizzle";
 import type { Env } from "../../types";
-import { eq, count } from "drizzle-orm";
-import { stores, consents } from "../../infrastructure/db/schema";
+import { eq, count, and } from "drizzle-orm";
+import { stores, consents, otpCodes, user, account, session } from "../../infrastructure/db/schema";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { PlanService } from "../../application/plan/plan-service";
+import { createOtp, verifyOtp, OtpError, type OtpPurpose } from "../../application/auth/otp-service";
+import { hashPassword } from "better-auth/crypto";
 import type { EntityId } from "../../domain/shared/types";
 
 // Versi dokumen legal yang sedang berlaku — dicatat pada consent log.
@@ -43,6 +45,11 @@ function serializeStoreRow(row: typeof stores.$inferSelect) {
     originLatitude: row.originLatitude,
     originLongitude: row.originLongitude,
     paymentOnline: row.paymentOnline === 1,
+    singapayAccountId: row.singapayAccountId,
+    kybStatus: row.kybStatus,
+    payoutBankCode: row.payoutBankCode,
+    payoutBankAccountNumber: row.payoutBankAccountNumber,
+    payoutBankAccountName: row.payoutBankAccountName,
     bankName: row.bankName,
     bankAccountNumber: row.bankAccountNumber,
     bankAccountName: row.bankAccountName,
@@ -56,6 +63,7 @@ function serializeUser(u: {
   id: string;
   name: string;
   email: string;
+  emailVerified?: boolean;
   role?: string | null;
   banned?: boolean | null;
   image?: string | null;
@@ -64,6 +72,7 @@ function serializeUser(u: {
     id: u.id,
     name: u.name,
     email: u.email,
+    emailVerified: u.emailVerified ?? false,
     role: u.role ?? "user",
     banned: u.banned ?? false,
   };
@@ -86,6 +95,37 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+/** Login-style session payload (user + store + consent) — shared by login OTP verify. */
+async function buildSessionPayload(
+  db: ReturnType<typeof createDb>,
+  session: { user: { id: string; name: string; email: string; emailVerified?: boolean; role?: string | null; banned?: boolean | null } },
+) {
+  const storeRow = await db.select().from(stores).where(eq(stores.ownerId, session.user.id)).get();
+  const consentRow = await db.select({ c: count() }).from(consents).where(eq(consents.userId, session.user.id)).get();
+  return {
+    user: serializeUser(session.user),
+    store: storeRow ? serializeStoreRow(storeRow) : null,
+    hasConsent: (consentRow?.c ?? 0) > 0,
+  };
+}
+
+/** Extract the better-auth session token from a cookie header (raw or Set-Cookie). */
+function sessionTokenFromCookie(cookieHeader: string): string | null {
+  const m = cookieHeader.match(/(?:^|;\s*)better-auth\.session_token=([^;\s]+)/);
+  return m?.[1] ?? null;
+}
+
+/** Mark the session OTP-verified (Google/email login double-layer). */
+async function markSessionVerified(db: ReturnType<typeof createDb>, cookieHeader: string | null): Promise<void> {
+  const token = sessionTokenFromCookie(cookieHeader ?? "");
+  if (!token) return;
+  await db
+    .update(session)
+    .set({ otpVerifiedAt: new Date().toISOString() })
+    .where(eq(session.token, token))
+    .run();
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/auth/register
 // ---------------------------------------------------------------------------
@@ -100,16 +140,13 @@ authRouter.post("/register", zValidator("json", registerSchema), async (c) => {
       returnHeaders: true,
     });
 
-    // Forward cookies from better-auth
-    const setCookie = headers?.get("set-cookie");
-    if (setCookie) {
-      c.header("set-cookie", setCookie);
-    }
-
-    // Get session using the response headers that contain the new cookie
-    const session = await auth.api.getSession({
-      headers: new Headers({ cookie: setCookie ?? "" }),
-    });
+    // Double-layer: WITHHOLD the session — it is released only after the
+    // email OTP verifies. The session exists in the DB (server-side) so we
+    // can still log consent now.
+    const setCookie = headers?.get("set-cookie") ?? null;
+    const session = setCookie
+      ? await auth.api.getSession({ headers: new Headers({ cookie: setCookie }) })
+      : null;
 
     // Catat bukti persetujuan S&K + Privasi (UU PDP Pasal 22 & 24 —
     // consent tanpa bukti = tidak ada).
@@ -131,13 +168,22 @@ authRouter.post("/register", zValidator("json", registerSchema), async (c) => {
         });
       } catch (consentErr) {
         console.error("CONSENT LOG ERROR:", consentErr);
-        // Jangan gagalkan registrasi karena kegagalan pencatatan consent —
-        // tapi log error untuk investigasi.
       }
     }
 
+    const otp = await createOtp({
+      db: createDb(c.env.DB),
+      env: c.env,
+      email,
+      purpose: "register",
+      sessionCookie: setCookie ?? undefined,
+    });
+
     return c.json({
-      user: serializeUser(session!.user),
+      otpRequired: true,
+      attemptId: otp.attemptId,
+      email,
+      resendAfter: otp.sent ? undefined : 60,
     }, 201);
   } catch (error: any) {
     console.error("REGISTER ERROR:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
@@ -166,48 +212,171 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
       returnHeaders: true,
     });
 
-    // Forward cookies
-    const setCookie = authHeaders?.get("set-cookie");
-    if (setCookie) {
-      c.header("set-cookie", setCookie);
-    }
+    // Double-layer: WITHHOLD the session — released only after the email OTP
+    // verifies. The session exists in the DB but the cookie never reaches the
+    // client without the code.
+    const setCookie = authHeaders?.get("set-cookie") ?? null;
+    if (!setCookie) throw new Error("no session");
 
-    // Get the session using the NEW cookie from the sign-in response — the
-    // original request headers carry no session cookie yet, so querying with
-    // them always returns null and login would always 401.
-    const session = await auth.api.getSession({
-      headers: new Headers({ cookie: setCookie ?? "" }),
+    const session = await auth.api.getSession({ headers: new Headers({ cookie: setCookie }) });
+    if (!session) throw new Error("no session");
+
+    const otp = await createOtp({
+      db: createDb(c.env.DB),
+      env: c.env,
+      email,
+      purpose: "login",
+      sessionCookie: setCookie,
     });
 
-    if (!session) {
-      return c.json({
-        error: { code: "INVALID_CREDENTIALS", message: "Email atau password salah." },
-      }, 401);
-    }
-
-    // Check if user has a store
-    const db = createDb(c.env.DB);
-    const storeRow = await db
-      .select()
-      .from(stores)
-      .where(eq(stores.ownerId, session.user.id))
-      .get();
-
-    const consentRow = await db
-      .select({ c: count() })
-      .from(consents)
-      .where(eq(consents.userId, session.user.id))
-      .get();
-
     return c.json({
-      user: serializeUser(session.user),
-      store: storeRow ? serializeStoreRow(storeRow) : null,
-      hasConsent: (consentRow?.c ?? 0) > 0,
+      otpRequired: true,
+      attemptId: otp.attemptId,
+      email,
+      resendAfter: otp.sent ? undefined : 60,
     });
   } catch (error: any) {
     return c.json({
       error: { code: "INVALID_CREDENTIALS", message: "Email atau password salah." },
     }, 401);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/otp/send  { email, purpose }  — double-layer OTP (email)
+// ---------------------------------------------------------------------------
+authRouter.post("/otp/send", zValidator("json", z.object({
+  email: z.string().email(),
+  purpose: z.enum(["register", "login", "password_reset", "email_change", "verify_email"]),
+})), async (c) => {
+  const { email, purpose } = c.req.valid("json");
+  const db = createDb(c.env.DB);
+  const auth = createAuth(c.env);
+
+  if (purpose === "register" || purpose === "email_change") {
+    const existing = await db.select({ id: user.id }).from(user).where(eq(user.email, email)).get();
+    if (existing) {
+      return c.json({ error: { code: "EMAIL_TAKEN", message: "Email sudah terdaftar." } }, 409);
+    }
+  }
+  if (purpose === "login" || purpose === "password_reset") {
+    const existing = await db.select({ id: user.id }).from(user).where(eq(user.email, email)).get();
+    if (!existing) {
+      return c.json({
+        error: { code: "USER_NOT_FOUND", message: purpose === "login" ? "Email atau password salah." : "Akun tidak ditemukan." },
+      }, 401);
+    }
+  }
+  if (purpose === "email_change") {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) {
+      return c.json({ error: { code: "UNAUTHORIZED", message: "Silakan login terlebih dahulu." } }, 401);
+    }
+  }
+  // verify_email: re-send OTP to the SESSION user's email (account tab).
+  if (purpose === "verify_email") {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) {
+      return c.json({ error: { code: "UNAUTHORIZED", message: "Silakan login terlebih dahulu." } }, 401);
+    }
+    const otp = await createOtp({ db, env: c.env, email: session.user.email, purpose });
+    return c.json({ attemptId: otp.attemptId, sent: otp.sent, resendAfter: otp.sent ? undefined : 60 });
+  }
+
+  const otp = await createOtp({ db, env: c.env, email, purpose });
+  return c.json({ attemptId: otp.attemptId, sent: otp.sent, resendAfter: otp.sent ? undefined : 60 });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/otp/verify  { attemptId, code, newPassword? }
+//   register: mark email verified + release withheld session
+//   login:    release withheld session (payload = user/store/consent)
+//   password_reset: set new password (newPassword required)
+//   email_change:   update user email (session required)
+// ---------------------------------------------------------------------------
+authRouter.post("/otp/verify", zValidator("json", z.object({
+  attemptId: z.string().min(8),
+  code: z.string().regex(/^\d{6}$/, "Kode harus 6 digit"),
+  newPassword: z.string().min(8).optional(),
+})), async (c) => {
+  const { attemptId, code, newPassword } = c.req.valid("json");
+  const db = createDb(c.env.DB);
+  const auth = createAuth(c.env);
+
+  const row = await db.select().from(otpCodes).where(eq(otpCodes.attemptId, attemptId)).get();
+  if (!row) return c.json({ error: { code: "OTP_INVALID", message: "Kode tidak valid." } }, 400);
+
+  let verified;
+  try {
+    verified = await verifyOtp({ db, email: row.email, purpose: row.purpose as OtpPurpose, attemptId, code });
+  } catch (e) {
+    if (e instanceof OtpError) {
+      const status = e.code === "OTP_EXPIRED" || e.code === "OTP_LOCKED" ? 410 : 400;
+      return c.json({ error: { code: e.code, message: e.message } }, status);
+    }
+    return c.json({ error: { code: "UNKNOWN", message: "Verifikasi gagal." } }, 400);
+  }
+
+  switch (row.purpose) {
+    case "register": {
+      await db.update(user).set({ emailVerified: true }).where(eq(user.email, row.email)).run();
+      const u = await db.select().from(user).where(eq(user.email, row.email)).get();
+      await markSessionVerified(db, verified.sessionCookie);
+      const res = c.json({
+        verified: true,
+        user: u
+          ? serializeUser({ id: u.id, name: u.name, email: u.email, emailVerified: u.emailVerified, role: u.role, banned: u.banned })
+          : null,
+      });
+      if (verified.sessionCookie) res.headers.set("set-cookie", verified.sessionCookie);
+      return res;
+    }
+    case "login": {
+      // Mark the session OTP-verified: either the withheld one (email/password
+      // flow) or the CURRENT session (Google OAuth flow — no withheld cookie).
+      await markSessionVerified(db, verified.sessionCookie ?? c.req.raw.headers.get("cookie"));
+      const session = verified.sessionCookie
+        ? await auth.api.getSession({ headers: new Headers({ cookie: verified.sessionCookie }) })
+        : await auth.api.getSession({ headers: c.req.raw.headers });
+      const res = c.json(session ? await buildSessionPayload(db, session) : { verified: true });
+      if (verified.sessionCookie) res.headers.set("set-cookie", verified.sessionCookie);
+      return res;
+    }
+    case "verify_email": {
+      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      if (!session) return c.json({ error: { code: "UNAUTHORIZED" } }, 401);
+      await db.update(user).set({ emailVerified: true }).where(eq(user.id, session.user.id)).run();
+      return c.json({ verified: true, message: "Email berhasil diverifikasi." });
+    }
+    case "password_reset": {
+      if (!newPassword) {
+        return c.json({ error: { code: "VALIDATION", message: "Kata sandi baru diperlukan." } }, 400);
+      }
+      const target = await db.select({ id: user.id }).from(user).where(eq(user.email, row.email)).get();
+      if (!target) return c.json({ error: { code: "USER_NOT_FOUND" } }, 404);
+      const hashed = await hashPassword(newPassword);
+      const updated = await db
+        .update(account)
+        .set({ password: hashed })
+        .where(and(eq(account.userId, target.id), eq(account.providerId, "credential")))
+        .run();
+      if (updated.meta.changes === 0) {
+        return c.json({ error: { code: "NO_PASSWORD", message: "Akun ini tidak memiliki kata sandi (login Google)." } }, 400);
+      }
+      return c.json({ verified: true, message: "Kata sandi berhasil diubah. Silakan masuk." });
+    }
+    case "email_change": {
+      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      if (!session) return c.json({ error: { code: "UNAUTHORIZED" } }, 401);
+      const updateUser = auth.api.updateUser as unknown as (p: {
+        body: Record<string, unknown>;
+        headers: Headers;
+      }) => Promise<{
+        user: { id: string; name: string; email: string; emailVerified?: boolean; role?: string | null; banned?: boolean | null };
+      }>;
+      const updated = await updateUser({ body: { email: row.email }, headers: c.req.raw.headers });
+      return c.json({ verified: true, user: serializeUser(updated.user) });
+    }
   }
 });
 
@@ -274,9 +443,9 @@ authRouter.post("/consent", async (c) => {
 // ---------------------------------------------------------------------------
 authRouter.get("/me", async (c) => {
   const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const authSession = await auth.api.getSession({ headers: c.req.raw.headers });
 
-  if (!session) {
+  if (!authSession) {
     return c.json({ user: null, store: null }, 401);
   }
 
@@ -285,7 +454,7 @@ authRouter.get("/me", async (c) => {
   const storeRow = await db
     .select()
     .from(stores)
-    .where(eq(stores.ownerId, session.user.id))
+    .where(eq(stores.ownerId, authSession.user.id))
     .get();
 
   // Attach the plan view (tier, limits, pending change…) — the auth-context
@@ -296,13 +465,21 @@ authRouter.get("/me", async (c) => {
   const consentRow = await db
     .select({ c: count() })
     .from(consents)
-    .where(eq(consents.userId, session.user.id))
+    .where(eq(consents.userId, authSession.user.id))
     .get();
 
+  // OTP double-layer gate: Google OAuth (and pre-feature sessions) have no
+  // otp_verified_at marker — the app must require the OTP once per session.
+  const token = sessionTokenFromCookie(c.req.raw.headers.get("cookie") ?? "");
+  const otpRow = token
+    ? await db.select({ otpVerifiedAt: session.otpVerifiedAt }).from(session).where(eq(session.token, token)).get()
+    : null;
+
   return c.json({
-    user: serializeUser(session.user),
+    user: serializeUser(authSession.user),
     store: storeRow ? { ...serializeStoreRow(storeRow), plan } : null,
     hasConsent: (consentRow?.c ?? 0) > 0,
+    otpPending: !otpRow?.otpVerifiedAt,
   });
 });
 

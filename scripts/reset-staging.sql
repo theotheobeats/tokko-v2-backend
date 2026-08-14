@@ -9,6 +9,8 @@ DELETE FROM products;
 DELETE FROM product_variants;
 DELETE FROM product_categories;
 DELETE FROM stores;
+DELETE FROM pending_plans;
+DELETE FROM app_settings;
 DELETE FROM session;
 DELETE FROM account;
 DELETE FROM verification;

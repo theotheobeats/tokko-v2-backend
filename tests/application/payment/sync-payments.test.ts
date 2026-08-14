@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { SyncPendingPayments } from "../../../src/application/payment/sync-payments";
 import type { PaymentRepository } from "../../../src/infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../../src/infrastructure/repos/d1-order-repo";
-import type { PaymentProviderClient } from "../../../src/infrastructure/payments/payment-provider-client";
+import type { PaymentProviderClient } from "../../../src/infrastructure/payments/xendit-client";
+import type { StoreRepository } from "../../../src/application/store/store-repo";
 import { Payment } from "../../../src/domain/payment/payment";
 import { PaymentChannel } from "../../../src/domain/payment/types";
 import { Order } from "../../../src/domain/order/order";
@@ -15,7 +16,7 @@ function makePayment(externalId = "tokko-abc"): Payment {
     amount: 50000,
     channel: PaymentChannel.Qris,
     externalId,
-    invoiceUrl: "https://checkout.payments.test/web/x",
+    invoiceUrl: "https://checkout.xendit.co/web/x",
   });
 }
 
@@ -40,8 +41,13 @@ function makeOrder(orderId: string, storeId: string): Order {
   } as never);
 }
 
+// Merchant sub-account resolver — no account by default (tests use undefined accountId).
+const storeRepo = {
+  findById: vi.fn().mockResolvedValue(null),
+} as unknown as StoreRepository;
+
 describe("SyncPendingPayments", () => {
-  it("marks a pending payment paid + confirms the order when the provider says PAID", async () => {
+  it("marks a pending payment paid + confirms the order when Xendit says PAID", async () => {
     const payment = makePayment();
     const order = makeOrder(payment.orderId as string, payment.storeId as string);
 
@@ -57,7 +63,7 @@ describe("SyncPendingPayments", () => {
       getInvoice: vi.fn().mockResolvedValue({ status: "PAID", paidAt: "2026-08-11T00:00:00Z", paymentMethod: "QRIS" }),
     } as unknown as PaymentProviderClient;
 
-    const result = await new SyncPendingPayments(paymentRepo, orderRepo, provider).execute();
+    const result = await new SyncPendingPayments(paymentRepo, orderRepo, () => provider, storeRepo).execute();
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ checked: 1, updated: 1, paid: 1 });
@@ -66,7 +72,7 @@ describe("SyncPendingPayments", () => {
     expect(order.paymentNote).toContain("QRIS");
   });
 
-  it("leaves pending payments alone when the provider still says PENDING", async () => {
+  it("leaves pending payments alone when Xendit still says PENDING", async () => {
     const payment = makePayment();
     const paymentRepo = {
       listPending: vi.fn().mockResolvedValue([payment]),
@@ -77,7 +83,7 @@ describe("SyncPendingPayments", () => {
       getInvoice: vi.fn().mockResolvedValue({ status: "PENDING" }),
     } as unknown as PaymentProviderClient;
 
-    const result = await new SyncPendingPayments(paymentRepo, orderRepo, provider).execute();
+    const result = await new SyncPendingPayments(paymentRepo, orderRepo, () => provider, storeRepo).execute();
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ checked: 1, updated: 0, paid: 0 });
@@ -97,10 +103,10 @@ describe("SyncPendingPayments", () => {
       getInvoice: vi
         .fn()
         .mockResolvedValueOnce({ status: "EXPIRED" })
-        .mockRejectedValueOnce(new Error("provider down")),
+        .mockRejectedValueOnce(new Error("xendit down")),
     } as unknown as PaymentProviderClient;
 
-    const result = await new SyncPendingPayments(paymentRepo, orderRepo, provider).execute();
+    const result = await new SyncPendingPayments(paymentRepo, orderRepo, () => provider, storeRepo).execute();
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ checked: 2, updated: 1, paid: 0 });

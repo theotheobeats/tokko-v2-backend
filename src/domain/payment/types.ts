@@ -2,7 +2,7 @@
  * Payment bounded context — domain types and value objects.
  *
  * A Payment wraps a payment attempt for an Order via a payment provider
- * (hosted checkout). One order can have several payment attempts (expired/failed →
+ * (Xendit). One order can have several payment attempts (expired/failed →
  * create a new one); the most recent successful one confirms the order.
  */
 
@@ -15,11 +15,12 @@ export const PaymentStatus = {
 export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
 
 export const PaymentProvider = {
-  Hosted: "hosted",
+  Xendit: "xendit",
+  SingaPay: "singapay",
 } as const;
 export type PaymentProvider = (typeof PaymentProvider)[keyof typeof PaymentProvider];
 
-/** Payment channels we expose (maps to provider invoice payment methods). */
+/** Xendit payment channels we expose (maps to Xendit invoice payment methods). */
 export const PaymentChannel = {
   Qris: "qris",
   BankTransfer: "bank_transfer",
@@ -34,7 +35,7 @@ export const VALID_PAYMENT_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> =
   paid: [], // terminal
   failed: [], // terminal — create a new payment attempt instead
   // A payment that arrived AFTER the invoice expired still counts — the
-  // customer did pay. The provider sends a PAID event for it ("payment received
+  // customer did pay. Xendit sends a PAID event for it ("payment received
   // after expiry"), so expired → paid must not throw.
   expired: ["paid"],
 };

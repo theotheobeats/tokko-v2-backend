@@ -1,17 +1,23 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   CreatePayment,
-  HandlePaymentWebhook,
+  HandleXenditWebhook,
   OrderNotFoundError,
   OrderAlreadyPaidError,
   PaymentNotFoundError,
   WebhookAmountMismatchError,
-  type PaymentWebhookPayload,
+  type XenditWebhookPayload,
 } from "../../../src/application/payment/payment-use-cases";
 import type { PaymentRepository } from "../../../src/infrastructure/repos/d1-payment-repo";
 import type { OrderRepository } from "../../../src/infrastructure/repos/d1-order-repo";
-import type { PaymentProviderClient } from "../../../src/infrastructure/payments/payment-provider-client";
+import type { PaymentProviderClient } from "../../../src/infrastructure/payments/xendit-client";
+import type { StoreRepository } from "../../../src/application/store/store-repo";
+import type { CommissionLedger } from "../../../src/infrastructure/repos/d1-commission-ledger";
+import type { SubscriptionRepository } from "../../../src/infrastructure/repos/d1-subscription-repo";
 import { Order } from "../../../src/domain/order/order";
+import { Store } from "../../../src/domain/store/store";
+import { BusinessType, Aesthetic } from "../../../src/domain/store/types";
+import { Subscription } from "../../../src/domain/plan/subscription";
 import { createEntityId } from "../../../src/domain/shared/types";
 
 const storeId = createEntityId();
@@ -58,7 +64,7 @@ function mockProvider(overrides?: Partial<PaymentProviderClient>): PaymentProvid
   return {
     createInvoice: vi.fn().mockResolvedValue({
       externalId: "xnd-invoice-1",
-      invoiceUrl: "https://checkout.payments.test/web/1",
+      invoiceUrl: "https://checkout.xendit.co/web/1",
     }),
     getInvoice: vi.fn().mockResolvedValue({ status: "PENDING" }),
     ...overrides,
@@ -118,7 +124,7 @@ describe("CreatePayment", () => {
   it("should surface provider errors", async () => {
     const order = makeOrder();
     const provider = mockProvider({
-      createInvoice: vi.fn().mockRejectedValue(new Error("Payment provider 500: boom")),
+      createInvoice: vi.fn().mockRejectedValue(new Error("Xendit 500: boom")),
     });
 
     const result = await new CreatePayment(
@@ -132,11 +138,11 @@ describe("CreatePayment", () => {
 });
 
 // ---------------------------------------------------------------------------
-// HandlePaymentWebhook
+// HandleXenditWebhook
 // ---------------------------------------------------------------------------
 
-describe("HandlePaymentWebhook", () => {
-  const paidPayload: PaymentWebhookPayload = {
+describe("HandleXenditWebhook", () => {
+  const paidPayload: XenditWebhookPayload = {
     id: "invoice-1",
     external_id: "xnd-invoice-1",
     status: "PAID",
@@ -164,7 +170,7 @@ describe("HandlePaymentWebhook", () => {
     ).value;
     paymentRepo.findByExternalId = vi.fn().mockResolvedValue(paymentDomain);
 
-    const result = await new HandlePaymentWebhook(paymentRepo, orderRepo).execute(paidPayload);
+    const result = await new HandleXenditWebhook(paymentRepo, orderRepo).execute(paidPayload);
     expect(result.ok).toBe(true);
     expect(paymentDomain.status).toBe("paid");
     expect(paymentDomain.paidAt).toBe("2026-08-06T10:00:00Z");
@@ -186,7 +192,7 @@ describe("HandlePaymentWebhook", () => {
     const saveSpy = vi.fn();
     paymentRepo.save = saveSpy;
 
-    const result = await new HandlePaymentWebhook(paymentRepo, orderRepo).execute(paidPayload);
+    const result = await new HandleXenditWebhook(paymentRepo, orderRepo).execute(paidPayload);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.handled).toBe(true);
     expect(saveSpy).not.toHaveBeenCalled();
@@ -203,7 +209,7 @@ describe("HandlePaymentWebhook", () => {
     const paymentDomain = (created as { ok: true; value: import("../../../src/domain/payment/payment").Payment }).value;
     paymentRepo.findByExternalId = vi.fn().mockResolvedValue(paymentDomain);
 
-    const result = await new HandlePaymentWebhook(paymentRepo, orderRepo).execute({
+    const result = await new HandleXenditWebhook(paymentRepo, orderRepo).execute({
       ...paidPayload,
       status: "EXPIRED",
     });
@@ -213,7 +219,7 @@ describe("HandlePaymentWebhook", () => {
   });
 
   it("should reject unknown external ids", async () => {
-    const result = await new HandlePaymentWebhook(mockPaymentRepo(), mockOrderRepo()).execute(paidPayload);
+    const result = await new HandleXenditWebhook(mockPaymentRepo(), mockOrderRepo()).execute(paidPayload);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBeInstanceOf(PaymentNotFoundError);
   });
@@ -229,11 +235,54 @@ describe("HandlePaymentWebhook", () => {
     const paymentDomain = (created as { ok: true; value: import("../../../src/domain/payment/payment").Payment }).value;
     paymentRepo.findByExternalId = vi.fn().mockResolvedValue(paymentDomain);
 
-    const result = await new HandlePaymentWebhook(paymentRepo, orderRepo).execute({
+    const result = await new HandleXenditWebhook(paymentRepo, orderRepo).execute({
       ...paidPayload,
       amount: 1, // forged amount
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBeInstanceOf(WebhookAmountMismatchError);
+  });
+
+  it("accrues flat 2,5% royalty on paid tiers but nothing on trial", async () => {
+    // Fresh order+payment+repos per run (the paid webhook is idempotent).
+    const runWebhook = async (sub: unknown | null) => {
+      const order = makeOrder();
+      const paymentRepo = mockPaymentRepo();
+      const orderRepo = mockOrderRepo({ findById: vi.fn().mockResolvedValue(order) });
+      const created = await new CreatePayment(orderRepo, paymentRepo, mockProvider()).execute({ orderId: order.id });
+      const paymentDomain = (created as { ok: true; value: import("../../../src/domain/payment/payment").Payment }).value;
+      paymentRepo.findByExternalId = vi.fn().mockResolvedValue(paymentDomain);
+
+      const store = Store.create({
+        ownerId: createEntityId(),
+        name: "Cake Shop",
+        businessType: BusinessType.Food,
+        aestheticPreference: Aesthetic.Warm,
+        whatsappNumber: "628123456789",
+      });
+      const storeRepo = { findById: vi.fn().mockResolvedValue(store) } as unknown as StoreRepository;
+      const ledger = {
+        record: vi.fn().mockResolvedValue(undefined),
+        sumByStoreId: vi.fn().mockResolvedValue(0),
+        listByStoreId: vi.fn().mockResolvedValue([]),
+      } as unknown as CommissionLedger;
+      const subscriptionRepo = { findActiveByStoreId: vi.fn().mockResolvedValue(sub) } as unknown as SubscriptionRepository;
+
+      await new HandleXenditWebhook(paymentRepo, orderRepo, { storeRepo, ledger, subscriptionRepo }).execute(paidPayload);
+      return ledger;
+    };
+
+    const pro = Subscription.create({
+      id: createEntityId(),
+      storeId: createEntityId(),
+      plan: "pro",
+      currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    });
+
+    const proLedger = await runWebhook(pro);
+    expect(proLedger.record).toHaveBeenCalledWith(expect.objectContaining({ rate: 2.5, fee: 2125 })); // 85000 × 2,5%
+
+    const trialLedger = await runWebhook(null);
+    expect(trialLedger.record).not.toHaveBeenCalled(); // trial is royalty-free
   });
 });
