@@ -19,7 +19,7 @@ describe("Payment aggregate", () => {
     expect(p.status).toBe(PaymentStatus.Pending);
     expect(p.amount).toBe(85000);
     expect(p.currency).toBe("IDR");
-    expect(p.provider).toBe("hosted");
+    expect(p.provider).toBe("xendit");
     expect(p.isPaid).toBe(false);
     expect(p.paidAt).toBeNull();
   });

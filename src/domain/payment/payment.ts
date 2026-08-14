@@ -60,7 +60,7 @@ export class Payment {
       storeId: params.storeId,
       amount: Math.round(params.amount),
       currency: params.currency ?? "IDR",
-      provider: params.provider ?? PaymentProvider.Hosted,
+      provider: params.provider ?? PaymentProvider.Xendit,
       channel: params.channel?.trim() || null,
       customerEmail: params.customerEmail?.trim() || null,
       status: PaymentStatus.Pending,
