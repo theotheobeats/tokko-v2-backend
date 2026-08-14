@@ -64,6 +64,19 @@ plansRouter.post("/checkout", zValidator("json", z.object({
     }, 502);
   }
 
+  // #10: email the invoice + payment link to the merchant (best-effort).
+  try {
+    const { notifyPlanInvoice } = await import("../../application/order/notify-payment");
+    await notifyPlanInvoice({
+      env: c.env,
+      email: session.user.email,
+      plan,
+      cycle,
+      amount,
+      invoiceUrl: invoice.invoiceUrl,
+    });
+  } catch { /* non-blocking */ }
+
   return c.json({ invoiceUrl: invoice.invoiceUrl, externalId, plan, cycle, amount }, 201);
 });
 

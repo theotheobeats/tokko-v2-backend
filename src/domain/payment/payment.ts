@@ -21,6 +21,8 @@ export interface PaymentProps {
   provider: PaymentProviderType;
   /** Payment method the customer picked (qris / bank_transfer / ewallet / credit_card). */
   channel: string | null;
+  /** Customer email from checkout (optional) — used for the paid invoice email. */
+  customerEmail: string | null;
   status: PaymentStatusType;
   /** Provider's invoice id (Xendit invoice id). */
   externalId: string;
@@ -41,6 +43,7 @@ export class Payment {
     currency?: string;
     provider?: PaymentProviderType;
     channel?: string | null;
+    customerEmail?: string | null;
     externalId: string;
     invoiceUrl: string;
   }): Payment {
@@ -59,6 +62,7 @@ export class Payment {
       currency: params.currency ?? "IDR",
       provider: params.provider ?? PaymentProvider.Xendit,
       channel: params.channel?.trim() || null,
+      customerEmail: params.customerEmail?.trim() || null,
       status: PaymentStatus.Pending,
       externalId: params.externalId.trim(),
       invoiceUrl: params.invoiceUrl.trim(),
@@ -80,6 +84,7 @@ export class Payment {
   get currency() { return this.props.currency; }
   get provider() { return this.props.provider; }
   get channel() { return this.props.channel; }
+  get customerEmail() { return this.props.customerEmail; }
   get status() { return this.props.status; }
   get externalId() { return this.props.externalId; }
   get invoiceUrl() { return this.props.invoiceUrl; }

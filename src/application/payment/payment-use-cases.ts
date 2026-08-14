@@ -123,6 +123,7 @@ export class CreatePayment {
         storeId: order.storeId,
         amount: order.totalAmount,
         channel: input.channel ?? null,
+        customerEmail: input.customerEmail?.trim() || null,
         externalId: invoice.externalId,
         invoiceUrl: invoice.invoiceUrl,
         provider: input.provider,

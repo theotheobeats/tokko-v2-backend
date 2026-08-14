@@ -18,3 +18,4 @@ export { appSettings } from "./app-settings";
 export { payouts } from "./payouts";
 export { settlements } from "./settlements";
 export { payoutRequests } from "./payout-requests";
+export { otpCodes } from "./otp-codes";

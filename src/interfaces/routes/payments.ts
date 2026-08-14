@@ -74,6 +74,20 @@ import { resolveTestAccess, isTestEmail } from "../../application/payout/test-ac
 
 const paymentsRouter = new Hono<{ Bindings: Env }>();
 
+/** Payment webhook email hooks (#5 merchant payment-received, #6 customer invoice) — best-effort. */
+async function notifyPaidEmails(db: ReturnType<typeof createDb>, env: Env, externalId: string): Promise<void> {
+  try {
+    const payment = await new D1PaymentRepository(db).findByExternalId(externalId);
+    if (!payment || !payment.isPaid) return;
+    const order = await new D1OrderRepository(db).findById(payment.orderId);
+    if (!order) return;
+    const { notifyOrderPayment } = await import("../../application/order/notify-payment");
+    await notifyOrderPayment({ db, env, payment, order });
+  } catch (e) {
+    console.error("[notify] paid-email hook failed:", e);
+  }
+}
+
 const createPaymentSchema = z.object({
   channel: z
     .enum(Object.values(PaymentChannel) as [string, ...string[]])
@@ -263,6 +277,10 @@ paymentsRouter.post("/webhooks/xendit", async (c) => {
     return c.json({ error: result.error }, 400);
   }
 
+  if (result.ok && payload.status === "PAID") {
+    await notifyPaidEmails(db, c.env, payload.external_id);
+  }
+
   return c.json({ handled: result.value.handled });
 });
 
@@ -389,6 +407,10 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
     if (result.error instanceof PaymentNotFoundError) return c.json({ error: result.error }, 404);
     if (result.error instanceof WebhookAmountMismatchError) return c.json({ error: result.error }, 400);
     return c.json({ error: result.error }, 400);
+  }
+
+  if (result.ok && normalized.status === "PAID") {
+    await notifyPaidEmails(db, c.env, normalized.external_id);
   }
 
   return c.json({ handled: result.value.handled });
