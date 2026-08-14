@@ -110,10 +110,17 @@ async function buildSessionPayload(
 }
 
 /** Extract the better-auth session token from a cookie header (raw or Set-Cookie).
- * HTTPS deployments prefix the cookie with `__Secure-` (better-auth reads it first). */
+ * The cookie value is `{token}.{hmacSignature}` URL-encoded, and HTTPS
+ * deployments prefix the name with `__Secure-` — mirror better-auth's own read. */
 function sessionTokenFromCookie(cookieHeader: string): string | null {
   const m = cookieHeader.match(/(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;\s]+)/);
-  return m?.[1] ?? null;
+  if (!m) return null;
+  try {
+    // URL-decode (%3D → =) then drop the signature suffix after the dot.
+    return decodeURIComponent(m[1]).split(".")[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Mark the session OTP-verified (Google/email login double-layer). */
