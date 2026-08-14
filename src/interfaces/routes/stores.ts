@@ -28,7 +28,7 @@ import { activatePendingPlan } from "../../application/plan/pending-plan";
 import { createProviderClient, resolveActivePaymentProvider, providerIsReal } from "../../infrastructure/payments/registry";
 import { createSingaPayAccountsClient, SINGAPAY_METHOD_CODES } from "../../infrastructure/payments/singapay-client";
 import { StartMerchantKYB, GetMerchantKYBStatus, KYBStoreNotFoundError } from "../../application/kyb/merchant-kyb";
-import { isSupportedBankCode, swiftCodeFor } from "../../application/admin/admin-payouts";
+import { isSupportedBankCode } from "../../application/admin/admin-payouts";
 import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
 
@@ -587,7 +587,7 @@ storesRouter.get("/:id/kyb", async (c) => {
 });
 
 // POST /api/stores/:id/payout-bank/check — validate the payout bank account
-// via SingaPay's check-beneficiary (best-effort; digital banks have no SWIFT).
+// via SingaPay's v2 beneficiary inquiry (accepts national bank codes).
 storesRouter.post("/:id/payout-bank/check", zValidator("json", z.object({
   bankCode: z.string(),
   accountNumber: z.string(),
@@ -608,15 +608,32 @@ storesRouter.post("/:id/payout-bank/check", zValidator("json", z.object({
   if (!isSupportedBankCode(bankCode)) {
     return c.json({ valid: false, message: "Bank tidak didukung." });
   }
-  const swift = swiftCodeFor(bankCode);
-  if (!swift) {
-    return c.json({ valid: null, message: "Bank digital tidak bisa dicek otomatis — akan diverifikasi saat pencairan." });
-  }
   try {
-    await createSingaPayAccountsClient(c.env).checkBeneficiary({ bankSwiftCode: swift, bankAccountNumber: accountNumber });
-    return c.json({ valid: true, message: "Rekening valid." });
-  } catch {
-    return c.json({ valid: false, message: "Rekening tidak ditemukan di bank tersebut — periksa nomor rekening." });
+    const res = await createSingaPayAccountsClient(c.env).checkBeneficiary({ bankCode, bankAccountNumber: accountNumber });
+    if (res.status !== "valid") {
+      return c.json({
+        valid: false,
+        message: res.message ?? "Rekening tidak ditemukan di bank tersebut — periksa nomor rekening.",
+        detail: JSON.stringify(res),
+      });
+    }
+    return c.json({
+      valid: true,
+      message: res.bank_account_name ? `Rekening valid — a.n. ${res.bank_account_name}` : "Rekening valid.",
+    });
+  } catch (e) {
+    // Surface the REAL SingaPay error (visible in wrangler tail + the response
+    // detail) instead of masking technical failures as "not found".
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error(`[payout-bank/check] store ${storeId}:`, detail);
+    const isNotFound = /not found|invalid (card|account)|inactive|tidak ditemukan/i.test(detail);
+    return c.json({
+      valid: false,
+      message: isNotFound
+        ? "Rekening tidak ditemukan di bank tersebut — periksa nomor rekening."
+        : "Gagal memverifikasi rekening — coba lagi nanti.",
+      detail,
+    });
   }
 });
 

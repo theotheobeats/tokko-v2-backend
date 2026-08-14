@@ -117,6 +117,14 @@ export interface SingaPayBalance {
   held: number;
 }
 
+/** Result of the v2 beneficiary account inquiry. */
+export interface SingaPayBeneficiaryResult {
+  status: "valid" | "invalid";
+  bank_account_name?: string | null;
+  bank_name?: string | null;
+  message?: string | null;
+}
+
 /** Result of a v2 disbursement (money-out) transfer. */
 export interface SingaPayDisbursement {
   transactionId: string;
@@ -442,12 +450,12 @@ export class SingaPayClient implements PaymentProviderClient {
     });
   }
 
-  /** Validate a beneficiary bank account before paying out. */
-  async checkBeneficiary(input: { bankSwiftCode: string; bankAccountNumber: string }): Promise<unknown> {
-    return this.request("/api/v1.0/disbursement/check-beneficiary", {
+  /** Validate a beneficiary bank account before paying out (v2 — accepts national codes). */
+  async checkBeneficiary(input: { bankCode: string; bankAccountNumber: string }): Promise<SingaPayBeneficiaryResult> {
+    return this.request<SingaPayBeneficiaryResult>("/api/v2.0/disbursement/check-beneficiary", {
       method: "POST",
       body: JSON.stringify({
-        bank_swift_code: input.bankSwiftCode,
+        bank_code: input.bankCode,
         bank_account_number: input.bankAccountNumber,
       }),
     });
@@ -572,8 +580,8 @@ export class MockSingaPayProvider implements PaymentProviderClient {
     return { transfer_fee: 4000 };
   }
 
-  async checkBeneficiary(): Promise<unknown> {
-    return { valid: true };
+  async checkBeneficiary(): Promise<SingaPayBeneficiaryResult> {
+    return { status: "valid", bank_account_name: "Mock Account" };
   }
 
   async disburse(input: {
@@ -654,7 +662,7 @@ export interface SingaPayAccountsClientLike {
   listPaymentMethods(): Promise<SingaPayPaymentMethodCatalog>;
   checkBalance(accountId: string): Promise<SingaPayBalance>;
   checkFee(input: { accountId: string; bankSwiftCode: string; amount: number }): Promise<SingaPayFeeQuote>;
-  checkBeneficiary(input: { bankSwiftCode: string; bankAccountNumber: string }): Promise<unknown>;
+  checkBeneficiary(input: { bankCode: string; bankAccountNumber: string }): Promise<SingaPayBeneficiaryResult>;
   disburse(input: {
     accountId: string;
     referenceNumber: string;
