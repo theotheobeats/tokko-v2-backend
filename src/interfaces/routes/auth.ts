@@ -109,9 +109,10 @@ async function buildSessionPayload(
   };
 }
 
-/** Extract the better-auth session token from a cookie header (raw or Set-Cookie). */
+/** Extract the better-auth session token from a cookie header (raw or Set-Cookie).
+ * HTTPS deployments prefix the cookie with `__Secure-` (better-auth reads it first). */
 function sessionTokenFromCookie(cookieHeader: string): string | null {
-  const m = cookieHeader.match(/(?:^|;\s*)better-auth\.session_token=([^;\s]+)/);
+  const m = cookieHeader.match(/(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;\s]+)/);
   return m?.[1] ?? null;
 }
 
