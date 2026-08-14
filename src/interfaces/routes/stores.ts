@@ -615,8 +615,19 @@ storesRouter.post("/:id/payout-bank/check", zValidator("json", z.object({
   try {
     await createSingaPayAccountsClient(c.env).checkBeneficiary({ bankSwiftCode: swift, bankAccountNumber: accountNumber });
     return c.json({ valid: true, message: "Rekening valid." });
-  } catch {
-    return c.json({ valid: false, message: "Rekening tidak ditemukan di bank tersebut — periksa nomor rekening." });
+  } catch (e) {
+    // Surface the REAL SingaPay error (visible in wrangler tail + the response
+    // detail) instead of masking technical failures as "not found".
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error(`[payout-bank/check] store ${storeId}:`, detail);
+    const isNotFound = /not found|invalid (card|account)|inactive|tidak ditemukan/i.test(detail);
+    return c.json({
+      valid: false,
+      message: isNotFound
+        ? "Rekening tidak ditemukan di bank tersebut — periksa nomor rekening."
+        : "Gagal memverifikasi rekening — coba lagi nanti.",
+      detail,
+    });
   }
 });
 
