@@ -19,6 +19,10 @@ export const session = sqliteTable(
       .notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
+    /** Set when the user completed the OTP double-layer for THIS session
+     * (email/password login or Google OAuth). Extra column — better-auth
+     * ignores it; we read it from /auth/me to gate the app. */
+    otpVerifiedAt: text("otp_verified_at"),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

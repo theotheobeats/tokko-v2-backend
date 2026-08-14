@@ -18,7 +18,7 @@ import { ResendEmailer } from "../../infrastructure/email/resend";
 import { otpCodes } from "../../infrastructure/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 
-export type OtpPurpose = "register" | "login" | "password_reset" | "email_change";
+export type OtpPurpose = "register" | "login" | "password_reset" | "email_change" | "verify_email";
 
 export class OtpError extends Error {
   constructor(
@@ -38,6 +38,7 @@ const PURPOSE_LABEL: Record<OtpPurpose, string> = {
   login: "verifikasi masuk",
   password_reset: "reset kata sandi",
   email_change: "perubahan email",
+  verify_email: "verifikasi email",
 };
 
 /** "YYYY-MM-DD HH:MM:SS" UTC — matches SQLite datetime('now'). */

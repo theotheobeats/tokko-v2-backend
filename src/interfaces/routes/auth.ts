@@ -5,7 +5,7 @@ import { createAuth } from "../../lib/auth";
 import { createDb } from "../../infrastructure/db/drizzle";
 import type { Env } from "../../types";
 import { eq, count, and } from "drizzle-orm";
-import { stores, consents, otpCodes, user, account } from "../../infrastructure/db/schema";
+import { stores, consents, otpCodes, user, account, session } from "../../infrastructure/db/schema";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
 import { D1SubscriptionRepository } from "../../infrastructure/repos/d1-subscription-repo";
 import { PlanService } from "../../application/plan/plan-service";
@@ -107,6 +107,23 @@ async function buildSessionPayload(
     store: storeRow ? serializeStoreRow(storeRow) : null,
     hasConsent: (consentRow?.c ?? 0) > 0,
   };
+}
+
+/** Extract the better-auth session token from a cookie header (raw or Set-Cookie). */
+function sessionTokenFromCookie(cookieHeader: string): string | null {
+  const m = cookieHeader.match(/(?:^|;\s*)better-auth\.session_token=([^;\s]+)/);
+  return m?.[1] ?? null;
+}
+
+/** Mark the session OTP-verified (Google/email login double-layer). */
+async function markSessionVerified(db: ReturnType<typeof createDb>, cookieHeader: string | null): Promise<void> {
+  const token = sessionTokenFromCookie(cookieHeader ?? "");
+  if (!token) return;
+  await db
+    .update(session)
+    .set({ otpVerifiedAt: new Date().toISOString() })
+    .where(eq(session.token, token))
+    .run();
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +247,7 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
 // ---------------------------------------------------------------------------
 authRouter.post("/otp/send", zValidator("json", z.object({
   email: z.string().email(),
-  purpose: z.enum(["register", "login", "password_reset", "email_change"]),
+  purpose: z.enum(["register", "login", "password_reset", "email_change", "verify_email"]),
 })), async (c) => {
   const { email, purpose } = c.req.valid("json");
   const db = createDb(c.env.DB);
@@ -255,6 +272,15 @@ authRouter.post("/otp/send", zValidator("json", z.object({
     if (!session) {
       return c.json({ error: { code: "UNAUTHORIZED", message: "Silakan login terlebih dahulu." } }, 401);
     }
+  }
+  // verify_email: re-send OTP to the SESSION user's email (account tab).
+  if (purpose === "verify_email") {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) {
+      return c.json({ error: { code: "UNAUTHORIZED", message: "Silakan login terlebih dahulu." } }, 401);
+    }
+    const otp = await createOtp({ db, env: c.env, email: session.user.email, purpose });
+    return c.json({ attemptId: otp.attemptId, sent: otp.sent, resendAfter: otp.sent ? undefined : 60 });
   }
 
   const otp = await createOtp({ db, env: c.env, email, purpose });
@@ -295,6 +321,7 @@ authRouter.post("/otp/verify", zValidator("json", z.object({
     case "register": {
       await db.update(user).set({ emailVerified: true }).where(eq(user.email, row.email)).run();
       const u = await db.select().from(user).where(eq(user.email, row.email)).get();
+      await markSessionVerified(db, verified.sessionCookie);
       const res = c.json({
         verified: true,
         user: u
@@ -305,12 +332,21 @@ authRouter.post("/otp/verify", zValidator("json", z.object({
       return res;
     }
     case "login": {
+      // Mark the session OTP-verified: either the withheld one (email/password
+      // flow) or the CURRENT session (Google OAuth flow — no withheld cookie).
+      await markSessionVerified(db, verified.sessionCookie ?? c.req.raw.headers.get("cookie"));
       const session = verified.sessionCookie
         ? await auth.api.getSession({ headers: new Headers({ cookie: verified.sessionCookie }) })
-        : null;
+        : await auth.api.getSession({ headers: c.req.raw.headers });
       const res = c.json(session ? await buildSessionPayload(db, session) : { verified: true });
       if (verified.sessionCookie) res.headers.set("set-cookie", verified.sessionCookie);
       return res;
+    }
+    case "verify_email": {
+      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      if (!session) return c.json({ error: { code: "UNAUTHORIZED" } }, 401);
+      await db.update(user).set({ emailVerified: true }).where(eq(user.id, session.user.id)).run();
+      return c.json({ verified: true, message: "Email berhasil diverifikasi." });
     }
     case "password_reset": {
       if (!newPassword) {
@@ -407,9 +443,9 @@ authRouter.post("/consent", async (c) => {
 // ---------------------------------------------------------------------------
 authRouter.get("/me", async (c) => {
   const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const authSession = await auth.api.getSession({ headers: c.req.raw.headers });
 
-  if (!session) {
+  if (!authSession) {
     return c.json({ user: null, store: null }, 401);
   }
 
@@ -418,7 +454,7 @@ authRouter.get("/me", async (c) => {
   const storeRow = await db
     .select()
     .from(stores)
-    .where(eq(stores.ownerId, session.user.id))
+    .where(eq(stores.ownerId, authSession.user.id))
     .get();
 
   // Attach the plan view (tier, limits, pending change…) — the auth-context
@@ -429,13 +465,21 @@ authRouter.get("/me", async (c) => {
   const consentRow = await db
     .select({ c: count() })
     .from(consents)
-    .where(eq(consents.userId, session.user.id))
+    .where(eq(consents.userId, authSession.user.id))
     .get();
 
+  // OTP double-layer gate: Google OAuth (and pre-feature sessions) have no
+  // otp_verified_at marker — the app must require the OTP once per session.
+  const token = sessionTokenFromCookie(c.req.raw.headers.get("cookie") ?? "");
+  const otpRow = token
+    ? await db.select({ otpVerifiedAt: session.otpVerifiedAt }).from(session).where(eq(session.token, token)).get()
+    : null;
+
   return c.json({
-    user: serializeUser(session.user),
+    user: serializeUser(authSession.user),
     store: storeRow ? { ...serializeStoreRow(storeRow), plan } : null,
     hasConsent: (consentRow?.c ?? 0) > 0,
+    otpPending: !otpRow?.otpVerifiedAt,
   });
 });
 
