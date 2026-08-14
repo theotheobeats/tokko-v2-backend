@@ -283,8 +283,11 @@ export class SingaPayClient implements PaymentProviderClient {
         ...init?.headers,
       },
     });
-    const body = (await res.json().catch(() => null)) as SingaPayEnvelope<T> | null;
-    if (!res.ok || !body?.success) {
+    const body = (await res.json().catch(() => null)) as (SingaPayEnvelope<T> & { response_code?: string; response_message?: string }) | null;
+    // Accept both envelopes: v1 Flugg (`success: true`) and v2
+    // (`response_code: "SP000"` — v2 responses carry no `success` field).
+    const okEnvelope = !!body && (body.success === true || body.response_code === "SP000");
+    if (!res.ok || !okEnvelope) {
       throw new Error(`SingaPay ${res.status}: ${JSON.stringify(body ?? "no response").slice(0, 300)}`);
     }
     return body.data;
