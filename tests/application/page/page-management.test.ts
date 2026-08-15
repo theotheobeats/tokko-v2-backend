@@ -7,6 +7,7 @@ import {
   PageSlugTakenError,
   PageNotFoundError,
   LastPageError,
+  PageLimitReachedError,
 } from "../../../src/application/page/page-management";
 import type { PageRepository } from "../../../src/infrastructure/repos/d1-page-repo";
 import { Page } from "../../../src/domain/store/page";
@@ -75,6 +76,35 @@ describe("AddPage", () => {
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error).toBeInstanceOf(PageSlugInvalidError);
     }
+  });
+
+  it("should reject when the store already has 5 pages (limit)", async () => {
+    const repo = mockPageRepo({ countByStoreId: vi.fn().mockResolvedValue(5) });
+    const result = await new AddPage(repo).execute({ storeId, slug: "tentang" });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(PageLimitReachedError);
+      expect(result.error.message).toContain("5");
+    }
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it("should allow creating the 5th page (4 existing)", async () => {
+    const repo = mockPageRepo({ countByStoreId: vi.fn().mockResolvedValue(4) });
+    const result = await new AddPage(repo).execute({ storeId, slug: "tentang" });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.page.slug).toBe("tentang");
+    expect(repo.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("validates the slug before enforcing the page limit", async () => {
+    const repo = mockPageRepo({ countByStoreId: vi.fn().mockResolvedValue(5) });
+    const result = await new AddPage(repo).execute({ storeId, slug: "beranda" });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBeInstanceOf(PageSlugInvalidError);
   });
 });
 
