@@ -56,6 +56,7 @@ function mockStoreRepo(store?: Store | null): StoreRepository {
     findBySingapayAccountId: vi.fn().mockResolvedValue(store ?? null),
     save: vi.fn().mockResolvedValue(undefined),
     countProducts: vi.fn().mockResolvedValue(0),
+    countPhysicalProductsMissingShipping: vi.fn().mockResolvedValue(0),
     listAll: vi.fn().mockResolvedValue({ stores: [], total: 0 }),
     countAll: vi.fn().mockResolvedValue({ total: 0, published: 0, draft: 0, suspended: 0 }),
     delete: vi.fn().mockResolvedValue(undefined),

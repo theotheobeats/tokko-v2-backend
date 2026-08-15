@@ -8,7 +8,7 @@ import type { EntityId } from "../shared/types";
 import type { Result } from "../shared/types";
 import { ok, err, createEntityId } from "../shared/types";
 import { StoreStatus, type Aesthetic, type BusinessType } from "./types";
-import { StoreMustHaveProductsError, generateSubdomain } from "./rules";
+import { StoreMustHaveProductsError, StoreOriginIncompleteError, StoreBankIncompleteError, StoreProductsMissingShippingError, generateSubdomain } from "./rules";
 
 export interface StoreProps {
   id: EntityId;
@@ -67,6 +67,8 @@ export interface StoreProps {
   trialReminderSentAt: string | null;
   pausedAt: string | null;
   archivedAt: string | null;
+  /** Transient (not persisted) — populated by the publish use case from the product repo. */
+  physicalProductsMissingShipping: number;
 }
 
 export class Store {
@@ -132,6 +134,7 @@ export class Store {
       trialReminderSentAt: null,
       pausedAt: null,
       archivedAt: null,
+      physicalProductsMissingShipping: 0,
     });
   }
 
@@ -188,6 +191,7 @@ export class Store {
   get trialReminderSentAt() { return this.props.trialReminderSentAt; }
   get pausedAt() { return this.props.pausedAt; }
   get archivedAt() { return this.props.archivedAt; }
+  get physicalProductsMissingShipping() { return this.props.physicalProductsMissingShipping; }
 
   /** Manual transfer is configured when all three bank fields are filled. */
   get hasBankDetails(): boolean {
@@ -225,10 +229,25 @@ export class Store {
     return parts.join(", ");
   }
 
-  /** Publish the store — requires at least 1 product */
-  publish(): Result<Store, StoreMustHaveProductsError> {
+  /**
+   * Publish the store — requires the required setup forms to be complete:
+   *   1. at least 1 product
+   *   2. shipping origin (courier rates / pickup) fully filled
+   *   3. bank account (manual transfer) fully filled
+   *   4. no physical product missing weight/dimensions (Biteship needs them)
+   */
+  publish(): Result<Store, StoreMustHaveProductsError | StoreOriginIncompleteError | StoreBankIncompleteError | StoreProductsMissingShippingError> {
     if (this.props.productCount < 1) {
       return err(new StoreMustHaveProductsError());
+    }
+    if (!this.hasShippingOrigin) {
+      return err(new StoreOriginIncompleteError());
+    }
+    if (!this.hasBankDetails) {
+      return err(new StoreBankIncompleteError());
+    }
+    if (this.props.physicalProductsMissingShipping > 0) {
+      return err(new StoreProductsMissingShippingError(this.props.physicalProductsMissingShipping));
     }
     this.props.status = StoreStatus.Published;
     return ok(this);
@@ -325,6 +344,15 @@ export class Store {
   /** Update the internal product count reference */
   setProductCount(count: number): Store {
     this.props.productCount = count;
+    return this;
+  }
+
+  /**
+   * Set the count of physical products missing weight/dimensions (transient —
+   * populated by the publish use case so the aggregate can enforce the invariant).
+   */
+  setPhysicalProductsMissingShipping(count: number): Store {
+    this.props.physicalProductsMissingShipping = count;
     return this;
   }
 

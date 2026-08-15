@@ -86,6 +86,30 @@ export class D1StoreRepository implements StoreRepository {
     return result?.count ?? 0;
   }
 
+  /**
+   * Count physical products missing weight/dimensions (Biteship needs all four
+   * for shipping rates) — publish invariant, same pattern as countProducts().
+   */
+  async countPhysicalProductsMissingShipping(storeId: EntityId): Promise<number> {
+    const { products } = await import("../db/schema");
+    const { count, and, eq, isNull } = await import("drizzle-orm");
+    const result = await this.db
+      .select({ count: count() })
+      .from(products)
+      .where(
+        and(
+          eq(products.storeId, storeId as string),
+          eq(products.type, "product"),
+          isNull(products.weight),
+          isNull(products.width),
+          isNull(products.length),
+          isNull(products.height),
+        ),
+      )
+      .get();
+    return result?.count ?? 0;
+  }
+
   /** Admin: list stores across all owners with filters + pagination. */
   async listAll(filters: StoreListFilters = {}): Promise<{ stores: Store[]; total: number }> {
     const { count } = await import("drizzle-orm");
@@ -176,6 +200,7 @@ export class D1StoreRepository implements StoreRepository {
       heroImageUrl: row.heroImageUrl,
       logoUrl: row.logoUrl,
       productCount: 0, // populated separately via countProducts()
+      physicalProductsMissingShipping: 0, // transient — set by the publish use case
       suspendedAt: row.suspendedAt,
       suspendedReason: row.suspendedReason,
       createdAt: row.createdAt,
