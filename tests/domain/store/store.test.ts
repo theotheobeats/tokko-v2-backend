@@ -6,6 +6,38 @@ import { generateSubdomain } from "../../../src/domain/store/rules";
 
 const ownerId = createEntityId();
 
+/**
+ * Fully-configured store — passes the publish gate except for the product
+ * count (set explicitly per test). Origin + bank are the required forms.
+ */
+function makeReadyStore() {
+  const store = Store.create({
+    ownerId,
+    name: "Test Store",
+    businessType: BusinessType.Food,
+    aestheticPreference: Aesthetic.Warm,
+    whatsappNumber: "+62",
+  });
+  store.updateShippingOrigin({
+    originAddress: "Jl. Merdeka No. 1",
+    originRt: "001",
+    originRw: "002",
+    originKelurahan: "Cideng",
+    originKecamatan: "Gambir",
+    originCity: "Jakarta Pusat",
+    originProvince: "DKI Jakarta",
+    originPostalCode: "10150",
+    originContactName: "Anna",
+    originContactPhone: "+6281234567890",
+  });
+  store.updatePaymentConfig({
+    bankName: "BCA",
+    bankAccountNumber: "1234567890",
+    bankAccountName: "Anna",
+  });
+  return store;
+}
+
 describe("Store aggregate", () => {
   // -----------------------------------------------------------------------
   // Creation
@@ -67,31 +99,58 @@ describe("Store aggregate", () => {
   // -----------------------------------------------------------------------
   describe("publish()", () => {
     it("should not publish a store with zero products", () => {
-      const store = Store.create({
-        ownerId,
-        name: "Test Store",
-        businessType: BusinessType.Service,
-        aestheticPreference: Aesthetic.Minimal,
-        whatsappNumber: "+62",
-      });
+      const store = makeReadyStore();
 
       const result = store.publish();
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toContain("at least one product");
+        expect(result.error.name).toBe("StoreMustHaveProductsError");
       }
     });
 
-    it("should publish when product count >= 1", () => {
-      const store = Store.create({
-        ownerId,
-        name: "Test Store",
-        businessType: BusinessType.Service,
-        aestheticPreference: Aesthetic.Minimal,
-        whatsappNumber: "+62",
-      });
+    it("should not publish when the shipping origin form is incomplete", () => {
+      const store = makeReadyStore();
+      store.updateShippingOrigin({ originAddress: null });
+      store.setProductCount(3);
 
+      const result = store.publish();
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.name).toBe("StoreOriginIncompleteError");
+      }
+    });
+
+    it("should not publish when the bank account form is incomplete", () => {
+      const store = makeReadyStore();
+      store.updatePaymentConfig({ bankName: null });
+      store.setProductCount(3);
+
+      const result = store.publish();
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.name).toBe("StoreBankIncompleteError");
+      }
+    });
+
+    it("should not publish when physical products are missing weight/dimensions", () => {
+      const store = makeReadyStore();
+      store.setProductCount(3);
+      store.setPhysicalProductsMissingShipping(2);
+
+      const result = store.publish();
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.name).toBe("StoreProductsMissingShippingError");
+        expect(result.error.message).toContain("2");
+      }
+    });
+
+    it("should publish when products, origin and bank are complete", () => {
+      const store = makeReadyStore();
       store.setProductCount(3);
       const result = store.publish();
 
@@ -102,14 +161,7 @@ describe("Store aggregate", () => {
     });
 
     it("should return the store with published status", () => {
-      const store = Store.create({
-        ownerId,
-        name: "Test Store",
-        businessType: BusinessType.Service,
-        aestheticPreference: Aesthetic.Minimal,
-        whatsappNumber: "+62",
-      });
-
+      const store = makeReadyStore();
       store.setProductCount(1);
       const result = store.publish();
 
@@ -125,14 +177,7 @@ describe("Store aggregate", () => {
   // -----------------------------------------------------------------------
   describe("unpublish()", () => {
     it("should set status back to draft", () => {
-      const store = Store.create({
-        ownerId,
-        name: "Test Store",
-        businessType: BusinessType.Service,
-        aestheticPreference: Aesthetic.Minimal,
-        whatsappNumber: "+62",
-      });
-
+      const store = makeReadyStore();
       store.setProductCount(5);
       store.publish();
       expect(store.status).toBe(StoreStatus.Published);
