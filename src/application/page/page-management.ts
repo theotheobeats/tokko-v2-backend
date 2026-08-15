@@ -5,7 +5,7 @@
 import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
-import { HOME_SLUG, Page } from "../../domain/store/page";
+import { HOME_SLUG, MAX_PAGES, Page } from "../../domain/store/page";
 import { Section, type SectionType } from "../../domain/store/section";
 import type { PageRepository, PageMeta } from "../../infrastructure/repos/d1-page-repo";
 import { serializePage, type SerializedPage } from "./render-section";
@@ -39,6 +39,13 @@ export class LastPageError extends Error {
   code = "LAST_PAGE";
   constructor() {
     super("Tidak bisa menghapus halaman terakhir");
+  }
+}
+
+export class PageLimitReachedError extends Error {
+  code = "PAGE_LIMIT_REACHED";
+  constructor() {
+    super(`Maksimal ${MAX_PAGES} halaman per toko`);
   }
 }
 
@@ -139,10 +146,14 @@ export class AddPage {
   constructor(private readonly pageRepo: PageRepository) {}
 
   async execute(input: { storeId: EntityId; slug: string; title?: string; template?: PageTemplate }): Promise<
-    Result<{ page: SerializedPage; pages: PageMeta[] }, PageSlugInvalidError | PageSlugTakenError>
+    Result<{ page: SerializedPage; pages: PageMeta[] }, PageSlugInvalidError | PageSlugTakenError | PageLimitReachedError>
   > {
     const slug = input.slug.trim();
     if (!isValidSlug(slug)) return err(new PageSlugInvalidError());
+
+    // Page-count limit (home page included) — DDD invariant, checked before save.
+    const count = await this.pageRepo.countByStoreId(input.storeId);
+    if (count >= MAX_PAGES) return err(new PageLimitReachedError());
 
     const existing = await this.pageRepo.findByStoreIdAndSlug(input.storeId, slug);
     if (existing) return err(new PageSlugTakenError(slug));

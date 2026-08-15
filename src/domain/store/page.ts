@@ -18,6 +18,9 @@ export interface PageProps {
 /** Reserved slug — every store's home page. */
 export const HOME_SLUG = "beranda";
 
+/** Maximum pages a store can have (home page included). */
+export const MAX_PAGES = 5;
+
 export class Page {
   private constructor(private readonly props: PageProps) {}
 
