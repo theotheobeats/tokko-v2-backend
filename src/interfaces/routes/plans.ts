@@ -21,6 +21,7 @@ import {
 } from "../../infrastructure/payments/registry";
 import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { pendingPlanExternalId, priceFor } from "../../domain/plan/pricing";
+import { isBetaPricing } from "../../application/plan/pricing-policy";
 
 const plansRouter = new Hono<{ Bindings: Env }>();
 
@@ -35,11 +36,13 @@ plansRouter.post("/checkout", zValidator("json", z.object({
   }
 
   const { plan, cycle } = c.req.valid("json");
-  const amount = priceFor(plan, cycle);
 
   // Route through the active provider (admin switch); real payments only —
   // no mock invoices for paid plans.
   const db = createDb(c.env.DB);
+  // BETA test pricing while `pricing_beta` is set; NORMAL after the flip.
+  const beta = await isBetaPricing((k) => new D1AppSettingsRepository(db).get(k));
+  const amount = priceFor(plan, cycle, beta);
   const providerId = await resolveActivePaymentProvider((k) => new D1AppSettingsRepository(db).get(k));
   if (!providerIsReal(c.env, providerId)) {
     return c.json({ error: { code: "PAYMENT_UNAVAILABLE", message: "Pembayaran belum tersedia saat ini." } }, 502);

@@ -11,7 +11,7 @@
 
 import type { Result } from "../../domain/shared/types";
 import { ok, err, createEntityId } from "../../domain/shared/types";
-import { parsePendingPlanExternalId, priceFor, PERIOD_DAYS } from "../../domain/plan/pricing";
+import { parsePendingPlanExternalId, isValidInvoiceAmount, PERIOD_DAYS } from "../../domain/plan/pricing";
 import { Subscription } from "../../domain/plan/subscription";
 import type { Store } from "../../domain/store/store";
 import type { StoreRepository } from "../store/store-repo";
@@ -62,8 +62,8 @@ export class HandlePendingPlanPayment {
     if (!parsed) return ok({ handled: false });
     if (payload.status !== "PAID") return ok({ handled: false });
 
-    const expected = priceFor(parsed.plan, parsed.cycle);
-    if (payload.amount !== undefined && Number(payload.amount) !== expected) {
+    const expected = isValidInvoiceAmount(payload.amount ?? -1, parsed.plan, parsed.cycle);
+    if (payload.amount !== undefined && !expected) {
       return err(new PendingPlanAmountMismatchError());
     }
 

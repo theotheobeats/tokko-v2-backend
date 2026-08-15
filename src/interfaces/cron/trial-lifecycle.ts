@@ -22,14 +22,17 @@ export async function runTrialLifecycle(env: Env): Promise<TrialLifecycleResult>
     await import("../../infrastructure/payments/registry");
   const { D1AppSettingsRepository } = await import("../../infrastructure/repos/d1-app-settings-repo");
   const { subscriptionExternalId, priceFor } = await import("../../domain/plan/pricing");
-  const providerId = await resolveActivePaymentProvider((k) => new D1AppSettingsRepository(db).get(k));
+  const { isBetaPricing } = await import("../../application/plan/pricing-policy");
+  const settings = new D1AppSettingsRepository(db);
+  const beta = await isBetaPricing((k) => settings.get(k));
+  const providerId = await resolveActivePaymentProvider((k) => settings.get(k));
   const provider = createProviderClient(env, providerId);
   const createRenewalInvoice = providerIsReal(env, providerId)
     ? async (input: { store: { id: string }; plan: "pro" | "commerce"; cycle: "monthly" | "annual" }) => {
         const externalId = subscriptionExternalId(input.store.id, input.plan, input.cycle, `renew-${Date.now()}`);
         const invoice = await provider.createInvoice({
           externalId,
-          amount: priceFor(input.plan, input.cycle),
+          amount: priceFor(input.plan, input.cycle, beta),
           description: `Perpanjangan langganan Tokko ${input.plan === "pro" ? "Pro" : "Commerce"} (${input.cycle})`,
         });
         return { externalId: invoice.externalId };
