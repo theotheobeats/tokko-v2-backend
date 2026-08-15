@@ -111,6 +111,9 @@ ordersRouter.post("/:storeId/orders", zValidator("json", submitSchema), async (c
     shippingAddress: input.shippingAddress,
     destination: input.destination,
     shipping: input.shipping,
+    // Map the transaction: online checkout on → provider invoice; else the
+    // buyer pays manual bank transfer and the merchant confirms it.
+    paymentMethod: store.paymentOnline ? "online" : "manual",
   });
 
   if (!result.ok) {

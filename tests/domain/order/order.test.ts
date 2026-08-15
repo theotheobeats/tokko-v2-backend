@@ -192,6 +192,45 @@ describe("Order aggregate", () => {
       expect(order.shippingFee).toBe(15000);
       expect(order.totalAmount).toBe(25000); // 10000 items + 15000 delivery fee
     });
+
+    it("records a manual-transfer payment method", () => {
+      const order = Order.create({
+        storeId,
+        customerName: "Rina",
+        customerPhone: "+62",
+        items,
+        shippingAddress: "Jl. Test No. 1",
+        paymentMethod: "manual",
+      });
+
+      expect(order.paymentMethod).toBe("manual");
+      expect(order.toJSON().paymentMethod).toBe("manual");
+    });
+
+    it("records an online payment method", () => {
+      const order = Order.create({
+        storeId,
+        customerName: "Rina",
+        customerPhone: "+62",
+        items,
+        shippingAddress: "Jl. Test No. 1",
+        paymentMethod: "online",
+      });
+
+      expect(order.paymentMethod).toBe("online");
+    });
+
+    it("defaults paymentMethod to null for legacy orders", () => {
+      const order = Order.create({
+        storeId,
+        customerName: "Rina",
+        customerPhone: "+62",
+        items,
+        shippingAddress: "Jl. Test No. 1",
+      });
+
+      expect(order.paymentMethod).toBeNull();
+    });
   });
 
   describe("status transitions", () => {
