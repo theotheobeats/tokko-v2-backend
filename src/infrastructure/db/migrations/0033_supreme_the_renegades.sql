@@ -1,0 +1,1 @@
+ALTER TABLE `commission_entries` ADD `kind` text DEFAULT 'royalty' NOT NULL;

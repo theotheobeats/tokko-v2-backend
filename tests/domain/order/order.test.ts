@@ -193,6 +193,28 @@ describe("Order aggregate", () => {
       expect(order.totalAmount).toBe(25000); // 10000 items + 15000 delivery fee
     });
 
+    it("exposes itemsTotal as the sales value excluding delivery", () => {
+      const order = Order.create({
+        storeId,
+        customerName: "Rina",
+        customerPhone: "+62",
+        items: [
+          { productId: createEntityId(), productName: "A", quantity: 2, unitPrice: 85000, productType: "product" as const },
+          { productId: createEntityId(), productName: "B", quantity: 1, unitPrice: 25000, productType: "product" as const },
+        ],
+        shippingAddress: "Jl. Test No. 1",
+        shippingFee: 15000,
+        shippingCourier: "jne",
+        shippingService: "reg",
+      });
+
+      // Royalty is based on SALES value (excl. ongkir); ongkir goes to the platform.
+      expect(order.itemsTotal).toBe(195_000); // 2×85000 + 25000
+      expect(order.shippingFee).toBe(15_000);
+      expect(order.totalAmount).toBe(210_000);
+      expect(order.itemsTotal + order.shippingFee).toBe(order.totalAmount);
+    });
+
     it("records a manual-transfer payment method", () => {
       const order = Order.create({
         storeId,

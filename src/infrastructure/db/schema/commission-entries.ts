@@ -18,6 +18,8 @@ export const commissionEntries = sqliteTable("commission_entries", {
     .references(() => orders.id),
   orderAmount: integer("order_amount").notNull(), // paid order total (IDR)
   rate: real("rate").notNull(), // e.g. 3.5 = 3.5%
-  fee: integer("fee").notNull(), // calculated commission (IDR)
+  fee: integer("fee").notNull(), // calculated platform fee (IDR)
+  /** What the entry claims: "royalty" (2,5% of sales) | "shipping" (ongkir). */
+  kind: text("kind").notNull().default("royalty"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 });

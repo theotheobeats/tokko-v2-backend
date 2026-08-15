@@ -35,6 +35,10 @@ export class PublishStore {
     const missingShipping = await this.storeRepo.countPhysicalProductsMissingShipping(store.id);
     store.setPhysicalProductsMissingShipping(missingShipping);
 
+    // Shipping origin is only required when the store actually ships.
+    const physicalProducts = await this.storeRepo.countPhysicalProducts(store.id);
+    store.setPhysicalProducts(physicalProducts);
+
     const result = store.publish();
     if (!result.ok) {
       const error = result.error;

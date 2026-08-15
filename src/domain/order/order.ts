@@ -159,6 +159,10 @@ export class Order {
   get customerPhone() { return this.props.customerPhone; }
   get items() { return [...this.props.items]; }
   get totalAmount() { return this.props.totalAmount; }
+  /** Sales value of the items (excl. delivery) — royalty is based on this. */
+  get itemsTotal(): number {
+    return this.props.items.reduce((sum, item) => sum + item.subtotal, 0);
+  }
   get status() { return this.props.status; }
   get notes() { return this.props.notes; }
   get shippingAddress() { return this.props.shippingAddress; }

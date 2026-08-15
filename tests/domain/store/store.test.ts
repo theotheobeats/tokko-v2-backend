@@ -35,6 +35,7 @@ function makeReadyStore() {
     bankAccountNumber: "1234567890",
     bankAccountName: "Anna",
   });
+  store.setPhysicalProducts(1); // default: the store sells physical goods
   return store;
 }
 
@@ -120,6 +121,42 @@ describe("Store aggregate", () => {
       if (!result.ok) {
         expect(result.error.name).toBe("StoreOriginIncompleteError");
       }
+    });
+
+    it("should publish a service-only store without a shipping origin (no Biteship)", () => {
+      const store = makeReadyStore();
+      // Clear the entire origin — services/booking never ship via courier.
+      store.updateShippingOrigin({
+        originAddress: null,
+        originRt: null,
+        originRw: null,
+        originKelurahan: null,
+        originKecamatan: null,
+        originCity: null,
+        originProvince: null,
+        originPostalCode: null,
+        originContactName: null,
+        originContactPhone: null,
+      });
+      store.setProductCount(3);
+      store.setPhysicalProducts(0); // no physical products → origin not required
+
+      const result = store.publish();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.status).toBe(StoreStatus.Published);
+    });
+
+    it("should publish a physical store without origin when e-payment is off (no Biteship)", () => {
+      const store = makeReadyStore();
+      store.updateShippingOrigin({ originAddress: null });
+      store.setPaymentOnline(false); // e-payment off → Biteship unavailable → no origin needed
+      store.setProductCount(3);
+
+      const result = store.publish();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.status).toBe(StoreStatus.Published);
     });
 
     it("should not publish when the bank account form is incomplete", () => {
