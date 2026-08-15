@@ -148,6 +148,22 @@ export interface NormalizedSingaPaySettlementWebhook {
 // genuine replays (the HMAC is the real auth; this is just staleness).
 const TIMESTAMP_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
+/**
+ * HMAC key for inbound webhook verification.
+ *
+ * Per SingaPay docs (Security and Signature Validation), webhooks are signed
+ * with the merchant's CLIENT_SECRET — a separate "webhook secret" is never
+ * used by SingaPay (prod incident: every webhook 401'd because we verified
+ * with SINGAPAY_WEBHOOK_SECRET). Fall back to the legacy webhook secret only
+ * if the client secret is missing, so older setups keep working.
+ */
+export function resolveWebhookSecret(env: {
+  SINGAPAY_CLIENT_SECRET?: string;
+  SINGAPAY_WEBHOOK_SECRET?: string;
+}): string | null {
+  return env.SINGAPAY_CLIENT_SECRET ?? env.SINGAPAY_WEBHOOK_SECRET ?? null;
+}
+
 async function sha256Hex(data: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(data));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
