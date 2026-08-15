@@ -245,8 +245,7 @@ describe("HandleXenditWebhook", () => {
 
   it("accrues flat 2,5% royalty on paid tiers but nothing on trial", async () => {
     // Fresh order+payment+repos per run (the paid webhook is idempotent).
-    const runWebhook = async (sub: unknown | null) => {
-      const order = makeOrder();
+    const runWebhook = async (sub: unknown | null, order = makeOrder()) => {
       const paymentRepo = mockPaymentRepo();
       const orderRepo = mockOrderRepo({ findById: vi.fn().mockResolvedValue(order) });
       const created = await new CreatePayment(orderRepo, paymentRepo, mockProvider()).execute({ orderId: order.id });
@@ -268,7 +267,10 @@ describe("HandleXenditWebhook", () => {
       } as unknown as CommissionLedger;
       const subscriptionRepo = { findActiveByStoreId: vi.fn().mockResolvedValue(sub) } as unknown as SubscriptionRepository;
 
-      await new HandleXenditWebhook(paymentRepo, orderRepo, { storeRepo, ledger, subscriptionRepo }).execute(paidPayload);
+      await new HandleXenditWebhook(paymentRepo, orderRepo, { storeRepo, ledger, subscriptionRepo }).execute({
+        ...paidPayload,
+        amount: paymentDomain.amount, // match the order's total (items + ongkir)
+      });
       return ledger;
     };
 
@@ -280,9 +282,29 @@ describe("HandleXenditWebhook", () => {
     });
 
     const proLedger = await runWebhook(pro);
-    expect(proLedger.record).toHaveBeenCalledWith(expect.objectContaining({ rate: 2.5, fee: 2125 })); // 85000 × 2,5%
+    // Royalty is 2,5% of SALES value (excl. ongkir) — 85.000 item, no shipping.
+    expect(proLedger.record).toHaveBeenCalledWith(expect.objectContaining({ rate: 2.5, fee: 2125, kind: "royalty" })); // 85000 × 2,5%
 
     const trialLedger = await runWebhook(null);
     expect(trialLedger.record).not.toHaveBeenCalled(); // trial is royalty-free
+
+    // With shipping: royalty on items only + a separate ongkir entry for the platform.
+    const withShipping = makeOrder();
+    // 85.000 item + 15.000 ongkir — itemsTotal stays 85.000, totalAmount 100.000.
+    const shipOrder = Order.create({
+      storeId,
+      customerName: "Rina",
+      customerPhone: "+628111222333",
+      items: [{ productId: createEntityId(), productName: "Cake", quantity: 1, unitPrice: 85000, productType: "product" }],
+      shippingAddress: "Jl. Test 1",
+      shippingFee: 15000,
+      shippingCourier: "jne",
+      shippingService: "reg",
+    });
+    const shipLedger = await runWebhook(pro, shipOrder);
+    // Royalty on sales value (85.000), NOT on the total incl. ongkir (100.000).
+    expect(shipLedger.record).toHaveBeenCalledWith(expect.objectContaining({ kind: "royalty", rate: 2.5, fee: 2125 }));
+    // Ongkir accrues to the platform as its own entry.
+    expect(shipLedger.record).toHaveBeenCalledWith(expect.objectContaining({ kind: "shipping", fee: 15000 }));
   });
 });

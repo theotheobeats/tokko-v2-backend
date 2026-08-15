@@ -35,6 +35,7 @@ function mockStoreRepo(store: Store): StoreRepository {
     save: vi.fn().mockResolvedValue(undefined),
     countProducts: vi.fn().mockResolvedValue(0),
     countPhysicalProductsMissingShipping: vi.fn().mockResolvedValue(0),
+    countPhysicalProducts: vi.fn().mockResolvedValue(1),
     listAll: vi.fn().mockResolvedValue({ stores: [], total: 0 }),
     countAll: vi.fn().mockResolvedValue({ total: 0, published: 0, draft: 0, suspended: 0 }),
     delete: vi.fn().mockResolvedValue(undefined),
@@ -56,14 +57,18 @@ function mockAccounts(balance = { available: 1_250_000, balance: 1_250_000, pend
   };
 }
 
-function makePaidOrder(storeId: string, amount: number, daysAgo: number): Order {
+function makePaidOrder(storeId: string, amount: number, daysAgo: number, shippingFee = 0): Order {
   const createdAt = new Date(Date.now() - daysAgo * 86_400_000).toISOString();
   const order = Order.create({
     storeId,
     customerName: "Budi",
     customerPhone: "628123456789",
     items: [{ productId: "p1", productName: "Roti", quantity: 1, unitPrice: amount, productType: "product" as const }],
-    shippingOption: "manual",
+    shippingAddress: shippingFee > 0 ? "Jl. Kirim 1" : undefined,
+    shippingOption: shippingFee > 0 ? "courier" : "manual",
+    shippingFee,
+    shippingCourier: shippingFee > 0 ? "jne" : null,
+    shippingService: shippingFee > 0 ? "reg" : null,
   });
   order.updateFulfillment({ paymentConfirmed: true, status: "completed" });
   // createdAt is set at creation; patch the ISO for period bucketing.
@@ -79,7 +84,7 @@ describe("GetEarningsDashboard", () => {
   it("aggregates period earnings, ready-to-payout and the merged transaction log", async () => {
     const store = makeStore();
     const orders = [
-      makePaidOrder(store.id, 100_000, 0), // today
+      makePaidOrder(store.id, 100_000, 0, 15_000), // today — 100rb items + 15rb ongkir
       makePaidOrder(store.id, 200_000, 3), // this week
       makePaidOrder(store.id, 300_000, 20), // this month
       makePaidOrder(store.id, 400_000, 60), // outside all periods
@@ -99,7 +104,7 @@ describe("GetEarningsDashboard", () => {
       record: vi.fn(),
       sumByStoreId: vi.fn().mockResolvedValue(10_000),
       listByStoreId: vi.fn().mockResolvedValue([
-        { id: "c1", storeId: store.id, orderId: orders[0].id, orderAmount: 100_000, rate: 3.5, fee: 3_500, createdAt: "2026-08-10 00:00:00" },
+        { id: "c1", storeId: store.id, orderId: orders[0].id, orderAmount: 100_000, rate: 3.5, fee: 3_500, kind: "royalty" as const, createdAt: "2026-08-10 00:00:00" },
       ]),
     };
     const payoutRepo: PayoutRepository = {
@@ -177,7 +182,7 @@ describe("GetEarningsDashboard", () => {
     expect(v.clearing.pending).toBe(200_000);
 
     // Period buckets: today = 1 order, this week = 2, this month = 3, total = 4.
-    expect(v.earnings.today.gross).toBe(100_000);
+    expect(v.earnings.today.gross).toBe(100_000); // items only — ongkir (15rb) goes to the platform
     expect(v.earnings.today.orders).toBe(1);
     expect(v.earnings.thisWeek.gross).toBe(300_000);
     expect(v.earnings.thisWeek.orders).toBe(2);

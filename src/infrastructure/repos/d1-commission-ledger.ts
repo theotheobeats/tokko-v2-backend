@@ -14,6 +14,8 @@ export interface CommissionEntry {
   orderAmount: number;
   rate: number;
   fee: number;
+  /** "royalty" (2,5% of sales) | "shipping" (ongkir) — both accrue to the platform. */
+  kind: "royalty" | "shipping";
   createdAt: string;
 }
 
@@ -35,6 +37,7 @@ export class D1CommissionLedger implements CommissionLedger {
       orderAmount: entry.orderAmount,
       rate: entry.rate,
       fee: entry.fee,
+      kind: entry.kind,
     });
   }
 
@@ -60,6 +63,7 @@ export class D1CommissionLedger implements CommissionLedger {
       orderAmount: r.orderAmount,
       rate: r.rate,
       fee: r.fee,
+      kind: r.kind as CommissionEntry["kind"],
       createdAt: r.createdAt,
     }));
   }

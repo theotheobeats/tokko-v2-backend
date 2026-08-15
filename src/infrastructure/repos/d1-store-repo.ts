@@ -87,6 +87,21 @@ export class D1StoreRepository implements StoreRepository {
   }
 
   /**
+   * Count physical products (type "product") — origin is only required when
+   * this is > 0 (service/booking stores don't use Biteship).
+   */
+  async countPhysicalProducts(storeId: EntityId): Promise<number> {
+    const { products } = await import("../db/schema");
+    const { count, and, eq } = await import("drizzle-orm");
+    const result = await this.db
+      .select({ count: count() })
+      .from(products)
+      .where(and(eq(products.storeId, storeId as string), eq(products.type, "product")))
+      .get();
+    return result?.count ?? 0;
+  }
+
+  /**
    * Count physical products missing weight/dimensions (Biteship needs all four
    * for shipping rates) — publish invariant, same pattern as countProducts().
    */
@@ -201,6 +216,7 @@ export class D1StoreRepository implements StoreRepository {
       logoUrl: row.logoUrl,
       productCount: 0, // populated separately via countProducts()
       physicalProductsMissingShipping: 0, // transient — set by the publish use case
+      physicalProducts: 0, // transient — set by the publish use case
       suspendedAt: row.suspendedAt,
       suspendedReason: row.suspendedReason,
       createdAt: row.createdAt,

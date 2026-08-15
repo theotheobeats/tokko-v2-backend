@@ -145,6 +145,9 @@ export class GetEarningsDashboard {
 
     const commissionByOrder = new Map<string, number>();
     for (const entry of commissionEntries) {
+      // Displayed commission = ROYALTY only (2,5% of sales). Ongkir is the
+      // platform's pass-through claim — deducted at payout, not merchant income.
+      if (entry.kind !== "royalty") continue;
       commissionByOrder.set(entry.orderId, (commissionByOrder.get(entry.orderId) ?? 0) + entry.fee);
     }
 
@@ -160,9 +163,10 @@ export class GetEarningsDashboard {
         const created = o.toJSON().createdAt ?? "";
         if (since && created < since) continue;
         const fee = commissionByOrder.get(o.id) ?? 0;
-        out.gross += o.totalAmount;
+        // Gross = SALES value (items excl. ongkir) — ongkir goes to the platform.
+        out.gross += o.itemsTotal;
         out.commission += fee;
-        out.net += o.totalAmount - fee;
+        out.net += o.itemsTotal - fee;
         out.orders += 1;
       }
       return out;

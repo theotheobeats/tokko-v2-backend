@@ -28,6 +28,14 @@ export type SubscriptionStatus = "active" | "expired" | "canceled";
 /** Flat royalty (%) on paid plans — trial is royalty-free. */
 export const ROYALTY_RATE = 2.5;
 
+/**
+ * Platform royalty fee on SALES value (items excl. ongkir).
+ * Ongkir is claimed separately (it goes to the platform too).
+ */
+export function royaltyFeeFor(salesValue: number, rate: number): number {
+  return Math.round((salesValue * rate) / 100);
+}
+
 /** Feature/limit set per tier. null limit = unlimited. */
 export interface TierConfig {
   productLimit: number;

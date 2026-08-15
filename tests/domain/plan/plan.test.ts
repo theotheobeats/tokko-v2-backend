@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { royaltyFeeFor } from "../../../src/domain/plan/types";
 import { Store } from "../../../src/domain/store/store";
 import { BusinessType, Aesthetic } from "../../../src/domain/store/types";
 import { createEntityId } from "../../../src/domain/shared/types";
@@ -176,5 +177,13 @@ describe("Store plan fields", () => {
     expect(store.commissionRate).toBe(3.5);
     store.setCustomDomain("toko.example.com");
     expect(store.customDomain).toBe("toko.example.com");
+  });
+});
+
+describe("royaltyFeeFor", () => {
+  it("computes the flat royalty on SALES value (excl. ongkir)", () => {
+    expect(royaltyFeeFor(195_000, 2.5)).toBe(4_875); // 195.000 × 2,5%
+    expect(royaltyFeeFor(100_000, 2.5)).toBe(2_500);
+    expect(royaltyFeeFor(0, 2.5)).toBe(0);
   });
 });
