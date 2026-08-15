@@ -5,7 +5,7 @@
 import type { EntityId } from "../../domain/shared/types";
 import type { Result } from "../../domain/shared/types";
 import { ok, err } from "../../domain/shared/types";
-import { resolveTier, tierConfigFor } from "../../domain/plan/types";
+import { resolveTier, tierConfigFor, royaltyFeeFor } from "../../domain/plan/types";
 import { Payment } from "../../domain/payment/payment";
 import type { PaymentStatus } from "../../domain/payment/types";
 import type { PaymentProvider as PaymentProviderType } from "../../domain/payment/types";
@@ -228,12 +228,29 @@ export class HandleXenditWebhook {
           }
 
           if (rate > 0) {
+            // Royalty: 2,5% of SALES value (items excl. ongkir) — ongkir is
+            // claimed separately below (the platform pays Biteship for it).
+            const salesValue = order?.itemsTotal ?? payment.amount;
             await this.commission.ledger.record({
               storeId: store.id,
               orderId: order?.id ?? payment.orderId,
-              orderAmount: payment.amount,
+              orderAmount: salesValue,
               rate,
-              fee: Math.round((payment.amount * rate) / 100),
+              fee: royaltyFeeFor(salesValue, rate),
+              kind: "royalty",
+            });
+          }
+
+          // Ongkir accrues to the platform (it fronts the courier cost to
+          // Biteship) — only reachable for e-payment orders (webhook path).
+          if (order && order.shippingFee > 0) {
+            await this.commission.ledger.record({
+              storeId: store.id,
+              orderId: order.id,
+              orderAmount: order.totalAmount,
+              rate: 0,
+              fee: order.shippingFee,
+              kind: "shipping",
             });
           }
         } catch (e) {

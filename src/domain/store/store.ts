@@ -69,6 +69,8 @@ export interface StoreProps {
   archivedAt: string | null;
   /** Transient (not persisted) — populated by the publish use case from the product repo. */
   physicalProductsMissingShipping: number;
+  /** Transient — how many products ship (type "product"); origin only required when > 0. */
+  physicalProducts: number;
 }
 
 export class Store {
@@ -135,6 +137,7 @@ export class Store {
       pausedAt: null,
       archivedAt: null,
       physicalProductsMissingShipping: 0,
+      physicalProducts: 0,
     });
   }
 
@@ -192,6 +195,7 @@ export class Store {
   get pausedAt() { return this.props.pausedAt; }
   get archivedAt() { return this.props.archivedAt; }
   get physicalProductsMissingShipping() { return this.props.physicalProductsMissingShipping; }
+  get physicalProducts() { return this.props.physicalProducts; }
 
   /** Manual transfer is configured when all three bank fields are filled. */
   get hasBankDetails(): boolean {
@@ -240,7 +244,10 @@ export class Store {
     if (this.props.productCount < 1) {
       return err(new StoreMustHaveProductsError());
     }
-    if (!this.hasShippingOrigin) {
+    // Shipping origin is only required when the store actually ships via
+    // Biteship: physical products AND e-payment on (trial/manual-only stores
+    // have no platform-managed money to cover the courier cost).
+    if (this.props.physicalProducts > 0 && this.props.paymentOnline && !this.hasShippingOrigin) {
       return err(new StoreOriginIncompleteError());
     }
     if (!this.hasBankDetails) {
@@ -353,6 +360,15 @@ export class Store {
    */
   setPhysicalProductsMissingShipping(count: number): Store {
     this.props.physicalProductsMissingShipping = count;
+    return this;
+  }
+
+  /**
+   * Set how many products ship (type "product") — origin is only required
+   * when this is > 0 (service/booking stores don't use Biteship).
+   */
+  setPhysicalProducts(count: number): Store {
+    this.props.physicalProducts = count;
     return this;
   }
 

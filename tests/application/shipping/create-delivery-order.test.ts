@@ -3,6 +3,7 @@ import {
   CreateDeliveryOrder,
   DeliveryOrderAlreadyShippedError,
   DeliveryOrderDestinationMissingError,
+  DeliveryOrderEpaymentRequiredError,
   DeliveryOrderNoShippingError,
   DeliveryOrderNotPaidError,
 } from "../../../src/application/shipping/create-delivery-order";
@@ -135,6 +136,18 @@ describe("CreateDeliveryOrder", () => {
     const result = await new CreateDeliveryOrder(orderRepo, storeRepo, productRepo, provider).execute({ storeId: STORE_ID, orderId: ORDER_ID });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBeInstanceOf(DeliveryOrderNotPaidError);
+  });
+
+  it("rejects stores without e-payment (trial/manual-only — platform would subsidize Biteship)", async () => {
+    const { storeRepo, orderRepo, productRepo, provider } = mocks();
+    const store = makeStore();
+    store.setPaymentOnline(false); // trial / KYB not done → e-payment off
+    storeRepo.findById = vi.fn().mockResolvedValue(store);
+    orderRepo.findById = vi.fn().mockResolvedValue(makeOrder());
+    const result = await new CreateDeliveryOrder(orderRepo, storeRepo, productRepo, provider).execute({ storeId: STORE_ID, orderId: ORDER_ID });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBeInstanceOf(DeliveryOrderEpaymentRequiredError);
+    expect(provider.createOrder).not.toHaveBeenCalled();
   });
 
   it("rejects orders without courier shipping", async () => {

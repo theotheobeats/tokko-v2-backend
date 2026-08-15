@@ -16,6 +16,10 @@ import type { ShippingProviderClient, DeliveryOrderResult } from "../../infrastr
 
 export class DeliveryOrderNotFoundError extends Error { code = "ORDER_NOT_FOUND"; constructor() { super("Pesanan tidak ditemukan"); } }
 export class DeliveryOrderNotPaidError extends Error { code = "NOT_PAID"; constructor() { super("Pesanan belum dibayar."); } }
+export class DeliveryOrderEpaymentRequiredError extends Error {
+  code = "EPAYMENT_REQUIRED";
+  constructor() { super("Biteship tersedia di paket Pro/Commerce dengan pembayaran online."); }
+}
 export class DeliveryOrderNoShippingError extends Error { code = "NO_SHIPPING"; constructor() { super("Pesanan tidak memakai kurir."); } }
 export class DeliveryOrderAlreadyShippedError extends Error { code = "ALREADY_SHIPPED"; constructor() { super("Resi sudah dibuat untuk pesanan ini."); } }
 export class DeliveryOrderDestinationMissingError extends Error { code = "DESTINATION_MISSING"; constructor() { super("Alamat tujuan belum lengkap — minta pembeli mengisi alamat lengkap."); } }
@@ -47,6 +51,9 @@ export class CreateDeliveryOrder {
     if (!order || order.storeId !== input.storeId) return err(new DeliveryOrderNotFoundError());
 
     if (!order.paymentConfirmed) return err(new DeliveryOrderNotPaidError());
+    // Biteship is gated on e-payment: trial/manual-only stores have no
+    // platform-managed money to recover the courier cost from (no subsidy).
+    if (!store.paymentOnline) return err(new DeliveryOrderEpaymentRequiredError());
     if (!order.shippingCourier || !order.shippingService) return err(new DeliveryOrderNoShippingError());
     if (order.trackingNumber || order.biteshipOrderId) return err(new DeliveryOrderAlreadyShippedError());
 

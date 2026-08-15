@@ -15,6 +15,7 @@ function mockStoreRepo(overrides?: Partial<StoreRepository>): StoreRepository {
     delete: vi.fn().mockResolvedValue(undefined),
     countProducts: vi.fn().mockResolvedValue(0),
     countPhysicalProductsMissingShipping: vi.fn().mockResolvedValue(0),
+    countPhysicalProducts: vi.fn().mockResolvedValue(1),
     ...overrides,
   };
 }
@@ -48,6 +49,7 @@ function makeStore(productCount = 0) {
     bankAccountName: "Anna",
   });
   store.setProductCount(productCount);
+  store.setPhysicalProducts(1); // default: the store sells physical goods
   return store;
 }
 
@@ -98,6 +100,36 @@ describe("PublishStore use case", () => {
       expect(result.error.message).toContain("Alamat Pengiriman");
     }
     expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it("should publish a service-only store without a shipping origin", async () => {
+    const store = makeStore(3);
+    // Clear the whole origin — services/booking never ship via courier.
+    store.updateShippingOrigin({
+      originAddress: null,
+      originRt: null,
+      originRw: null,
+      originKelurahan: null,
+      originKecamatan: null,
+      originCity: null,
+      originProvince: null,
+      originPostalCode: null,
+      originContactName: null,
+      originContactPhone: null,
+    });
+    store.setPhysicalProducts(0);
+    const repo = mockStoreRepo({
+      findById: vi.fn().mockResolvedValue(store),
+      countProducts: vi.fn().mockResolvedValue(3),
+      countPhysicalProducts: vi.fn().mockResolvedValue(0),
+    });
+    const useCase = new PublishStore(repo);
+
+    const result = await useCase.execute({ storeId: store.id });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.status).toBe(StoreStatus.Published);
+    expect(repo.save).toHaveBeenCalledOnce();
   });
 
   it("should reject when the bank account form is incomplete", async () => {
