@@ -22,6 +22,8 @@ export const orders = sqliteTable("orders", {
   courier: text("courier"), // jasa kirim
   paymentConfirmed: integer("payment_confirmed").notNull().default(0), // SQLite boolean (0/1)
   paymentNote: text("payment_note"),
+  /** How the buyer pays: "manual" (bank transfer) | "online" (provider invoice) | NULL (legacy). */
+  paymentMethod: text("payment_method"),
   queueNumber: text("queue_number"), // nomor antrian (booking orders)
   // Shipping (Biteship) — courier/pickup/manual option + cost.
   shippingOption: text("shipping_option"), // "courier" | "pickup" | "manual"

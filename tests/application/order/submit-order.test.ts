@@ -132,6 +132,28 @@ describe("SubmitOrder with shipping", () => {
       expect(result.value.totalAmount).toBe(40000); // 25000 items + 15000 delivery
     }
   });
+
+  it("maps the payment method onto the order", async () => {
+    const product = makeProduct("Kue", 25000);
+    const orderRepo = mockOrderRepo();
+    const productRepo = mockProductRepo({
+      findById: vi.fn().mockResolvedValue(product),
+      findVariantsByProductIds: vi.fn().mockResolvedValue([]),
+    });
+    const useCase = new SubmitOrder(orderRepo, productRepo);
+
+    const result = await useCase.execute({
+      storeId,
+      customerName: "Budi",
+      customerPhone: "0812345",
+      items: [{ productId: product.id, quantity: 1 }],
+      shippingAddress: "Jakarta",
+      paymentMethod: "manual",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.paymentMethod).toBe("manual");
+  });
 });
 
 describe("SubmitOrder with variants", () => {

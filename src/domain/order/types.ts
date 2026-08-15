@@ -35,3 +35,11 @@ export const SHIPPING_OPTIONS: ShippingOption[] = ["courier", "pickup", "manual"
 export function isShippingOption(value: unknown): value is ShippingOption {
   return typeof value === "string" && (SHIPPING_OPTIONS as string[]).includes(value);
 }
+
+/** How the buyer pays: provider invoice (online) or manual bank transfer. */
+export type PaymentMethod = "manual" | "online";
+export const PAYMENT_METHODS: PaymentMethod[] = ["manual", "online"];
+
+export function isPaymentMethod(value: unknown): value is PaymentMethod {
+  return typeof value === "string" && (PAYMENT_METHODS as string[]).includes(value);
+}
