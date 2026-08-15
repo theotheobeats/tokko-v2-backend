@@ -124,6 +124,21 @@ describe("verifySingaPayWebhookSignature", () => {
     expect(ok).toBe(false);
   });
 
+  it("accepts a delayed delivery inside the replay window (SingaPay retry latency)", async () => {
+    const body = samplePayload();
+    // SingaPay delivered this webhook ~5 minutes after the transaction
+    // timestamp — the old 5-minute window rejected it (401, prod incident).
+    const delivered = now - 10 * 60; // 10 minutes after the tx timestamp
+    const signature = signPayload(body, { endpoint: ENDPOINT, timestamp: String(delivered), token });
+    const ok = await verifySingaPayWebhookSignature({
+      rawBody: JSON.stringify(body),
+      headers: { "x-signature": signature, "x-timestamp": String(delivered), authorization: `Bearer ${token}` },
+      clientSecret: SECRET,
+      endpoint: ENDPOINT,
+    });
+    expect(ok).toBe(true);
+  });
+
   it("rejects missing headers", async () => {
     const ok = await verifySingaPayWebhookSignature({
       rawBody: JSON.stringify(samplePayload()),

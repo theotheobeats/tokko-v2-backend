@@ -27,6 +27,8 @@ export interface SingaPayWebhookHeaders {
 }
 
 export interface SingaPayWebhookPayload {
+  /** Event kind, e.g. "payment-link-transaction" (SingaPay notification). */
+  event?: string;
   data?: {
     transaction?: {
       reff_no?: string;
@@ -139,7 +141,12 @@ export interface NormalizedSingaPaySettlementWebhook {
   refund: { accountId: string | null; netAmount: number } | null;
 }
 
-const TIMESTAMP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes — replay protection
+// Replay protection window. SingaPay delivers webhooks with latency and
+// retries ~5 minutes after the transaction timestamp (prod incident: a paid
+// subscription webhook was rejected because delivery landed 5s past the old
+// 5-minute window). 15 minutes tolerates retries while still rejecting
+// genuine replays (the HMAC is the real auth; this is just staleness).
+const TIMESTAMP_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 async function sha256Hex(data: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(data));
