@@ -18,6 +18,7 @@ import {
   normalizeSingaPayWebhook,
   normalizeSingaPayDisbursementWebhook,
   normalizeSingaPaySettlementWebhook,
+  resolveWebhookSecret,
   type SingaPayWebhookPayload,
   type SingaPayDisbursementWebhookPayload,
   type SingaPaySettlementWebhookPayload,
@@ -294,7 +295,9 @@ paymentsRouter.post("/webhooks/xendit", async (c) => {
 // ---------------------------------------------------------------------------
 paymentsRouter.post("/webhooks/singapay", async (c) => {
   const env = c.env as Env;
-  const secret = env.SINGAPAY_WEBHOOK_SECRET;
+  // SingaPay signs inbound webhooks with the merchant CLIENT_SECRET (per their
+  // docs). Fall back to the legacy webhook secret for older setups.
+  const secret = resolveWebhookSecret(env);
   if (!secret) {
     return c.json({ error: { code: "WEBHOOK_UNAVAILABLE", message: "Webhook SingaPay belum dikonfigurasi." } }, 503);
   }

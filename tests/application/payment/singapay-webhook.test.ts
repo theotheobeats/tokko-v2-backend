@@ -3,6 +3,7 @@ import { createHmac, createHash } from "node:crypto";
 import {
   verifySingaPayWebhookSignature,
   normalizeSingaPayWebhook,
+  resolveWebhookSecret,
 } from "../../../src/infrastructure/payments/singapay-webhook";
 import { encodeSingaPayRef } from "../../../src/infrastructure/payments/singapay-ref";
 
@@ -68,6 +69,20 @@ function samplePayload() {
     },
   };
 }
+
+describe("resolveWebhookSecret", () => {
+  it("prefers the client secret (SingaPay signs webhooks with it)", () => {
+    expect(resolveWebhookSecret({ SINGAPAY_CLIENT_SECRET: "client", SINGAPAY_WEBHOOK_SECRET: "legacy" })).toBe("client");
+  });
+
+  it("falls back to the legacy webhook secret", () => {
+    expect(resolveWebhookSecret({ SINGAPAY_WEBHOOK_SECRET: "legacy" })).toBe("legacy");
+  });
+
+  it("returns null when neither secret is set", () => {
+    expect(resolveWebhookSecret({})).toBeNull();
+  });
+});
 
 describe("verifySingaPayWebhookSignature", () => {
   const now = Math.floor(Date.now() / 1000);
