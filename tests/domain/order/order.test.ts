@@ -174,6 +174,24 @@ describe("Order aggregate", () => {
 
       expect(order.totalAmount).toBe(25000); // 10000 + 15000
     });
+
+    it("should add the delivery fee on top of the items total", () => {
+      const order = Order.create({
+        storeId,
+        customerName: "Rina",
+        customerPhone: "+62",
+        items: [
+          { productId: createEntityId(), productName: "A", quantity: 1, unitPrice: 10000, productType: "product" as const },
+        ],
+        shippingAddress: "Jl. Test No. 1",
+        shippingFee: 15000,
+        shippingCourier: "jne",
+        shippingService: "reg",
+      });
+
+      expect(order.shippingFee).toBe(15000);
+      expect(order.totalAmount).toBe(25000); // 10000 items + 15000 delivery fee
+    });
   });
 
   describe("status transitions", () => {

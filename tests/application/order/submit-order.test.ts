@@ -4,6 +4,10 @@ import type { OrderRepository } from "../../../src/infrastructure/repos/d1-order
 import type { ProductRepository } from "../../../src/infrastructure/repos/d1-product-repo";
 import { Product } from "../../../src/domain/store/product";
 import { ProductVariant } from "../../../src/domain/store/variant";
+import { Store } from "../../../src/domain/store/store";
+import { BusinessType, Aesthetic } from "../../../src/domain/store/types";
+import type { StoreRepository } from "../../../src/application/store/store-repo";
+import type { ShippingProviderClient } from "../../../src/infrastructure/shipping/biteship-client";
 import { createEntityId } from "../../../src/domain/shared/types";
 
 const storeId = createEntityId();
@@ -46,6 +50,89 @@ function mockProductRepo(overrides?: Partial<ProductRepository>): ProductReposit
     ...overrides,
   };
 }
+
+describe("SubmitOrder with shipping", () => {
+  /** Store with a complete shipping origin (Biteship rates need all fields). */
+  function makeStoreWithOrigin(): Store {
+    const store = Store.create({
+      ownerId: createEntityId(),
+      name: "Test Store",
+      businessType: BusinessType.Food,
+      aestheticPreference: Aesthetic.Warm,
+      whatsappNumber: "+62",
+    });
+    store.updateShippingOrigin({
+      originAddress: "Jl. Merdeka No. 1",
+      originRt: "001",
+      originRw: "002",
+      originKelurahan: "Cideng",
+      originKecamatan: "Gambir",
+      originCity: "Jakarta Pusat",
+      originProvince: "DKI Jakarta",
+      originPostalCode: "10150",
+      originContactName: "Anna",
+      originContactPhone: "+6281234567890",
+    });
+    return store;
+  }
+
+  /** Shippable physical product — weight + dimensions required for rates. */
+  function makeShippableProduct(name: string, price: number) {
+    return Product.create({
+      storeId,
+      name,
+      price,
+      weight: 500,
+      width: 10,
+      length: 10,
+      height: 5,
+    });
+  }
+
+  function mockShippingProvider(rates: unknown[] = [
+    { courier: "jne", service: "reg", name: "Reguler", duration: "2 - 3 hari", price: 15000, collectionMethod: ["pickup"] },
+  ]): ShippingProviderClient {
+    return {
+      getRates: vi.fn().mockResolvedValue(rates),
+      resolveCoordinates: vi.fn().mockResolvedValue(null),
+    };
+  }
+
+  it("adds the quoted delivery fee on top of the items total", async () => {
+    const store = makeStoreWithOrigin();
+    const product = makeShippableProduct("Kue", 25000);
+    const orderRepo = mockOrderRepo();
+    const productRepo = mockProductRepo({
+      findById: vi.fn().mockResolvedValue(product),
+      findVariantsByProductIds: vi.fn().mockResolvedValue([]),
+    });
+    const storeRepo = { findById: vi.fn().mockResolvedValue(store) } as unknown as StoreRepository;
+    const provider = mockShippingProvider();
+    const useCase = new SubmitOrder(orderRepo, productRepo, storeRepo, provider);
+
+    const result = await useCase.execute({
+      storeId,
+      customerName: "Budi",
+      customerPhone: "0812345",
+      items: [{ productId: product.id, quantity: 1 }],
+      shippingAddress: "Jl. Tujuan No. 2, Bandung",
+      shipping: {
+        type: "courier",
+        courierCompany: "jne",
+        courierType: "reg",
+        destinationPostalCode: "40111",
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Delivery fee quoted by the provider lands on the order — on top of items.
+      expect(result.value.shippingFee).toBe(15000);
+      expect(result.value.shippingCourier).toBe("jne");
+      expect(result.value.totalAmount).toBe(40000); // 25000 items + 15000 delivery
+    }
+  });
+});
 
 describe("SubmitOrder with variants", () => {
   let orderRepo: OrderRepository;
