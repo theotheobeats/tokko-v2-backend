@@ -305,6 +305,16 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
   c.req.raw.headers.forEach((value, key) => {
     headerObj[key] = value;
   });
+
+  // Receipt log — every SingaPay webhook is visible in worker logs, with the
+  // outcome, so lost/rejected deliveries (e.g. the 5-min replay-window 401
+  // incident) are never invisible again.
+  console.log("[webhook:singapay] received", {
+    event: (() => { try { return (JSON.parse(rawBody) as { event?: string })?.event ?? null; } catch { return null; } })(),
+    hasSignature: Boolean(headerObj["x-signature"]),
+    hasTimestamp: Boolean(headerObj["x-timestamp"]),
+  });
+
   const valid = await verifySingaPayWebhookSignature({
     rawBody,
     headers: headerObj,
@@ -312,6 +322,10 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
     endpoint: "/api/webhooks/singapay",
   });
   if (!valid) {
+    console.warn("[webhook:singapay] unauthorized", {
+      signature: headerObj["x-signature"] ? "present" : "missing",
+      timestamp: headerObj["x-timestamp"] ?? "missing",
+    });
     return c.json({ error: { code: "WEBHOOK_UNAUTHORIZED" } }, 401);
   }
 
@@ -323,6 +337,11 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
   }
 
   const normalized = normalizeSingaPayWebhook(payload);
+  console.log("[webhook:singapay] verified", {
+    externalId: normalized?.external_id ?? null,
+    status: normalized?.status ?? null,
+    event: payload?.event ?? null,
+  });
 
   // Shared-endpoint resilience (docs: "Shared Webhook Endpoints" — events are
   // routed by payload shape when multiple notif_urls point at one URL). If the
