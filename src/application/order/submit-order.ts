@@ -45,6 +45,8 @@ export interface SubmitOrderInput {
   items: SubmitOrderItemInput[];
   notes?: string;
   shippingAddress?: string;
+  /** How the buyer pays: "manual" (bank transfer) | "online" (provider invoice). */
+  paymentMethod?: "manual" | "online";
   shipping?: SubmitOrderShippingInput;
   destination?: SubmitOrderDestinationInput;
 }
@@ -200,6 +202,7 @@ export class SubmitOrder {
       shippingService,
       shippingDuration,
       destination: input.destination,
+      paymentMethod: input.paymentMethod ?? null,
     });
 
     await this.orderRepo.save(order);

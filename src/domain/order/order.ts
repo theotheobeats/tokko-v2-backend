@@ -4,7 +4,7 @@
 
 import type { EntityId, ProductType as ProductTypeT } from "../shared/types";
 import { createEntityId, ProductType } from "../shared/types";
-import { OrderStatus, VALID_TRANSITIONS, type OrderStatus as OrderStatusType, type ShippingOption } from "./types";
+import { OrderStatus, VALID_TRANSITIONS, type OrderStatus as OrderStatusType, type ShippingOption, type PaymentMethod } from "./types";
 import type { FulfillmentData, FulfillmentField } from "./types";
 import { OrderItem, type OrderItemProps } from "./order-item";
 import { generateOrderCode } from "./rules";
@@ -24,6 +24,8 @@ export interface OrderProps {
   courier: string | null;
   paymentConfirmed: boolean;
   paymentNote: string | null;
+  /** How the buyer pays: "manual" (bank transfer) | "online" (provider invoice) | null (legacy). */
+  paymentMethod: PaymentMethod | null;
   queueNumber: string | null;
   createdAt?: string;
   // Shipping (Biteship) — option + cost.
@@ -60,6 +62,7 @@ export class Order {
     shippingCourier?: string | null;
     shippingService?: string | null;
     shippingDuration?: string | null;
+    paymentMethod?: PaymentMethod | null;
     destination?: {
       detail?: string | null;
       kelurahan?: string | null;
@@ -104,6 +107,7 @@ export class Order {
       courier: null,
       paymentConfirmed: false,
       paymentNote: null,
+      paymentMethod: params.paymentMethod ?? null,
       queueNumber: null,
       createdAt: new Date().toISOString(),
       shippingOption: params.shippingOption ?? (hasPhysicalItem ? "courier" : null),
@@ -131,6 +135,7 @@ export class Order {
       courier: props.courier ?? null,
       paymentConfirmed: props.paymentConfirmed ?? false,
       paymentNote: props.paymentNote ?? null,
+      paymentMethod: props.paymentMethod ?? null,
       queueNumber: props.queueNumber ?? null,
       shippingOption: props.shippingOption ?? null,
       shippingFee: props.shippingFee ?? 0,
@@ -161,6 +166,7 @@ export class Order {
   get courier() { return this.props.courier; }
   get paymentConfirmed() { return this.props.paymentConfirmed; }
   get paymentNote() { return this.props.paymentNote; }
+  get paymentMethod() { return this.props.paymentMethod; }
   get queueNumber() { return this.props.queueNumber; }
   get shippingOption() { return this.props.shippingOption; }
   get shippingFee() { return this.props.shippingFee; }
@@ -277,6 +283,7 @@ export class Order {
       courier: this.props.courier,
       paymentConfirmed: this.props.paymentConfirmed,
       paymentNote: this.props.paymentNote,
+      paymentMethod: this.props.paymentMethod,
       queueNumber: this.props.queueNumber,
       shippingOption: this.props.shippingOption,
       shippingFee: this.props.shippingFee,
