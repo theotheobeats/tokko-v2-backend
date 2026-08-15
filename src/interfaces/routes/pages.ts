@@ -17,6 +17,7 @@ import {
   PageSlugTakenError,
   PageNotFoundError,
   LastPageError,
+  PageLimitReachedError,
 } from "../../application/page/page-management";
 import { D1PageRepository } from "../../infrastructure/repos/d1-page-repo";
 import { D1StoreRepository } from "../../infrastructure/repos/d1-store-repo";
@@ -299,7 +300,7 @@ pagesRouter.post("/:storeId/pages", zValidator("json", addPageSchema), async (c)
   });
 
   if (!result.ok) {
-    if (result.error instanceof PageSlugTakenError) {
+    if (result.error instanceof PageSlugTakenError || result.error instanceof PageLimitReachedError) {
       return c.json({ error: result.error }, 409);
     }
     return c.json({ error: result.error }, 400);
