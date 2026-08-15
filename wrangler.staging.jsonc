@@ -18,6 +18,7 @@
     "BETTER_AUTH_URL": "https://staging-api.7okko.com",
     "FRONTEND_URL": "https://staging.7okko.com",
     "RESEND_FROM": "no-reply@7okko.com",
+    "PAYMENT_PROVIDER_API_URL": "https://api.xendit.co",
     "NODE_ENV": "production"
   },
   "observability": {

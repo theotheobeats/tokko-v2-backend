@@ -4,7 +4,7 @@ import { stores } from "./stores";
 
 /**
  * Subscriptions — paid tier state per store (Phase 1: manual/admin-managed;
- * Phase 3: Xendit recurring / xenPlatform → webhook → auto-activate).
+ * Phase 3: provider recurring billing → webhook → auto-activate).
  *
  * Effective tier resolution (see domain/plan):
  *   - active subscription → plan (pro | commerce)

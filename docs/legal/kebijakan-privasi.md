@@ -48,7 +48,7 @@ Kami hanya membagikan data pribadi kepada pihak ketiga seperlunya dan berdasarka
 
 | Pihak Ketiga | Tujuan | Jenis Data |
 |---|---|---|
-| **Penyedia layanan pembayaran (PSP)** — Xendit dan/atau Midtrans (saat fitur pembayaran aktif) | Memproses pembayaran | Data pembayaran, identitas, alamat |
+| **Penyedia layanan pembayaran (PSP) pihak ketiga** (saat fitur pembayaran aktif) | Memproses pembayaran | Data pembayaran, identitas, alamat |
 | **Penyedia email transaksional** — Resend | Mengirim email verifikasi, pemberitahuan, dan komunikasi layanan | Email, nama |
 | **Penyedia AI** — penyedia model bahasa (antara lain DeepSeek) | Menghasilkan Konten AI atas perintah Merchant | Data yang Anda masukkan untuk generasi (deskripsi bisnis, produk) |
 | **Platform iklan** — Meta (Facebook/Instagram) dan TikTok | Pelacakan iklan & audiens (hanya dengan persetujuan) | Data peristiwa pixel, IP, identifikasi perangkat |

@@ -26,6 +26,8 @@ export interface StoreRepository {
   save(store: Store): Promise<void>;
   delete(id: EntityId): Promise<void>;
   countProducts(storeId: EntityId): Promise<number>;
+  /** Publish invariant: physical products (type "product") missing weight/dimensions. */
+  countPhysicalProductsMissingShipping(storeId: EntityId): Promise<number>;
   /** Admin: list stores across all owners. */
   listAll(filters?: StoreListFilters): Promise<{ stores: Store[]; total: number }>;
   /** Admin: aggregate counts for the dashboard. */

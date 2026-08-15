@@ -17,6 +17,27 @@ export class StoreMustHaveProductsError extends Error {
   }
 }
 
+export class StoreOriginIncompleteError extends Error {
+  constructor() {
+    super("Store must have a complete shipping origin to publish");
+    this.name = "StoreOriginIncompleteError";
+  }
+}
+
+export class StoreBankIncompleteError extends Error {
+  constructor() {
+    super("Store must have bank account details to publish");
+    this.name = "StoreBankIncompleteError";
+  }
+}
+
+export class StoreProductsMissingShippingError extends Error {
+  constructor(public readonly count: number) {
+    super(`Store has ${count} physical product(s) without weight/dimensions`);
+    this.name = "StoreProductsMissingShippingError";
+  }
+}
+
 export class SubdomainAlreadyTakenError extends Error {
   constructor(subdomain: string) {
     super(`Subdomain "${subdomain}" is already taken`);

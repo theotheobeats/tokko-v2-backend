@@ -364,7 +364,7 @@ entity, when) so moderation is accountable.
   kelurahan with kodepos, from `/api/regions/*`), notes
 - Submit → `POST /api/stores/:storeId/orders` → order saved, response includes a `wa.me` deep
   link carrying the order summary for the store owner
-- No payment gateway yet (Xendit planned — see Deferred)
+- No payment gateway yet (payment gateway planned — see Deferred)
 
 ### 9. Order Dashboard (`/dashboard/orders`)
 - Table + status filter (`all | pending | contacted | completed`) with counts
@@ -386,7 +386,7 @@ entity, when) so moderation is accountable.
 
 ### 12. Marketing Landing Page
 - hero, features, how-it-works, business-types, comparison, pricing (with payment methods:
-  QRIS/OVO/GoPay/DANA/ShopeePay/VAs via Xendit — "segera hadir"), e-payment, editor showcase,
+  QRIS/OVO/GoPay/DANA/ShopeePay/VAs — "segera hadir"), e-payment, editor showcase,
   CTA, footer
 
 ### 13. Admin Panel (`admin.7okko.com` — separate worker, same backend)
@@ -411,7 +411,7 @@ entity, when) so moderation is accountable.
 
 ## NOT in Scope (Deferred)
 
-- Payment gateway (Xendit planned; landing page already lists methods as "segera hadir")
+- Payment gateway (planned; landing page already lists methods as "segera hadir")
 - Custom domains (CORS already supports `ALLOWED_ORIGINS`)
 - Analytics dashboard
 - Drag-and-drop canvas builder (block editor + field editor instead)

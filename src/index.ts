@@ -149,7 +149,7 @@ app.route("/api/regions", regionsRouter); // public Indonesian region cascade
 app.route("/api", ticketsRouter); // /api/tickets/* (user-facing support)
 app.route("/api", reportsRouter); // /api/stores/:storeId/report (public moderation)
 app.route("/api/admin", adminRouter); // admin panel (requireAdmin guard)
-app.route("/api", paymentsRouter); // payments + Xendit webhook
+app.route("/api", paymentsRouter); // payments + provider webhook
 app.route("/api/stores", categoriesRouter); // product categories
 app.route("/api/stores", shippingRouter); // Biteship shipping rates + origin settings
 app.route("/api/plans", plansRouter); // pre-store plan purchase (signup gate)

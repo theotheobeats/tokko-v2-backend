@@ -24,7 +24,7 @@ export interface PaymentProps {
   /** Customer email from checkout (optional) — used for the paid invoice email. */
   customerEmail: string | null;
   status: PaymentStatusType;
-  /** Provider's invoice id (Xendit invoice id). */
+  /** Provider's invoice id. */
   externalId: string;
   /** Provider-hosted payment page URL. */
   invoiceUrl: string;

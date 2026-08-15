@@ -3,9 +3,9 @@
  *
  * Prices (v2 spec):
  *   Pro      Rp 49.000/bln · Rp 490.000/thn  (main SKU — annual is the default ask)
- *   Commerce Rp 99.000/bln · Rp 990.000/thn  (post-Xendit; 99→149rb at traction)
+ *   Commerce Rp 99.000/bln · Rp 990.000/thn  (post-launch; 99→149rb at traction)
  *
- * Subscription invoices are Xendit invoices with a namespaced external_id:
+ * Subscription invoices are provider invoices with a namespaced external_id:
  *   tokko-sub::<storeId>::<plan>::<cycle>::<nonce>
  * The webhook parses it back (amount is re-verified against pricing, same
  * forgery-guard pattern as order payments).

@@ -27,7 +27,7 @@ export interface TrialEmailer {
   send(input: { to: string; subject: string; html: string; text?: string }): Promise<boolean>;
 }
 
-/** Creates the auto-renewal invoice for a subscription (wired to Xendit in the runner). */
+/** Creates the auto-renewal invoice for a subscription (wired to the payment provider in the runner). */
 export interface RenewalInvoiceCreator {
   (input: { store: Store; plan: Plan; cycle: BillingCycle }): Promise<{ externalId: string }>;
 }

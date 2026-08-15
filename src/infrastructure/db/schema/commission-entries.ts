@@ -5,7 +5,7 @@ import { orders } from "./orders";
 
 /**
  * Commission ledger — commission-path merchants (selective, 3.5% default /
- * 2.5% with custom domain). One entry per paid order; payouts (Xendit
+ * 2.5% with custom domain). One entry per paid order; payouts (provider
  * disbursement, D+1/D+7) are a Phase-4 concern — this is the accrual record.
  */
 export const commissionEntries = sqliteTable("commission_entries", {
