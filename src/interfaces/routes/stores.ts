@@ -31,6 +31,7 @@ import { StartMerchantKYB, GetMerchantKYBStatus, KYBStoreNotFoundError } from ".
 import { isSupportedBankCode } from "../../application/admin/admin-payouts";
 import { D1AppSettingsRepository } from "../../infrastructure/repos/d1-app-settings-repo";
 import { subscriptionExternalId, priceFor } from "../../domain/plan/pricing";
+import { isBetaPricing } from "../../application/plan/pricing-policy";
 
 const storesRouter = new Hono<{ Bindings: Env }>();
 
@@ -484,7 +485,9 @@ storesRouter.post("/:id/subscription-checkout", zValidator("json", subscriptionC
   }
 
   const { plan, cycle } = c.req.valid("json");
-  const amount = priceFor(plan, cycle);
+  // BETA test pricing while `pricing_beta` is set; NORMAL after the flip.
+  const beta = await isBetaPricing((k) => new D1AppSettingsRepository(db).get(k));
+  const amount = priceFor(plan, cycle, beta);
 
   // Route through the active provider (admin switch); real payments only —
   // no mock invoices for subscriptions.

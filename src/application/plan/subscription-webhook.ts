@@ -6,7 +6,7 @@
 
 import type { Result } from "../../domain/shared/types";
 import { ok, err, createEntityId } from "../../domain/shared/types";
-import { parseSubscriptionExternalId, priceFor, PERIOD_DAYS } from "../../domain/plan/pricing";
+import { parseSubscriptionExternalId, isValidInvoiceAmount, PERIOD_DAYS } from "../../domain/plan/pricing";
 import type { Plan, BillingCycle } from "../../domain/plan/types";
 import { Subscription } from "../../domain/plan/subscription";
 import type { StoreRepository } from "../store/store-repo";
@@ -43,8 +43,8 @@ export class HandleSubscriptionInvoice {
     // Only PAID activates — EXPIRED/FAILED/PENDING are no-ops (no pending state).
     if (payload.status !== "PAID") return ok({ handled: false });
 
-    const expected = priceFor(parsed.plan, parsed.cycle);
-    if (payload.amount !== undefined && Number(payload.amount) !== expected) {
+    const expected = isValidInvoiceAmount(payload.amount ?? -1, parsed.plan, parsed.cycle);
+    if (payload.amount !== undefined && !expected) {
       return err(new SubscriptionAmountMismatchError());
     }
 
