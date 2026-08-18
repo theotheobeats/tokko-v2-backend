@@ -10,7 +10,7 @@
  *      (e.g. `/api/webhooks/singapay`).
  *   4. calculated = HMAC-SHA512(StringToSign, client_secret), lowercase hex.
  *   5. Constant-time compare with the `X-Signature` header.
- *   Replay protection: `X-Timestamp` (Unix seconds) must be within 5 minutes.
+ *   Replay protection: `X-Timestamp` (Unix seconds) must be within 15 minutes.
  *
  * The payment link webhook carries our reference back in
  * `data.payment.additional_info.payment_link.reff_no` — that is the external

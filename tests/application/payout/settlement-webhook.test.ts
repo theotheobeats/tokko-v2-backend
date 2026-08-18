@@ -103,6 +103,54 @@ describe("normalizeSingaPaySettlementWebhook", () => {
     expect(normalizeSingaPaySettlementWebhook({ event: "something.else", data: {} })).toBeNull();
     expect(normalizeSingaPaySettlementWebhook({ event: "settlement.completed", data: {} })).toBeNull();
   });
+
+  it("handles the production auto-settlement payload (recipient envelope, currency)", () => {
+    // Prod incident 16 Aug 2026: auto-created settlement batch (approved_by
+    // SYSTEM) with the full envelope SingaPay actually sends — extra fields
+    // (id, is_auto_created, currency, transfer_status, recipient) must not
+    // break normalization or body hashing.
+    const payload = {
+      status: 200,
+      success: true,
+      event: "settlement.completed",
+      timestamp: "16 Aug 2026 12:00:16",
+      data: {
+        settlement: {
+          id: 2502,
+          reference_no: "SETTLEMENT-405-6A8143E02ECFD",
+          title: "Settlement 7okko (16/08/2026 - 16/08/2026)",
+          status: "completed",
+          settlement_type: "ALL",
+          settlement_method: "balance",
+          is_auto_created: true,
+          start_date: "16 Aug 2026 00:00:00",
+          end_date: "16 Aug 2026 23:59:59",
+          amount: 48657,
+          total_admin_fee: 343,
+          total_vendor_fee: 343,
+          total_our_margin: 0,
+          settlement_fee: 0,
+          total_to_transfer: 48657,
+          total_refunded: 0,
+          currency: "IDR",
+          transfer_status: null,
+          approved_by: "SYSTEM",
+          approved_at: "16 Aug 2026 12:00:16",
+          recipient: { bank_code: null, account_number: null, account_name: null },
+        },
+        total_transactions: 1,
+      },
+    } as SingaPaySettlementWebhookPayload;
+
+    const normalized = normalizeSingaPaySettlementWebhook(payload);
+    expect(normalized?.event).toBe("settlement.completed");
+    expect(normalized?.settlement.referenceNo).toBe("SETTLEMENT-405-6A8143E02ECFD");
+    expect(normalized?.settlement.amount).toBe(48657);
+    expect(normalized?.settlement.totalToTransfer).toBe(48657);
+    expect(normalized?.settlement.totalTransactions).toBe(1);
+    expect(normalized?.settlement.accountId).toBeNull();
+    expect(normalized?.refund).toBeNull();
+  });
 });
 
 describe("HandleSettlementWebhook", () => {

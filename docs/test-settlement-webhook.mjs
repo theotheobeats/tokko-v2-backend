@@ -2,19 +2,23 @@
  * One-off test harness for POST /api/webhooks/singapay/settlement.
  *
  * Usage:
- *   SINGAPAY_WEBHOOK_SECRET=<secret> node test-settlement-webhook.mjs
+ *   SINGAPAY_CLIENT_SECRET=<secret> node docs/test-settlement-webhook.mjs
  *
  * The HMAC scheme mirrors src/infrastructure/payments/singapay-webhook.ts:
  *   hashedBody = SHA256(JSON.stringify(sortRecursive(JSON.parse(rawBody))))
  *   stringToSign = `POST:{endpoint}:{accessToken}:{hashedBody}:{timestamp}`
- *   signature   = HMAC-SHA512(stringToSign, SINGAPAY_WEBHOOK_SECRET), hex
- * X-Timestamp must be within 5 minutes of the worker clock.
+ *   signature   = HMAC-SHA512(stringToSign, CLIENT_SECRET), hex
+ * X-Timestamp must be within 15 minutes of the worker clock.
+ *
+ * SingaPay signs inbound webhooks with the merchant CLIENT_SECRET (docs:
+ * "Security and Signature Validation"). The legacy SINGAPAY_WEBHOOK_SECRET is
+ * accepted as a fallback only for older setups.
  */
 import { createHmac, createHash } from "node:crypto";
 
-const secret = process.env.SINGAPAY_WEBHOOK_SECRET;
+const secret = process.env.SINGAPAY_CLIENT_SECRET ?? process.env.SINGAPAY_WEBHOOK_SECRET;
 if (!secret) {
-  console.error("SINGAPAY_WEBHOOK_SECRET is required");
+  console.error("SINGAPAY_CLIENT_SECRET (or legacy SINGAPAY_WEBHOOK_SECRET) is required");
   process.exit(1);
 }
 

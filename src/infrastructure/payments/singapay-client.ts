@@ -27,7 +27,9 @@
  *                                     the proxy's fixed egress IP
  *   SINGAPAY_PROXY_TOKEN    (secret) — optional shared secret the proxy
  *                                     requires (sent as X-Proxy-Token header)
- *   SINGAPAY_WEBHOOK_SECRET (secret) — webhook signature verification (Phase 2)
+ *   SINGAPAY_WEBHOOK_SECRET (secret) — legacy webhook-signature fallback
+ *                                     (SingaPay signs webhooks with the
+ *                                     CLIENT_SECRET; kept for older setups)
  *   SINGAPAY_FORCE_MOCK     (var)    — "1" forces mock even with keys
  */
 

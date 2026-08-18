@@ -157,6 +157,48 @@ describe("normalizeSingaPayDisbursementWebhook", () => {
     expect(normalizeSingaPayDisbursementWebhook({ data: {} })).toBeNull();
     expect(normalizeSingaPayDisbursementWebhook({})).toBeNull();
   });
+
+  it("returns null for a settlement payload (shared endpoints route by event)", () => {
+    // Prod incident 16 Aug 2026: a `settlement.completed` notification was
+    // delivered to the disbursement URL (SingaPay allows sharing callback
+    // URLs — docs: "Shared Webhook Endpoints"). The disbursement normalizer
+    // must not misinterpret it; the route dispatches by payload shape.
+    const settlementPayload = {
+      status: 200,
+      success: true,
+      event: "settlement.completed",
+      timestamp: "16 Aug 2026 12:00:16",
+      data: {
+        settlement: {
+          id: 2502,
+          reference_no: "SETTLEMENT-405-6A8143E02ECFD",
+          title: "Settlement 7okko (16/08/2026 - 16/08/2026)",
+          status: "completed",
+          settlement_type: "ALL",
+          settlement_method: "balance",
+          is_auto_created: true,
+          start_date: "16 Aug 2026 00:00:00",
+          end_date: "16 Aug 2026 23:59:59",
+          amount: 48657,
+          total_admin_fee: 343,
+          total_vendor_fee: 343,
+          total_our_margin: 0,
+          settlement_fee: 0,
+          total_to_transfer: 48657,
+          total_refunded: 0,
+          currency: "IDR",
+          transfer_status: null,
+          approved_by: "SYSTEM",
+          approved_at: "16 Aug 2026 12:00:16",
+          recipient: { bank_code: null, account_number: null, account_name: null },
+        },
+        total_transactions: 1,
+      },
+    };
+    expect(
+      normalizeSingaPayDisbursementWebhook(settlementPayload as unknown as SingaPayDisbursementWebhookPayload),
+    ).toBeNull();
+  });
 });
 
 describe("HandleDisbursementWebhook", () => {

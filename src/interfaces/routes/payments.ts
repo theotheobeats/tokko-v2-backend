@@ -445,10 +445,17 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
 // the signature endpoint string MUST match the configured path exactly.
 // Flipping payouts `submitted → settled/failed` removes the manual inquiry
 // step from the admin workflow.
+//
+// Shared-endpoint resilience: SingaPay may legally deliver settlement
+// notifications to this URL (docs: "Shared Webhook Endpoints" — route by the
+// `event` field). When the payload is not disbursement-shaped, dispatch by
+// shape instead of acking-and-dropping it.
 // ---------------------------------------------------------------------------
 paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
   const env = c.env as Env;
-  const secret = env.SINGAPAY_WEBHOOK_SECRET;
+  // SingaPay signs inbound webhooks with the merchant CLIENT_SECRET (docs:
+  // "Security and Signature Validation") — legacy webhook secret as fallback.
+  const secret = resolveWebhookSecret(env);
   if (!secret) {
     return c.json({ error: { code: "WEBHOOK_UNAVAILABLE", message: "Webhook SingaPay belum dikonfigurasi." } }, 503);
   }
@@ -477,6 +484,18 @@ paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
 
   const normalized = normalizeSingaPayDisbursementWebhook(payload);
   if (!normalized) {
+    // Settlement notifications can share this callback URL — route by shape
+    // so clearing batches recorded here are never silently dropped.
+    const settlement = normalizeSingaPaySettlementWebhook(payload as SingaPaySettlementWebhookPayload);
+    if (settlement) {
+      const db = createDb(env.DB);
+      const settResult = await new HandleSettlementWebhook(
+        new D1SettlementRepository(db),
+        new D1StoreRepository(db),
+      ).execute(settlement);
+      if (!settResult.ok) return c.json({ error: { code: "UNKNOWN" } }, 400);
+      return c.json({ handled: settResult.value.handled });
+    }
     return c.json({ handled: false });
   }
 
@@ -501,10 +520,15 @@ paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
 // available_balance) or a settled transaction was refunded. Register this path
 // as the `settlement_notif_url`; the signature endpoint string MUST match the
 // configured path exactly. Batches are recorded idempotently per reference_no.
+//
+// Shared-endpoint resilience: disbursement results may share this URL — route
+// by payload shape so money-out results landing here are not dropped.
 // ---------------------------------------------------------------------------
 paymentsRouter.post("/webhooks/singapay/settlement", async (c) => {
   const env = c.env as Env;
-  const secret = env.SINGAPAY_WEBHOOK_SECRET;
+  // SingaPay signs inbound webhooks with the merchant CLIENT_SECRET (docs:
+  // "Security and Signature Validation") — legacy webhook secret as fallback.
+  const secret = resolveWebhookSecret(env);
   if (!secret) {
     return c.json({ error: { code: "WEBHOOK_UNAVAILABLE", message: "Webhook SingaPay belum dikonfigurasi." } }, 503);
   }
@@ -534,6 +558,18 @@ paymentsRouter.post("/webhooks/singapay/settlement", async (c) => {
   const normalized = normalizeSingaPaySettlementWebhook(payload);
   if (!normalized) {
     // Unknown event or missing reference — acknowledge so SingaPay stops retrying.
+    // Shared-endpoint resilience: a disbursement notification may land here —
+    // route by shape so money-out results are never swallowed.
+    const disb = normalizeSingaPayDisbursementWebhook(payload as SingaPayDisbursementWebhookPayload);
+    if (disb) {
+      const db = createDb(env.DB);
+      const disbResult = await new HandleDisbursementWebhook(
+        new D1PayoutRepository(db),
+        new D1PayoutRequestRepository(db),
+      ).execute(disb);
+      if (!disbResult.ok) return c.json({ error: { code: "PAYOUT_NOT_FOUND" } }, 404);
+      return c.json({ handled: disbResult.value.handled });
+    }
     return c.json({ handled: false });
   }
 

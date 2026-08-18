@@ -2,7 +2,7 @@
  * One-off test harness for POST /api/webhooks/singapay/disbursement.
  *
  * Usage:
- *   SINGAPAY_WEBHOOK_SECRET=<secret> node docs/test-disbursement-webhook.mjs \
+ *   SINGAPAY_CLIENT_SECRET=<secret> node docs/test-disbursement-webhook.mjs \
  *     payout-65136938-1786612656411 failed "ACCOUNT_VALIDATION_ERROR: ACCOUNT INQUIRY FAILED"
  *
  * Args: <reference_number> <settled|failed> [failed_reason]
@@ -13,13 +13,17 @@
  * The HMAC scheme mirrors src/infrastructure/payments/singapay-webhook.ts:
  *   hashedBody = SHA256(JSON.stringify(sortRecursive(JSON.parse(rawBody))))
  *   stringToSign = `POST:{endpoint}:{accessToken}:{hashedBody}:{timestamp}`
- *   signature   = HMAC-SHA512(stringToSign, SINGAPAY_WEBHOOK_SECRET), hex
+ *   signature   = HMAC-SHA512(stringToSign, CLIENT_SECRET), hex
+ *
+ * SingaPay signs inbound webhooks with the merchant CLIENT_SECRET (docs:
+ * "Security and Signature Validation"). The legacy SINGAPAY_WEBHOOK_SECRET is
+ * accepted as a fallback only for older setups.
  */
 import { createHmac, createHash } from "node:crypto";
 
-const secret = process.env.SINGAPAY_WEBHOOK_SECRET;
+const secret = process.env.SINGAPAY_CLIENT_SECRET ?? process.env.SINGAPAY_WEBHOOK_SECRET;
 if (!secret) {
-  console.error("SINGAPAY_WEBHOOK_SECRET is required");
+  console.error("SINGAPAY_CLIENT_SECRET (or legacy SINGAPAY_WEBHOOK_SECRET) is required");
   process.exit(1);
 }
 
