@@ -197,16 +197,32 @@ export async function verifySingaPayWebhookSignature(params: {
   const timestamp = headers["x-timestamp"] ?? "";
   const accessToken = (headers["authorization"] ?? "").replace(/^Bearer\s+/i, "");
 
-  if (!received || !timestamp) return false;
+  if (!received || !timestamp) {
+    console.warn("[singapay-webhook] rejected: missing signing headers", {
+      endpoint,
+      hasSignature: Boolean(received),
+      hasTimestamp: Boolean(timestamp),
+      hasToken: Boolean(accessToken),
+    });
+    return false;
+  }
 
   // Replay protection: reject stale timestamps.
   const tsMs = Number(timestamp) * 1000;
-  if (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > TIMESTAMP_WINDOW_MS) return false;
+  if (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > TIMESTAMP_WINDOW_MS) {
+    console.warn("[singapay-webhook] rejected: timestamp outside replay window", {
+      endpoint,
+      timestamp,
+      ageSeconds: Number.isFinite(tsMs) ? Math.round((Date.now() - tsMs) / 1000) : null,
+    });
+    return false;
+  }
 
   let bodyObject: unknown;
   try {
     bodyObject = JSON.parse(rawBody);
   } catch {
+    console.warn("[singapay-webhook] rejected: unparseable body");
     return false;
   }
 
@@ -216,12 +232,32 @@ export async function verifySingaPayWebhookSignature(params: {
   const calculated = await hmacSha512Hex(clientSecret, stringToSign);
 
   // Constant-time comparison (timing-safe).
-  if (calculated.length !== received.length) return false;
+  if (calculated.length !== received.length) {
+    console.warn("[singapay-webhook] signature mismatch (length)", {
+      endpoint,
+      receivedLen: received.length,
+      calculatedLen: calculated.length,
+    });
+    return false;
+  }
   let diff = 0;
   for (let i = 0; i < calculated.length; i++) {
     diff |= calculated.charCodeAt(i) ^ received.charCodeAt(i);
   }
-  return diff === 0;
+  if (diff !== 0) {
+    // HMAC prefixes pinpoint the cause: same prefix = right secret, wrong
+    // body/endpoint/timestamp/token; different prefix = wrong key (e.g. the
+    // legacy webhook secret instead of the CLIENT_SECRET).
+    console.warn("[singapay-webhook] signature mismatch (HMAC differs)", {
+      endpoint,
+      receivedPrefix: received.slice(0, 16),
+      calculatedPrefix: calculated.slice(0, 16),
+      timestamp,
+      hasToken: Boolean(accessToken),
+    });
+    return false;
+  }
+  return true;
 }
 
 /** Map a SingaPay payment-link webhook to the internal payload shape. */

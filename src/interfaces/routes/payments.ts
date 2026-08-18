@@ -465,6 +465,12 @@ paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
   c.req.raw.headers.forEach((value, key) => {
     headerObj[key] = value;
   });
+  console.log("[webhook:singapay:disbursement] received", {
+    event: (() => { try { return (JSON.parse(rawBody) as { event?: string })?.event ?? null; } catch { return null; } })(),
+    hasSignature: Boolean(headerObj["x-signature"]),
+    hasTimestamp: Boolean(headerObj["x-timestamp"]),
+    hasAuth: Boolean(headerObj["authorization"]),
+  });
   const valid = await verifySingaPayWebhookSignature({
     rawBody,
     headers: headerObj,
@@ -472,6 +478,11 @@ paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
     endpoint: "/api/webhooks/singapay/disbursement",
   });
   if (!valid) {
+    console.warn("[webhook:singapay:disbursement] unauthorized", {
+      signature: headerObj["x-signature"] ? "present" : "missing",
+      timestamp: headerObj["x-timestamp"] ?? "missing",
+      auth: headerObj["authorization"] ? "present" : "missing",
+    });
     return c.json({ error: { code: "WEBHOOK_UNAUTHORIZED" } }, 401);
   }
 
@@ -538,6 +549,12 @@ paymentsRouter.post("/webhooks/singapay/settlement", async (c) => {
   c.req.raw.headers.forEach((value, key) => {
     headerObj[key] = value;
   });
+  console.log("[webhook:singapay:settlement] received", {
+    event: (() => { try { return (JSON.parse(rawBody) as { event?: string })?.event ?? null; } catch { return null; } })(),
+    hasSignature: Boolean(headerObj["x-signature"]),
+    hasTimestamp: Boolean(headerObj["x-timestamp"]),
+    hasAuth: Boolean(headerObj["authorization"]),
+  });
   const valid = await verifySingaPayWebhookSignature({
     rawBody,
     headers: headerObj,
@@ -545,6 +562,11 @@ paymentsRouter.post("/webhooks/singapay/settlement", async (c) => {
     endpoint: "/api/webhooks/singapay/settlement",
   });
   if (!valid) {
+    console.warn("[webhook:singapay:settlement] unauthorized", {
+      signature: headerObj["x-signature"] ? "present" : "missing",
+      timestamp: headerObj["x-timestamp"] ?? "missing",
+      auth: headerObj["authorization"] ? "present" : "missing",
+    });
     return c.json({ error: { code: "WEBHOOK_UNAUTHORIZED" } }, 401);
   }
 
