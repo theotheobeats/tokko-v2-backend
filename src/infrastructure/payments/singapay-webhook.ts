@@ -141,12 +141,25 @@ export interface NormalizedSingaPaySettlementWebhook {
   refund: { accountId: string | null; netAmount: number } | null;
 }
 
-// Replay protection window. SingaPay delivers webhooks with latency and
-// retries ~5 minutes after the transaction timestamp (prod incident: a paid
-// subscription webhook was rejected because delivery landed 5s past the old
-// 5-minute window). 15 minutes tolerates retries while still rejecting
-// genuine replays (the HMAC is the real auth; this is just staleness).
-const TIMESTAMP_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+// Replay protection window. SingaPay's automated retries are 1-minute apart
+// with a 15-minute cache TTL, but failed deliveries can also be re-fired
+// manually from their dashboard Callback menu — the re-send replays the
+// original X-Timestamp and signature verbatim (prod incident 18 Aug 2026: a
+// settlement webhook re-sent ~47h after its timestamp 401'd on the old
+// 15-minute window). The HMAC is the real auth; this is just staleness, and
+// every handler is idempotent (settlements upsert by reference_no), so a
+// generous window is safe. Override via SINGAPAY_WEBHOOK_TIMESTAMP_WINDOW_SECONDS.
+const DEFAULT_TIMESTAMP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/** Env override for the replay window, or the 7-day default. */
+export function resolveTimestampWindowMs(env: {
+  SINGAPAY_WEBHOOK_TIMESTAMP_WINDOW_SECONDS?: string;
+}): number {
+  const raw = env.SINGAPAY_WEBHOOK_TIMESTAMP_WINDOW_SECONDS;
+  const parsed = raw ? Number(raw) : NaN;
+  if (raw && Number.isFinite(parsed) && parsed > 0) return parsed * 1000;
+  return DEFAULT_TIMESTAMP_WINDOW_MS;
+}
 
 /**
  * HMAC key for inbound webhook verification.
@@ -191,8 +204,11 @@ export async function verifySingaPayWebhookSignature(params: {
   clientSecret: string;
   /** Registered webhook path exactly as configured, e.g. "/api/webhooks/singapay". */
   endpoint: string;
+  /** Replay window override (ms). Defaults to 7 days. */
+  timestampWindowMs?: number;
 }): Promise<boolean> {
   const { rawBody, headers, clientSecret, endpoint } = params;
+  const timestampWindowMs = params.timestampWindowMs ?? DEFAULT_TIMESTAMP_WINDOW_MS;
   const received = headers["x-signature"] ?? "";
   const timestamp = headers["x-timestamp"] ?? "";
   const accessToken = (headers["authorization"] ?? "").replace(/^Bearer\s+/i, "");
@@ -209,10 +225,11 @@ export async function verifySingaPayWebhookSignature(params: {
 
   // Replay protection: reject stale timestamps.
   const tsMs = Number(timestamp) * 1000;
-  if (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > TIMESTAMP_WINDOW_MS) {
+  if (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > timestampWindowMs) {
     console.warn("[singapay-webhook] rejected: timestamp outside replay window", {
       endpoint,
       timestamp,
+      windowSeconds: timestampWindowMs / 1000,
       ageSeconds: Number.isFinite(tsMs) ? Math.round((Date.now() - tsMs) / 1000) : null,
     });
     return false;

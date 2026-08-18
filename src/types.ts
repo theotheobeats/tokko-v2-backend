@@ -38,6 +38,10 @@ export interface Env {
   // Optional shared secret the proxy requires (X-Proxy-Token header).
   SINGAPAY_PROXY_TOKEN?: string;
   SINGAPAY_WEBHOOK_SECRET?: string;
+  // Replay-window override for inbound webhook verification (seconds).
+  // Default 7 days — SingaPay re-fires failed deliveries from their dashboard
+  // Callback menu with the original X-Timestamp (see singapay-webhook.ts).
+  SINGAPAY_WEBHOOK_TIMESTAMP_WINDOW_SECONDS?: string;
   SINGAPAY_FORCE_MOCK?: string;
   /** Comma-separated login emails that bypass KYB and may fall back to the master account (staging test access). */
   KYB_TEST_EMAILS?: string;

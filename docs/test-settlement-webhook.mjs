@@ -8,7 +8,8 @@
  *   hashedBody = SHA256(JSON.stringify(sortRecursive(JSON.parse(rawBody))))
  *   stringToSign = `POST:{endpoint}:{accessToken}:{hashedBody}:{timestamp}`
  *   signature   = HMAC-SHA512(stringToSign, CLIENT_SECRET), hex
- * X-Timestamp must be within 15 minutes of the worker clock.
+ * X-Timestamp must be within 7 days of the worker clock (default replay
+ * window; override via SINGAPAY_WEBHOOK_TIMESTAMP_WINDOW_SECONDS).
  *
  * SingaPay signs inbound webhooks with the merchant CLIENT_SECRET (docs:
  * "Security and Signature Validation"). The legacy SINGAPAY_WEBHOOK_SECRET is

@@ -19,6 +19,7 @@ import {
   normalizeSingaPayDisbursementWebhook,
   normalizeSingaPaySettlementWebhook,
   resolveWebhookSecret,
+  resolveTimestampWindowMs,
   type SingaPayWebhookPayload,
   type SingaPayDisbursementWebhookPayload,
   type SingaPaySettlementWebhookPayload,
@@ -323,6 +324,7 @@ paymentsRouter.post("/webhooks/singapay", async (c) => {
     headers: headerObj,
     clientSecret: secret,
     endpoint: "/api/webhooks/singapay",
+    timestampWindowMs: resolveTimestampWindowMs(env),
   });
   if (!valid) {
     console.warn("[webhook:singapay] unauthorized", {
@@ -476,6 +478,7 @@ paymentsRouter.post("/webhooks/singapay/disbursement", async (c) => {
     headers: headerObj,
     clientSecret: secret,
     endpoint: "/api/webhooks/singapay/disbursement",
+    timestampWindowMs: resolveTimestampWindowMs(env),
   });
   if (!valid) {
     console.warn("[webhook:singapay:disbursement] unauthorized", {
@@ -560,6 +563,7 @@ paymentsRouter.post("/webhooks/singapay/settlement", async (c) => {
     headers: headerObj,
     clientSecret: secret,
     endpoint: "/api/webhooks/singapay/settlement",
+    timestampWindowMs: resolveTimestampWindowMs(env),
   });
   if (!valid) {
     console.warn("[webhook:singapay:settlement] unauthorized", {

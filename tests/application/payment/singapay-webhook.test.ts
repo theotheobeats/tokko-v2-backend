@@ -128,13 +128,46 @@ describe("verifySingaPayWebhookSignature", () => {
 
   it("rejects a stale timestamp (replay protection)", async () => {
     const body = samplePayload();
-    const stale = now - 60 * 60; // 1 hour old
+    const stale = now - 8 * 24 * 60 * 60; // 8 days old — beyond the 7-day window
     const signature = signPayload(body, { endpoint: ENDPOINT, timestamp: String(stale), token });
     const ok = await verifySingaPayWebhookSignature({
       rawBody: JSON.stringify(body),
       headers: { "x-signature": signature, "x-timestamp": String(stale), authorization: `Bearer ${token}` },
       clientSecret: SECRET,
       endpoint: ENDPOINT,
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("accepts a manual re-send days later (SingaPay Callback re-fire)", async () => {
+    const body = samplePayload();
+    // Prod incident 18 Aug 2026: SingaPay support re-sent the original
+    // settlement webhook ~47h after its X-Timestamp, replaying the original
+    // signature verbatim (their dashboard Callback menu re-fires failed
+    // deliveries). The old 15-minute window rejected it — the HMAC is the
+    // real auth and the handlers are idempotent, so the window must tolerate
+    // re-sends.
+    const reSent = now - 47 * 60 * 60; // 47 hours old
+    const signature = signPayload(body, { endpoint: ENDPOINT, timestamp: String(reSent), token });
+    const ok = await verifySingaPayWebhookSignature({
+      rawBody: JSON.stringify(body),
+      headers: { "x-signature": signature, "x-timestamp": String(reSent), authorization: `Bearer ${token}` },
+      clientSecret: SECRET,
+      endpoint: ENDPOINT,
+    });
+    expect(ok).toBe(true);
+  });
+
+  it("honors an explicit timestamp window override", async () => {
+    const body = samplePayload();
+    const stale = now - 10 * 60; // 10 minutes old
+    const signature = signPayload(body, { endpoint: ENDPOINT, timestamp: String(stale), token });
+    const ok = await verifySingaPayWebhookSignature({
+      rawBody: JSON.stringify(body),
+      headers: { "x-signature": signature, "x-timestamp": String(stale), authorization: `Bearer ${token}` },
+      clientSecret: SECRET,
+      endpoint: ENDPOINT,
+      timestampWindowMs: 5 * 60 * 1000, // tight window for this endpoint
     });
     expect(ok).toBe(false);
   });
